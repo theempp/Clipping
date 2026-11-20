@@ -81,3 +81,14 @@ def test_store_gaps_and_prune():
     assert s.gaps("twitch:a") == [("chat", 10.0, 20.0, "drop")]
     s.prune(25.0)
     assert [m[0] for m in s.messages("twitch:a", 0, 100)] == [50.0]
+
+
+def test_caption_style_hex_to_ass(tmp_path):
+    import tomllib
+    from pathlib import Path
+    from clipworker.config import ass_colour, parse_settings
+    assert ass_colour("#60F3BD") == "&H00BDF360"
+    assert ass_colour("&H00FFFFFF") == "&H00FFFFFF"
+    example = Path(__file__).resolve().parents[1] / "config" / "channels.example.toml"
+    s = parse_settings(tomllib.loads(example.read_text()), tmp_path)
+    assert s.caption_style.highlight_colour == "&H00BDF360" and s.caption_style.margin_v >= 320

@@ -35,7 +35,7 @@ Discord bot (own server, followed channel) -> campaign drafts (D024)
 `uv pip install -e .[dev] && pytest` (renders real clips with ffmpeg; SQL checks run if a local Postgres exists: `../supabase/tests/run.sh`).
 
 ## Blocked on Zo / unverified before going live
-- `caption_style` and per-streamer `layout`: values only from `references/` (D022). Render refuses without a style.
+- `caption_style`: D048 proposal from the Stage refs is in the example config, pending Zo. Per-streamer `layout` crop boxes set by hand from a stream frame. Render refuses without a style.
 - Kick: official API payload names and the public Pusher chat path are unverified; live-only in V1.
 - YouTube/X endpoint shapes, quotas and prices: re-check docs right before the first live post (publish-approval-gate step 5).
 - `GROK_MODEL`: choose the cheapest model that passes the labeled eval set.

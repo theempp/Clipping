@@ -59,12 +59,14 @@ Renumbered 2026-11-20: these three were first written as D023-D025, which clashe
 - D031 — Next step (main thread): three dashboard variants for Zo to choose from. Brief in [[Dashboard Experience]] under "Next: three dashboard variants". Nothing generated yet; wait for Zo to say go and for Pinterest references.
 
 ## 2026-11-20 — Backend build (first slice)
+Numbered D040-D047 because D032 was taken by the dashboard "Stage" choice in a parallel thread.
 Code lives in `worker/` (Python 3.11 package `clipworker`) and `supabase/migrations/`. 61 tests pass, including real ffmpeg renders and the SQL migration on Postgres. Nothing deployed, no keys used.
-- D032 — Locked: Twitch live status by polling Helix every 60 s with an app token. EventSub needs a public URL (webhooks) or a user token (WebSocket); polling is 1 call/min and simpler on a home PC.
-- D033 — Locked for V1: Kick chat through Kick's public chat WebSocket (read-only, unofficial, may break). The official webhook path is coded (signature check) but stays off until a public endpoint and the payload are verified.
-- D034 — Locked: the review gate is enforced in Postgres, not only in code. A trigger allows only listed state moves per actor; the worker can never approve; a publication row is refused unless a human approved the clip; every state change writes an audit row automatically. The dashboard writes only through `review_clip` and `mark_submitted`.
-- D035 — Locked: no double posts. A post interrupted mid-call is never retried automatically (marked failed for Zo to check). Retryable errors retry up to 3 times with 5 min backoff. Default cap 10 posts/day per destination.
-- D036 — Locked: render bitrate capped at 6 Mbps so a 60 s clip stays under Supabase's 50 MB free-plan file limit; QA blocks anything larger.
-- D037 — Locked: spam guard. One chatter counts at most 2 messages per 5 s burst, so a single spammer cannot trigger a clip.
-- D038 — Locked: campaigns parsed from Discord are saved as drafts (or "avoid"). Only Zo activating a campaign opens the rights gate for its streamers.
-- D039 — Locked: dashboard access is an `owners` table plus row-level security; clips are private in Storage and reach the phone through signed links (D021).
+- D040 — Locked: Twitch live status by polling Helix every 60 s with an app token. EventSub needs a public URL (webhooks) or a user token (WebSocket); polling is 1 call/min and simpler on a home PC.
+- D041 — Locked for V1: Kick chat through Kick's public chat WebSocket (read-only, unofficial, may break). The official webhook path is coded (signature check) but stays off until a public endpoint and the payload are verified.
+- D042 — Locked: the review gate is enforced in Postgres, not only in code. A trigger allows only listed state moves per actor; the worker can never approve; a publication row is refused unless a human approved the clip; every state change writes an audit row automatically. The dashboard writes only through `review_clip` and `mark_submitted`.
+- D043 — Locked: no double posts. A post interrupted mid-call is never retried automatically (marked failed for Zo to check). Retryable errors retry up to 3 times with 5 min backoff. Default cap 10 posts/day per destination.
+- D044 — Locked: render bitrate capped at 6 Mbps so a 60 s clip stays under Supabase's 50 MB free-plan file limit; QA blocks anything larger.
+- D045 — Locked: spam guard. One chatter counts at most 2 messages per 5 s burst, so a single spammer cannot trigger a clip.
+- D046 — Locked: campaigns parsed from Discord are saved as drafts (or "avoid"). Only Zo activating a campaign opens the rights gate for its streamers.
+- D047 — Locked: dashboard access is an `owners` table plus row-level security; clips are private in Storage and reach the phone through signed links (D021).
+- D048 — Proposed, pending Zo: caption style from the Stage references (D032): Poppins SemiBold 78 px, white text, mint #60F3BD active word, #000002 outline 6 px, no shadow, 420 px bottom margin, 3 words per line. Set in `worker/config/channels.example.toml`.

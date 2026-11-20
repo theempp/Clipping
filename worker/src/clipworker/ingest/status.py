@@ -3,7 +3,7 @@
 Twitch: Helix GET /streams polled every 60 s with an app access token
 (client credentials). Chosen over EventSub because the PC has no public URL
 (webhooks) and EventSub-WebSocket needs a user token; polling is 1 call/min,
-far inside Helix limits. See Decision Log D032.
+far inside Helix limits. See Decision Log D040.
 Kick: official public API (api.kick.com/public/v1/channels) with an app token
 from id.kick.com. Payload field names are UNVERIFIED; parser is tolerant.
 """

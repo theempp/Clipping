@@ -6,6 +6,7 @@ style must come from config built from references/, or rendering refuses.
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -118,6 +119,18 @@ DEFAULT_REACTIONS = {
 }
 
 
+def ass_colour(value: str) -> str:
+    """'#RRGGBB' -> ASS '&H00BBGGRR'; ASS values pass through unchanged."""
+    v = value.strip()
+    if v.startswith("&H"):
+        return v
+    m = re.fullmatch(r"#?([0-9a-fA-F]{6})", v)
+    if not m:
+        raise ConfigError(f"bad colour {value!r}: use #RRGGBB or &HAABBGGRR")
+    rr, gg, bb = m.group(1)[0:2], m.group(1)[2:4], m.group(1)[4:6]
+    return f"&H00{bb}{gg}{rr}".upper()
+
+
 def _crop(d: dict) -> Crop:
     return Crop(int(d["x"]), int(d["y"]), int(d["w"]), int(d["h"]))
 
@@ -147,6 +160,8 @@ def parse_settings(data: dict, work_dir: Path) -> Settings:
     style = None
     cs = data.get("caption_style")
     if cs:
+        cs = {**cs, **{k: ass_colour(cs[k]) for k in
+                       ("primary_colour", "highlight_colour", "outline_colour") if k in cs}}
         style = CaptionStyle(**cs)
     return Settings(work_dir=work_dir, channels=channels, caption_style=style,
                     max_channels=max_channels, extra=data.get("extra", {}))
