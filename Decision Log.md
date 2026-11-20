@@ -41,3 +41,13 @@ Small initial channel lineup followed by expansion from measured results. Do not
 - D014 — Locked: the web app dashboard has a visible "Wake Up" button/toggle. Switching it on transforms the entire page into a beautiful, polished, fully working clipping-system interface. This is the requested future product experience, not an implemented interface or physical wake-on-LAN command. See [[Dashboard Experience]].
 - D015 — Locked session instruction: save and organize the current planning notes, then stop. Zo will move into a new chat to discuss an important topic. Do not automatically resume interview questions before that topic.
 
+
+## 2026-11-20 — Integration starting set
+- D023 — Locked by Zo (decision card): starting tool set is Supabase (database, sync, login, clip storage) + Vercel (dashboard hosting) + direct YouTube Data API and X API for posting. Postiz deferred until TikTok/Reels; Cloudflare Pages/R2 kept as a fallback. Vercel Pro ($20/mo) is likely needed for commercial use (unverified). Nothing set up yet. Research: [[Tools and Repos]].
+- D024 — Locked by Zo (decision card): Reach Discord campaigns are watched by "Following" Reach's announcement channel into Zo's own private server, where our own bot reads it. No user token or self-bot. Unverified: whether Reach's campaign channel is an announcement channel. Manual paste stays as fallback.
+- D025 — Locked by Zo (decision card): Zo submits clip URLs to Content Rewards by hand; the dashboard shows the post link and a 30-minute countdown. Whop bounty API not used for now.
+
+### 2026-11-20 — Skills and token policy
+- D023 — Locked: token usage is a top-level priority without lowering output quality; policy in `CLAUDE.md`. Code/ffmpeg for deterministic work, model only for judgment; skills load on demand.
+- D024 — Locked: project skills = impeccable, apple-design, stageshow (video breakdowns), learn, campaign-scout, clip-detector-tuning, publish-approval-gate, clip-qa, caveman, investigate-first. See [[Tools and Repos]].
+- D025 — Locked: rtk and context-mode installed for token savings; rtk hook active next session.
