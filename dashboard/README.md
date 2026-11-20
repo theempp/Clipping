@@ -45,7 +45,8 @@ Stop the server with **Ctrl+C**.
    insert into public.owners(user_id)
    select id from auth.users where email = 'YOUR EMAIL';
    ```
-6. **Authentication > URL Configuration**: set Site URL to your dashboard address and add `http://localhost:3000/auth/callback` and `https://<your-vercel-domain>/auth/callback` to Redirect URLs.
+6. **Authentication > Emails > Magic Link**: add `Code: {{ .Token }}` to the template so you can sign in by code on any device (D063).
+7. **Authentication > URL Configuration**: set Site URL to your dashboard address and add `http://localhost:3000/auth/callback` and `https://<your-vercel-domain>/auth/callback` to Redirect URLs.
 
 ### 2. Keys on the PC
 
@@ -68,7 +69,7 @@ Open http://localhost:3000, enter your email, and click the link in the email on
 
 1. Import the GitHub repo in Vercel and set **Root Directory** to `dashboard`.
 2. Add the same two `NEXT_PUBLIC_SUPABASE_*` variables under Project Settings > Environment Variables.
-3. Deploy, then add the Vercel address to Supabase Redirect URLs (step 1.6).
+3. Deploy, then add the Vercel address to Supabase Redirect URLs (step 1.7).
 4. On the phone, open the site and use **Add to Home Screen**.
 
 ## How access is protected
