@@ -31,6 +31,11 @@ Small initial channel lineup followed by expansion from measured results. Do not
 - D018 — Locked: ffmpeg is the editing core; CapCut optional polish for top clips only (no official API).
 - D019 — Locked gate: Zo joins Reach Discord/Whop and supplies campaign briefs, rules, payout details and the text of the X post before campaign-specific build work. Not yet done.
 
+## 2026-11-20 — Project choice: Review Dashboard (Option 4)
+- D020 — Locked: new project focus is Option 4, the Review Dashboard with Wake Up. Zo does NOT want a final plan locked yet; capture all detail in the living brief in [[Dashboard Experience]] and keep it open to refinement. More videos/links will be studied first.
+- D021 — Locked direction, details open: dashboard works on phone and computer, synced; after approving a clip on the computer, Zo can download that video from the dashboard on the phone. Hosting/storage method and iOS behavior unvalidated.
+- D022 — Locked source of truth: design references come from Zo's Pinterest board, delivered into `references/`; link pending. No design values until then.
+
 ## 2026-11-20 — Runtime and dashboard lock; session pause
 - D013 — Locked: for V1, Zo's PC watches streams only while the PC is on. No hosted monitoring or coverage while the PC is off is included in this decision. Continuous watching alongside clipping/editing applies during active monitoring sessions. Heavy-work placement, sleep/browser-close behavior and recovery details still need planning.
 - D014 — Locked: the web app dashboard has a visible "Wake Up" button/toggle. Switching it on transforms the entire page into a beautiful, polished, fully working clipping-system interface. This is the requested future product experience, not an implemented interface or physical wake-on-LAN command. See [[Dashboard Experience]].
