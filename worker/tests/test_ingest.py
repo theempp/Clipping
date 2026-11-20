@@ -92,3 +92,5 @@ def test_caption_style_hex_to_ass(tmp_path):
     example = Path(__file__).resolve().parents[1] / "config" / "channels.example.toml"
     s = parse_settings(tomllib.loads(example.read_text()), tmp_path)
     assert s.caption_style.highlight_colour == "&H00BDF360" and s.caption_style.margin_v >= 320
+    assert (s.caption_style.pop_scale, s.caption_style.pop_ms) == (115, 90)  # D050
+    assert s.zoom.scale == 1.3 and s.zoom.min_gap_s == 4.0  # D051

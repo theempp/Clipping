@@ -64,6 +64,34 @@ class CaptionStyle:
     outline: float
     margin_v: int
     words_per_line: int = 3
+    # Optional (D022: set from references/ or leave off). 100 = no pop.
+    pop_scale: int = 100            # active word starts at this % and settles to 100
+    pop_ms: int = 90
+    emphasis_colour: str | None = None  # judge's emphasis words; None = highlight_colour
+
+
+@dataclass(frozen=True)
+class ZoomParams:
+    """Punch-in zooms (P3). scale 1.0 = off; value from Zo / references (D022)."""
+    scale: float = 1.0
+    ramp_s: float = 0.2
+    hold_s: float = 1.2
+    min_gap_s: float = 4.0
+    max_zooms: int = 8
+    lead_s: float = 0.0
+
+    @property
+    def on(self) -> bool:
+        return self.scale > 1.0
+
+
+@dataclass(frozen=True)
+class SfxParams:
+    """Whoosh on each zoom (P4). Off unless enabled; the campaign can still forbid it."""
+    enabled: bool = False
+    volume_db: float = -18.0
+    lead_s: float = 0.15          # whoosh starts this long before the zoom
+    file: str | None = None       # custom sound; None = synthesized whoosh (no licence risk)
 
 
 @dataclass(frozen=True)
@@ -101,6 +129,8 @@ class Settings:
     channels: list[Channel]
     caption_style: CaptionStyle | None
     max_channels: int = 3
+    zoom: ZoomParams = field(default_factory=ZoomParams)
+    sfx: SfxParams = field(default_factory=SfxParams)
     extra: dict = field(default_factory=dict)
 
     @property
@@ -163,8 +193,12 @@ def parse_settings(data: dict, work_dir: Path) -> Settings:
         cs = {**cs, **{k: ass_colour(cs[k]) for k in
                        ("primary_colour", "highlight_colour", "outline_colour") if k in cs}}
         style = CaptionStyle(**cs)
+    zoom = ZoomParams(**data.get("zoom", {}))
+    if zoom.on and zoom.min_gap_s < 2 * zoom.ramp_s + zoom.hold_s:
+        raise ConfigError("zoom.min_gap_s must cover one full pulse (2*ramp_s + hold_s)")
     return Settings(work_dir=work_dir, channels=channels, caption_style=style,
-                    max_channels=max_channels, extra=data.get("extra", {}))
+                    max_channels=max_channels, zoom=zoom, sfx=SfxParams(**data.get("sfx", {})),
+                    extra=data.get("extra", {}))
 
 
 def load_settings(config_path: Path | None = None) -> Settings:

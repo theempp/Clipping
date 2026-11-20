@@ -23,7 +23,8 @@ def rules_from(c: dict) -> CampaignRules:
     r = c.get("rules") or {}
     return CampaignRules(min_s=float(r.get("min_s", 10)), max_s=float(r.get("max_s", 60)),
                          required_tags=list(r.get("required_tags", [])),
-                         banned_words=list(r.get("banned_words", [])), permitted=True)
+                         banned_words=list(r.get("banned_words", [])), permitted=True,
+                         allow_sfx=bool(r.get("allow_sfx", True)))
 
 
 def summarize(c: dict) -> str:

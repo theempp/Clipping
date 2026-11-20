@@ -10,11 +10,11 @@ import datetime as dt
 import logging
 import time
 import uuid
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from .capture.buffer import extract_window
-from .config import Channel, Layout, Crop, Settings
+from .config import Channel, Crop, Layout, Settings, ass_colour
 from .detector.dedupe import detection_key, same_moment
 from .detector.spike import Moment
 from .judge.grok import Judgment
@@ -145,26 +145,46 @@ class Pipeline:
     def _metadata(self, job: Job) -> tuple[str, str, list[str]]:
         j, rules = job.data["judgment"], job.data["rules"]
         tags = list(rules.get("required_tags", []))
+        for t in j.get("hashtags") or []:  # judge hashtags after campaign-required ones
+            if t.lower() not in {x.lower() for x in tags}:
+                tags.append(t)
         title = job.data.get("title_override") or j["title"]
-        desc = "\n".join([j["hook"], " ".join(tags)]).strip()
+        desc = "\n".join([j.get("post_caption") or j["hook"], " ".join(tags)]).strip()
         return title, desc, tags
 
     def _render_step(self, job: Job, overrides: dict | None = None) -> bool:
         ch = self.channels[job.channel]
         j = {**job.data["judgment"], **(overrides or {})}
         words = [Word(**w) for w in job.data["words"]]
-        layout = ch.layout
+        layout, track = ch.layout, ch.layout is None
         if overrides and overrides.get("layout"):
             lay = overrides["layout"]
-            layout = Layout(Crop(**lay["facecam"]), Crop(**lay["gameplay"]),
-                            int(lay.get("facecam_height", 640)))
+            if lay.get("mode") == "track":  # IRL / full cam: face-tracked full frame
+                layout, track = None, True
+            else:
+                layout = Layout(Crop(**lay["facecam"]), Crop(**lay["gameplay"]),
+                                int(lay.get("facecam_height", 640)))
+        if j.get("max_len_s"):  # hook-first, so shortening keeps the start and cuts the tail
+            keep_s = max(float(j["max_len_s"]), float(job.data["rules"].get("min_s", 0)))  # campaign floor
+            j["trim_out"] = min(j["trim_out"], j["trim_in"] + keep_s)
+        style = self.s.caption_style
+        if j.get("caption_colour") and style is not None:
+            style = replace(style, highlight_colour=ass_colour(j["caption_colour"]))
+        zoom = self.s.zoom
+        if j.get("zoom") is False:
+            zoom = None
+        elif j.get("zoom") is True and not zoom.on:
+            zoom = replace(zoom, scale=1.3)  # D051 strength when switched on per clip
+        sfx_on = j["sfx"] if isinstance(j.get("sfx"), bool) else self.s.sfx.enabled
+        sfx = replace(self.s.sfx, enabled=sfx_on and job.data["rules"].get("allow_sfx", True))
         peak_rel = job.data["peak_ts"] - job.data["capture"]["start_ts"] - j["trim_in"]
         title, desc, tags = self._metadata(job)
         manifest = self._render(job.id, Path(job.data["capture"]["video"]), self._job_dir(job),
-                                j["trim_in"], j["trim_out"], words, layout, self.s.caption_style,
+                                j["trim_in"], j["trim_out"], words, layout, style,
                                 j.get("emphasis_words"), hook_offset=peak_rel,
                                 manifest_extra={"tags": tags, "channel": job.channel,
-                                                "revision": job.data.get("revision", 0)})
+                                                "revision": job.data.get("revision", 0)},
+                                zoom=zoom, track=track, sfx=sfx)
         self.store.advance(job.id, "rendered", {"manifest": manifest, "title": title,
                                                 "description": desc, "judgment": j})
         return True
@@ -199,6 +219,7 @@ class Pipeline:
             "state": "pending_review", "title": job.data["title"], "hook": j["hook"],
             "description": job.data["description"], "category": j["category"],
             "confidence": j["confidence"], "detector_score": job.score,
+            "score_10": j.get("score_10") or None, "hook_type": j.get("hook_type"),
             "moment_at": iso(job.trigger_ts), "duration_s": m["duration"],
             "storage_path": f"{base}/clip.mp4", "thumb_path": f"{base}/thumb.jpg",
             "qa": job.data["qa"], "judge": j, "manifest": m}, on_conflict="job_id",
@@ -233,6 +254,19 @@ class Pipeline:
                     overrides["emphasis_words"] = list(p["emphasis_words"])
                 elif r["kind"] == "title" and "title" in p:
                     title = str(p["title"])[:100]
+                elif not p and r.get("note") and self.judge is not None:
+                    # revision box: plain English -> settings (one small cached Grok call)
+                    try:
+                        edit, usage = self.judge.parse_edit(r["note"])
+                    except Exception as e:  # noqa: BLE001 - a bad note must not block other revisions
+                        log.warning("could not parse revision note %r: %s", r["note"][:80], e)
+                        continue
+                    if usage:
+                        self.sb.log_spend("grok", self.judge.cost_usd(usage), usage.get("total_tokens"),
+                                          {"clip_id": clip["id"], "revision_note": True})
+                    title = edit.pop("title", None) or title
+                    edit.pop("best_part_only", None)
+                    overrides.update(edit)
             rev = int(clip.get("revision", 0)) + 1
             # reset job to judged, then re-render -> QA -> upload with the same storage path
             update = {"revision": rev, **({"title_override": title} if title else {})}

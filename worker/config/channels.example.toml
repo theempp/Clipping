@@ -19,6 +19,23 @@ outline_colour = "#000002"
 outline = 6
 margin_v = 420
 words_per_line = 3
+# D050 (Zo, 2026-11-20): active word pops to 115% and settles to 100% over 90 ms.
+pop_scale = 115
+pop_ms = 90
+
+# Punch-in zooms at sentence ends (P3). D051 (Zo, 2026-11-20): strong, 130%.
+# Gaming layouts zoom only the facecam panel; IRL (track) mode zooms the whole frame.
+[zoom]
+scale = 1.3
+ramp_s = 0.2
+hold_s = 1.2
+min_gap_s = 4.0
+
+# Whoosh on each zoom (P4). D052 (Zo, 2026-11-20): off by default. Synthesized locally, no licence risk. A campaign with
+# rules.allow_sfx = false always renders without it; a revision note can switch it per clip.
+[sfx]
+enabled = false
+volume_db = -18.0
 
 # All three stream on Twitch (checked 2026-11-20: active Twitch VODs; Kick accounts idle).
 # Layouts measured on 1920x1080 frames from each streamer's GTA 6 VOD (2026-11-18/19).

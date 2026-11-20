@@ -71,3 +71,68 @@ def test_transcriber_cache(tmp_path):
     t = CachedTranscriber(Fake(), tmp_path)
     assert t.transcribe(wav) == t.transcribe(wav) == [Word(0, 0.5, "hi")]
     assert Fake.n == 1
+
+
+RUBRIC = {**RAW, "hook_type": "bold_claim", "standalone": True, "score_10": 8,
+          "post_caption": "he really said that", "hashtags": ["Lacy", "#fortnite", "x", "y"]}
+TALK = [Word(2.0, 2.4, "um"), Word(2.5, 2.8, "so"), Word(6.0, 6.3, "nobody"), Word(6.3, 6.7, "beats"),
+        Word(6.7, 7.0, "me"), Word(20.0, 20.6, "EVER"), Word(25.0, 25.3, "next")]
+
+
+def test_rubric_fields_and_hashtag_cleanup():
+    j = validate(RUBRIC, 40, 10, 60)
+    assert (j.hook_type, j.standalone, j.score_10) == ("bold_claim", True, 8)
+    assert j.hashtags == ["#lacy", "#fortnite", "#x"] and j.post_caption == "he really said that"
+
+
+@pytest.mark.parametrize("patch,frag", [({"hook_type": "none"}, "no hook"),
+                                         ({"standalone": False}, "standalone"),
+                                         ({"score_10": 4}, "score 4/10")])
+def test_hard_rules_drop(patch, frag):
+    j = validate({**RUBRIC, **patch}, 40, 10, 60)
+    assert not j.keep and frag in j.reason
+
+
+def test_legacy_judgment_without_rubric_still_kept():
+    j = validate(RAW, 40, 10, 60, TALK)
+    assert j.keep and j.score_10 == 0 and (j.trim_in, j.trim_out) == (5.0, 33.0)  # no snapping
+
+
+def test_verbal_hook_snaps_to_first_word_and_never_cuts_words():
+    # model starts in dead air at 3.0 and ends inside "EVER"
+    j = validate({**RUBRIC, "trim_in": 3.0, "trim_out": 20.3}, 40, 10, 60, TALK)
+    assert j.trim_in == pytest.approx(5.85)          # 0.15 s before "nobody"
+    assert j.trim_out == pytest.approx(20.95)        # whole "EVER" + payoff tail
+
+
+def test_visual_hook_keeps_lead_in():
+    j = validate({**RUBRIC, "hook_type": "play_peak", "trim_in": 3.0, "trim_out": 22}, 40, 10, 60, TALK)
+    assert (j.trim_in, j.trim_out) == (3.0, 22.0)
+    j = validate({**RUBRIC, "hook_type": "play_peak", "trim_in": 2.6, "trim_out": 22}, 40, 10, 60, TALK)
+    assert j.trim_in == 2.5                           # cut inside "so" moves to its start
+
+
+def test_schema_requires_rubric_fields():
+    from clipworker.judge.grok import SCHEMA
+    for k in ("hook_type", "standalone", "score_10", "post_caption", "hashtags"):
+        assert k in SCHEMA["required"] and k in SCHEMA["properties"]
+
+
+
+def test_validate_edit_keeps_only_well_formed():
+    from clipworker.judge.grok import validate_edit
+    assert validate_edit({"max_len_s": 30, "sfx": False, "zoom": None, "caption_colour": "#2f80ff",
+                          "best_part_only": True, "title": None}) == \
+        {"max_len_s": 30.0, "sfx": False, "caption_colour": "#2F80FF", "best_part_only": True}
+    assert validate_edit({"max_len_s": 9999, "caption_colour": "blue", "title": "  "}) == {}
+
+
+def test_parse_edit_calls_once_then_caches(tmp_path):
+    calls = []
+    raw = {"max_len_s": 30, "sfx": False, "zoom": None, "caption_colour": "#2F80FF",
+           "best_part_only": True, "title": None}
+    g = GrokJudge("k", "grok-test", tmp_path, _client(calls, raw=raw))
+    a, usage = g.parse_edit("best part only, under 30s, no sfx, blue captions")
+    b, usage2 = g.parse_edit("best part only, under 30s, no sfx, blue captions")
+    assert a == b and a["max_len_s"] == 30.0 and len(calls) == 1 and usage and not usage2
+    assert calls[0]["response_format"]["json_schema"]["name"] == "clip_edit"

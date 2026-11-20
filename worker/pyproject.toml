@@ -13,6 +13,8 @@ dependencies = [
 # GPU captions. Install CUDA 12.8 torch wheels FIRST (see Install and Detector Plan, Phase 2).
 transcribe = ["whisperx>=3.3"]
 discord = ["discord.py>=2.4,<3"]
+# IRL reframe: face per shot. 4.x keeps the Haar cascades (removed from 5.x).
+reframe = ["opencv-python-headless>=4.9,<5"]
 dev = ["pytest>=8"]
 
 [project.scripts]

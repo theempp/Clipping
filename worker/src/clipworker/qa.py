@@ -9,7 +9,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .render.captions import H, SAFE_BOTTOM, W, parse_ass_events
+from .render.captions import H, SAFE_BOTTOM, SIDE_MARGIN, W, parse_ass_events, text_width
 from .render.ffmpeg import probe
 
 MAX_BYTES = 50 * 1024 * 1024  # Supabase free plan per-file limit
@@ -24,6 +24,7 @@ class CampaignRules:
     required_tags: list[str] = field(default_factory=list)   # must appear in title/description
     banned_words: list[str] = field(default_factory=list)
     permitted: bool = False                                  # rights gate (D016)
+    allow_sfx: bool = True                                   # some campaigns ban added audio
 
 
 @dataclass
@@ -91,6 +92,16 @@ def check_clip(video: Path, captions: Path | None, rules: CampaignRules, title: 
         mv = re.search(r"^Style: Cap,(?:[^,]*,){20}(\d+),", text, re.M)
         if mv and int(mv.group(1)) < SAFE_BOTTOM:
             fails.append("captions: inside bottom safe area")
+        sz = re.search(r"^Style: Cap,[^,]*,(\d+),(?:[^,]*,){13}([\d.]+),", text, re.M)
+        if sz:
+            size, outline = int(sz.group(1)), float(sz.group(2))
+            pops = [int(x) for x in re.findall(r"\\fscx(\d+)", text)] or [100]
+            widest = max((text_width(re.sub(r"\{[^}]*\}", "", line.split(",", 9)[9]), size,
+                                     outline, max(pops))
+                          for line in text.splitlines() if line.startswith("Dialogue:")), default=0)
+            m["caption_max_width_px"] = round(widest)
+            if widest > W - 2 * SIDE_MARGIN:
+                fails.append(f"captions: line ~{widest:.0f}px wide overflows the {W}px frame")
     meta = f"{title}\n{description}".lower()
     for tag in rules.required_tags:
         if tag.lower() not in meta:

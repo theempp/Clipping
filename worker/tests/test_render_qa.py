@@ -25,7 +25,7 @@ def test_ass_highlight_one_event_per_word():
     assert len(ev) == len(WORDS)
     assert all(e > s for s, e in ev)
     assert all(b[0] >= a[0] for a, b in zip(ev, ev[1:]))   # ordered
-    assert "{\\b1}shot{\\b0}" in ass
+    assert "{\\b1}{\\c&H0000FFFF}shot{\\c&H00FFFFFF}{\\b0}" in ass  # emphasis: bold + colour
     assert "(bro)" in ass  # braces escaped, can't inject ASS overrides
     assert "PlayResY: 1920" in ass
 
@@ -72,3 +72,40 @@ def test_qa_reports_every_failure(source_video, tmp_path):
     assert not res.passed
     for frag in ("rights", "duration", "#clix", "banned word"):
         assert frag in text, text
+
+
+def test_groups_break_on_punctuation_pause_and_width():
+    from dataclasses import replace
+
+    from clipworker.render.captions import group_words
+    ws = [Word(0.0, 0.2, "no"), Word(0.2, 0.4, "way,"), Word(0.4, 0.6, "he"), Word(0.6, 0.8, "hit"),
+          Word(1.5, 1.7, "that"), Word(1.7, 1.9, "shot")]
+    g = [[w.text for w in grp] for grp in group_words(ws, TEST_STYLE)]
+    assert g == [["no", "way,"], ["he", "hit"], ["that", "shot"]]   # comma, then 0.7 s pause
+    big = replace(TEST_STYLE, size=160)
+    long = [Word(i, i + 0.5, "unbelievable") for i in range(3)]
+    assert all(len(x) == 1 for x in group_words(long, big))           # would overflow 960 px
+
+
+def test_pop_animates_active_word_only():
+    from dataclasses import replace
+    ass = build_ass(shift_words(WORDS, 3.0, 20.0), replace(TEST_STYLE, pop_scale=115, pop_ms=90))
+    line = [x for x in ass.splitlines() if x.startswith("Dialogue:")][0]
+    assert "\\fscx115\\fscy115\\t(0,90,\\fscx100\\fscy100)" in line
+    assert line.count("fscx115") == 1
+    assert "fscx" not in build_ass(shift_words(WORDS, 3.0, 20.0), TEST_STYLE)  # off by default
+
+
+@needs_ffmpeg
+def test_qa_flags_caption_overflow(source_video, tmp_path):
+    from clipworker.render.captions import ass_time
+    render_clip("clip3", source_video, tmp_path / "r", 3.0, 18.0, WORDS, TEST_LAYOUT, TEST_STYLE)
+    cap = tmp_path / "r" / "captions.ass"
+    rules = CampaignRules(min_s=10, max_s=60, permitted=True)
+    ok = check_clip(tmp_path / "r" / "clip.mp4", cap, rules, title="t")
+    assert 0 < ok.metrics["caption_max_width_px"] <= 960
+    assert not [f for f in ok.failures if "overflows" in f]
+    cap.write_text(cap.read_text(encoding="utf-8")
+                   + f"Dialogue: 0,{ass_time(1)},{ass_time(2)},Cap,,0,0,0,,{'W' * 40}\n", encoding="utf-8")
+    bad = check_clip(tmp_path / "r" / "clip.mp4", cap, rules, title="t")
+    assert any("overflows" in f for f in bad.failures)
