@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/Icon";
 import { IS_DEMO } from "@/lib/env";
 import { browserClient } from "@/lib/supabase/client";
@@ -11,6 +11,8 @@ export default function LoginPage() {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Reason passed back by /auth/callback when a link fails.
+  useEffect(() => { setErr(new URLSearchParams(window.location.search).get("error")); }, []);
 
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
