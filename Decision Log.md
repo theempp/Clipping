@@ -59,7 +59,7 @@ Renumbered 2026-11-20: these three were first written as D023-D025, which clashe
 - D031 — Next step (main thread): three dashboard variants for Zo to choose from. Brief in [[Dashboard Experience]] under "Next: three dashboard variants". Nothing generated yet; wait for Zo to say go and for Pinterest references.
 
 ## 2026-11-20 — Backend build (first slice)
-Numbered D040-D047 because D032 was taken by the dashboard "Stage" choice in a parallel thread.
+Numbered D040-D047 to avoid a numbering clash with a parallel thread; the dashboard "Stage" choice is D049.
 Code lives in `worker/` (Python 3.11 package `clipworker`) and `supabase/migrations/`. 61 tests pass, including real ffmpeg renders and the SQL migration on Postgres. Nothing deployed, no keys used.
 - D040 — Locked: Twitch live status by polling Helix every 60 s with an app token. EventSub needs a public URL (webhooks) or a user token (WebSocket); polling is 1 call/min and simpler on a home PC.
 - D041 — Locked for V1: Kick chat through Kick's public chat WebSocket (read-only, unofficial, may break). The official webhook path is coded (signature check) but stays off until a public endpoint and the payload are verified.
@@ -69,4 +69,4 @@ Code lives in `worker/` (Python 3.11 package `clipworker`) and `supabase/migrati
 - D045 — Locked: spam guard. One chatter counts at most 2 messages per 5 s burst, so a single spammer cannot trigger a clip.
 - D046 — Locked: campaigns parsed from Discord are saved as drafts (or "avoid"). Only Zo activating a campaign opens the rights gate for its streamers.
 - D047 — Locked: dashboard access is an `owners` table plus row-level security; clips are private in Storage and reach the phone through signed links (D021).
-- D048 — Proposed, pending Zo: caption style from the Stage references (D032): Poppins SemiBold 78 px, white text, mint #60F3BD active word, #000002 outline 6 px, no shadow, 420 px bottom margin, 3 words per line. Set in `worker/config/channels.example.toml`.
+- D048 — Proposed, pending Zo: caption style from the Stage references (D049): Poppins SemiBold 78 px, white text, mint #60F3BD active word, #000002 outline 6 px, no shadow, 420 px bottom margin, 3 words per line. Set in `worker/config/channels.example.toml`.
