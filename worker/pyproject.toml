@@ -1,0 +1,30 @@
+[project]
+name = "clipworker"
+version = "0.1.0"
+description = "Clipp PC worker: ingest, detect, render, queue, publish."
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27,<1",
+  "websockets>=12,<16",
+  "cryptography>=42",
+]
+
+[project.optional-dependencies]
+# GPU captions. Install CUDA 12.8 torch wheels FIRST (see Install and Detector Plan, Phase 2).
+transcribe = ["whisperx>=3.3"]
+discord = ["discord.py>=2.4,<3"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+clipworker = "clipworker.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/clipworker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
