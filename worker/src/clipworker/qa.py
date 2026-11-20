@@ -24,6 +24,7 @@ class CampaignRules:
     required_tags: list[str] = field(default_factory=list)   # must appear in title/description
     banned_words: list[str] = field(default_factory=list)
     permitted: bool = False                                  # rights gate (D016)
+    allow_sfx: bool = True                                   # some campaigns ban added audio
 
 
 @dataclass

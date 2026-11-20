@@ -116,3 +116,23 @@ def test_schema_requires_rubric_fields():
     from clipworker.judge.grok import SCHEMA
     for k in ("hook_type", "standalone", "score_10", "post_caption", "hashtags"):
         assert k in SCHEMA["required"] and k in SCHEMA["properties"]
+
+
+
+def test_validate_edit_keeps_only_well_formed():
+    from clipworker.judge.grok import validate_edit
+    assert validate_edit({"max_len_s": 30, "sfx": False, "zoom": None, "caption_colour": "#2f80ff",
+                          "best_part_only": True, "title": None}) == \
+        {"max_len_s": 30.0, "sfx": False, "caption_colour": "#2F80FF", "best_part_only": True}
+    assert validate_edit({"max_len_s": 9999, "caption_colour": "blue", "title": "  "}) == {}
+
+
+def test_parse_edit_calls_once_then_caches(tmp_path):
+    calls = []
+    raw = {"max_len_s": 30, "sfx": False, "zoom": None, "caption_colour": "#2F80FF",
+           "best_part_only": True, "title": None}
+    g = GrokJudge("k", "grok-test", tmp_path, _client(calls, raw=raw))
+    a, usage = g.parse_edit("best part only, under 30s, no sfx, blue captions")
+    b, usage2 = g.parse_edit("best part only, under 30s, no sfx, blue captions")
+    assert a == b and a["max_len_s"] == 30.0 and len(calls) == 1 and usage and not usage2
+    assert calls[0]["response_format"]["json_schema"]["name"] == "clip_edit"

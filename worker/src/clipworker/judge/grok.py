@@ -8,6 +8,7 @@ Model = cheapest that passes the labeled eval set; set GROK_MODEL in .env.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -226,3 +227,70 @@ class GrokJudge:
         f.write_text(json.dumps(raw), encoding="utf-8")
         out.usage = j.get("usage", {})
         return out
+
+
+    def parse_edit(self, note: str) -> tuple[dict, dict]:
+        """(settings, usage). Cached by note hash; one small text call per new note."""
+        key = content_hash(self.model, EDIT_SYSTEM, note.strip())
+        f = self.cache / f"edit-{key}.json"
+        if f.exists():
+            return validate_edit(json.loads(f.read_text(encoding="utf-8"))), {}
+        body = {"model": self.model, "temperature": 0,
+                "messages": [{"role": "system", "content": EDIT_SYSTEM},
+                             {"role": "user", "content": note.strip()[:1000]}],
+                "response_format": {"type": "json_schema",
+                                    "json_schema": {"name": "clip_edit", "strict": True, "schema": EDIT_SCHEMA}}}
+        r = self.http.post(XAI_URL, json=body, headers={"Authorization": f"Bearer {self.api_key}"})
+        if r.status_code >= 400:
+            raise JudgeError(f"xAI {r.status_code}: {r.text[:300]}")
+        j = r.json()
+        try:
+            raw = json.loads(j["choices"][0]["message"]["content"])
+        except (KeyError, IndexError, json.JSONDecodeError) as e:
+            raise JudgeError(f"unparseable edit reply: {e}") from e
+        f.write_text(json.dumps(raw), encoding="utf-8")
+        return validate_edit(raw), j.get("usage", {})
+
+# --- plain-English revision box (P4) -------------------------------------------------
+
+EDIT_SYSTEM = (
+    "Turn a reviewer's plain-English edit request for a short vertical clip into settings. "
+    "Use null for anything the request does not mention. max_len_s: maximum clip length in "
+    "seconds. sfx: sound effects on/off. zoom: punch-in zooms on/off. caption_colour: the "
+    "caption highlight colour as #RRGGBB (blue = #2F80FF, red = #FF3B30, yellow = #FFD60A, "
+    "green = #34C759, purple = #AF52DE, pink = #FF5FA2, orange = #FF9500, white = #FFFFFF). "
+    "best_part_only: true when they ask for only the best/strongest part. title: new title or null. "
+    "Reply with JSON only."
+)
+
+EDIT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["max_len_s", "sfx", "zoom", "caption_colour", "best_part_only", "title"],
+    "properties": {
+        "max_len_s": {"type": ["number", "null"]},
+        "sfx": {"type": ["boolean", "null"]},
+        "zoom": {"type": ["boolean", "null"]},
+        "caption_colour": {"type": ["string", "null"]},
+        "best_part_only": {"type": ["boolean", "null"]},
+        "title": {"type": ["string", "null"]},
+    },
+}
+
+
+def validate_edit(raw: dict) -> dict:
+    """Keep only well-formed, mentioned settings."""
+    out: dict = {}
+    v = raw.get("max_len_s")
+    if isinstance(v, (int, float)) and 3 <= v <= 180:
+        out["max_len_s"] = float(v)
+    for k in ("sfx", "zoom", "best_part_only"):
+        if isinstance(raw.get(k), bool):
+            out[k] = raw[k]
+    c = raw.get("caption_colour")
+    if isinstance(c, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", c.strip()):
+        out["caption_colour"] = c.strip().upper()
+    t = raw.get("title")
+    if isinstance(t, str) and t.strip():
+        out["title"] = t.strip()[:100]
+    return out

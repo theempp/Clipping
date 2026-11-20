@@ -38,6 +38,10 @@ class FakeJudge:
         return Judgment(self.keep, "clutch", 2.0, 16.0, "he hit THAT", "No way he hit that",
                         ["that"], 0.9, "payoff", usage={"total_tokens": 900})
 
+    def parse_edit(self, note):
+        self.notes = getattr(self, "notes", []) + [note]
+        return {"max_len_s": 8.0, "sfx": False, "caption_colour": "#2F80FF"}, {"total_tokens": 50}
+
 
 def _env(tmp_path, source_video, keep=True, active=True, channels=("twitch:lacy",)):
     sb = FakeSupabase()
@@ -154,3 +158,22 @@ def test_revision_rerenders_and_returns_to_review(tmp_path, source_video):
     assert abs(clip["duration_s"] - 16.0) < 0.01
     assert all(r["resolved_at"] for r in sb.t["revisions"])
     assert pipe.transcriber.n == 1 and pipe.judge.n == 1      # only render+QA re-ran
+
+
+@needs_ffmpeg
+def test_revision_box_plain_english(tmp_path, source_video):
+    pipe, sb, store = _env(tmp_path, source_video)
+    pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    clip = sb.t["clips"][0]
+    sb.human(clip["id"], "revise")
+    sb.insert("revisions", {"clip_id": clip["id"], "kind": "other", "resolved_at": None, "payload": {},
+                            "note": "under 30 seconds, no sound effects, blue captions"})
+    assert pipe.process_revisions() == 1
+    clip = sb.t["clips"][0]
+    assert pipe.judge.notes == ["under 30 seconds, no sound effects, blue captions"]
+    # asked for 8 s, campaign minimum is 10 s: clamps to 10
+    assert abs(clip["duration_s"] - 10.0) < 0.01 and clip["manifest"]["sfx"] is False
+    ass = (Path(clip["manifest"]["video"]).parent / "captions.ass").read_text(encoding="utf-8")
+    assert "&H00FF802F" in ass                       # #2F80FF as ASS BGR highlight

@@ -31,6 +31,12 @@ ramp_s = 0.2
 hold_s = 1.2
 min_gap_s = 4.0
 
+# Whoosh on each zoom (P4). Synthesized locally, no licence risk. A campaign with
+# rules.allow_sfx = false always renders without it; a revision note can switch it per clip.
+[sfx]
+enabled = false
+volume_db = -18.0
+
 # All three stream on Twitch (checked 2026-11-20: active Twitch VODs; Kick accounts idle).
 # Layouts measured on 1920x1080 frames from each streamer's GTA 6 VOD (2026-11-18/19).
 # Gameplay boxes avoid each overlay's chat, facecam and sub counter. Scenes without a

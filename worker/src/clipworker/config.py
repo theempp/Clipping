@@ -86,6 +86,15 @@ class ZoomParams:
 
 
 @dataclass(frozen=True)
+class SfxParams:
+    """Whoosh on each zoom (P4). Off unless enabled; the campaign can still forbid it."""
+    enabled: bool = False
+    volume_db: float = -18.0
+    lead_s: float = 0.15          # whoosh starts this long before the zoom
+    file: str | None = None       # custom sound; None = synthesized whoosh (no licence risk)
+
+
+@dataclass(frozen=True)
 class DetectorParams:
     burst_s: float = 5.0
     baseline_s: float = 600.0
@@ -121,6 +130,7 @@ class Settings:
     caption_style: CaptionStyle | None
     max_channels: int = 3
     zoom: ZoomParams = field(default_factory=ZoomParams)
+    sfx: SfxParams = field(default_factory=SfxParams)
     extra: dict = field(default_factory=dict)
 
     @property
@@ -187,7 +197,8 @@ def parse_settings(data: dict, work_dir: Path) -> Settings:
     if zoom.on and zoom.min_gap_s < 2 * zoom.ramp_s + zoom.hold_s:
         raise ConfigError("zoom.min_gap_s must cover one full pulse (2*ramp_s + hold_s)")
     return Settings(work_dir=work_dir, channels=channels, caption_style=style,
-                    max_channels=max_channels, zoom=zoom, extra=data.get("extra", {}))
+                    max_channels=max_channels, zoom=zoom, sfx=SfxParams(**data.get("sfx", {})),
+                    extra=data.get("extra", {}))
 
 
 def load_settings(config_path: Path | None = None) -> Settings:

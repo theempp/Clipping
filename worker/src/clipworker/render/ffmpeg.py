@@ -11,9 +11,10 @@ import subprocess
 from dataclasses import asdict
 from pathlib import Path
 
-from ..config import CaptionStyle, Layout
+from ..config import CaptionStyle, Layout, SfxParams
 from ..transcribe import Word
 from .captions import H, W, build_ass, shift_words
+from .sfx import audio_filter, ensure_whoosh
 from .motion import ZoomParams, shot_centres, track_crop_filter, zoom_times, zoompan_filter
 
 CAPTION_VERSION = "ass-v1"
@@ -64,12 +65,15 @@ def video_filter(layout: Layout | None, captions_file: str | None, zooms: list[f
 def render_command(src: Path, out: Path, t_in: float, t_out: float, layout: Layout | None,
                    captions_file: str | None, fps: int, ffmpeg: str = "ffmpeg",
                    zooms: list[float] | None = None, zoom: ZoomParams | None = None,
-                   centres: list[tuple[float, float, float]] | None = None) -> list[str]:
+                   centres: list[tuple[float, float, float]] | None = None,
+                   sfx: SfxParams | None = None, whoosh: Path | None = None) -> list[str]:
+    a_graph, needs_sfx = audio_filter(zooms or [], sfx if whoosh else None)
+    extra_in = ["-i", str(whoosh)] if needs_sfx else []
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
-            "-ss", f"{t_in:.3f}", "-to", f"{t_out:.3f}", "-i", str(src),
-            "-filter_complex", video_filter(layout, captions_file, zooms, zoom, fps, centres),
-            "-map", "[v]", "-map", "0:a:0",
-            "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
+            "-ss", f"{t_in:.3f}", "-to", f"{t_out:.3f}", "-i", str(src), *extra_in,
+            "-filter_complex", video_filter(layout, captions_file, zooms, zoom, fps, centres)
+            + ";" + a_graph,
+            "-map", "[v]", "-map", "[a]",
             "-r", str(fps), "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p",
             "-preset", "medium", "-crf", "20", "-maxrate", "6M", "-bufsize", "12M",
             "-c:a", "aac", "-ar", "48000", "-b:a", "160k", "-movflags", "+faststart", str(out)]
@@ -80,7 +84,7 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
                 emphasis: list[str] | None = None, hook_offset: float | None = None,
                 manifest_extra: dict | None = None, ffmpeg: str = "ffmpeg",
                 ffprobe: str = "ffprobe", run=subprocess.run, zoom: ZoomParams | None = None,
-                track: bool = False) -> dict:
+                track: bool = False, sfx: SfxParams | None = None) -> dict:
     if style is None:
         raise ValueError("caption_style missing: design values must come from references/ (D022); "
                          "ask Zo before rendering")
@@ -92,17 +96,20 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
     zooms = zoom_times(rel, dur, zoom, hook_offset) if zoom else []
     centres = (shot_centres(Path(src), t_in, t_out, out_dir / "shots", ffmpeg, run)
                if track and layout is None else None)
+    whoosh = None
+    if sfx is not None and sfx.enabled and zooms:
+        whoosh = Path(sfx.file).resolve() if sfx.file else ensure_whoosh(out_dir.parent / "_sfx", ffmpeg, run)
     out = out_dir / "clip.mp4"
     # cwd=out_dir so the ass filter gets a bare filename (no Windows drive-colon escaping).
     run(render_command(Path(src).resolve(), out.resolve(), t_in, t_out, layout, "captions.ass", fps,
-                       ffmpeg, zooms, zoom, centres), check=True, cwd=str(out_dir))
+                       ffmpeg, zooms, zoom, centres, sfx, whoosh), check=True, cwd=str(out_dir))
     thumb_t = min(max(0.0, hook_offset if hook_offset is not None else dur * 0.3), max(0.0, dur - 0.1))
     thumb = out_dir / "thumb.jpg"
     run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{thumb_t:.3f}", "-i", str(out),
          "-frames:v", "1", "-q:v", "3", str(thumb)], check=True)
     manifest = {"clip_id": clip_id, "source": str(src), "window": [t_in, t_out], "fps": fps,
                 "layout": asdict(layout) if layout else None, "caption_version": CAPTION_VERSION,
-                "zooms": zooms, "shots": centres,
+                "zooms": zooms, "shots": centres, "sfx": bool(whoosh),
                 "video": str(out), "thumbnail": str(thumb), "duration": round(dur, 3),
                 **(manifest_extra or {})}
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
