@@ -145,8 +145,11 @@ class Pipeline:
     def _metadata(self, job: Job) -> tuple[str, str, list[str]]:
         j, rules = job.data["judgment"], job.data["rules"]
         tags = list(rules.get("required_tags", []))
+        for t in j.get("hashtags") or []:  # judge hashtags after campaign-required ones
+            if t.lower() not in {x.lower() for x in tags}:
+                tags.append(t)
         title = job.data.get("title_override") or j["title"]
-        desc = "\n".join([j["hook"], " ".join(tags)]).strip()
+        desc = "\n".join([j.get("post_caption") or j["hook"], " ".join(tags)]).strip()
         return title, desc, tags
 
     def _render_step(self, job: Job, overrides: dict | None = None) -> bool:
@@ -199,6 +202,7 @@ class Pipeline:
             "state": "pending_review", "title": job.data["title"], "hook": j["hook"],
             "description": job.data["description"], "category": j["category"],
             "confidence": j["confidence"], "detector_score": job.score,
+            "score_10": j.get("score_10") or None, "hook_type": j.get("hook_type"),
             "moment_at": iso(job.trigger_ts), "duration_s": m["duration"],
             "storage_path": f"{base}/clip.mp4", "thumb_path": f"{base}/thumb.jpg",
             "qa": job.data["qa"], "judge": j, "manifest": m}, on_conflict="job_id",

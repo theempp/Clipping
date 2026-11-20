@@ -11,6 +11,10 @@ from ..transcribe import Word
 
 W, H = 1080, 1920
 SAFE_BOTTOM = 320  # px kept clear for Shorts/X UI chrome
+SIDE_MARGIN = 60   # MarginL/MarginR in the style line
+GAP_BREAK_S = 0.30  # a pause this long starts a new caption group
+CHAR_W = 0.62       # rough glyph width / font size for bold sans (overflow guard)
+_PUNCT = (".", ",", "!", "?", ";", ":")
 
 
 def ass_time(t: float) -> str:
@@ -40,6 +44,36 @@ def shift_words(words: list[Word], t_in: float, t_out: float) -> list[Word]:
     return out
 
 
+def text_width(text: str, size: int, outline: float = 0, scale: int = 100) -> float:
+    """Conservative pixel width estimate for one caption line (no font file needed)."""
+    return (len(text) * size * CHAR_W + 2 * outline) * max(scale, 100) / 100
+
+
+def group_words(words: list[Word], style: CaptionStyle) -> list[list[Word]]:
+    """2-3 words on screen at a time (clipper-video rule).
+
+    Breaks after punctuation, on pauses >= GAP_BREAK_S, at words_per_line, and
+    before a line would overflow the frame width (WrapStyle 2 never wraps, so an
+    overlong line is cut off at the frame edge).
+    """
+    n = max(1, style.words_per_line)
+    usable = W - 2 * SIDE_MARGIN
+    groups: list[list[Word]] = []
+    cur: list[Word] = []
+    for w in words:
+        if cur:
+            gap = w.start - cur[-1].end
+            line = " ".join(x.text for x in cur + [w])
+            if (len(cur) >= n or gap >= GAP_BREAK_S or cur[-1].text.rstrip().endswith(_PUNCT)
+                    or text_width(line, style.size, style.outline, style.pop_scale) > usable):
+                groups.append(cur)
+                cur = []
+        cur.append(w)
+    if cur:
+        groups.append(cur)
+    return groups
+
+
 def build_ass(words: list[Word], style: CaptionStyle, emphasis: list[str] | None = None) -> str:
     if style.margin_v < SAFE_BOTTOM:
         raise ValueError(f"caption margin_v {style.margin_v} is inside the platform UI safe area "
@@ -58,8 +92,12 @@ def build_ass(words: list[Word], style: CaptionStyle, emphasis: list[str] | None
         "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
     events = []
-    n = max(1, style.words_per_line)
-    groups = [words[i:i + n] for i in range(0, len(words), n)]
+    groups = group_words(words, style)
+    emph_c = style.emphasis_colour or style.highlight_colour
+    pop = ""
+    if style.pop_scale != 100:
+        pop = (f"{{\\fscx{style.pop_scale}\\fscy{style.pop_scale}"
+               f"\\t(0,{style.pop_ms},\\fscx100\\fscy100)}}")
     for gi, g in enumerate(groups):
         group_end = g[-1].end
         if gi + 1 < len(groups):
@@ -72,11 +110,16 @@ def build_ass(words: list[Word], style: CaptionStyle, emphasis: list[str] | None
             parts = []
             for j, x in enumerate(g):
                 t = _esc(x.text)
-                bold = _norm(x.text) in emph
-                if bold:
-                    t = "{\\b1}" + t + "{\\b0}"
+                is_emph = _norm(x.text) in emph
                 if j == wi:
-                    t = "{\\c" + style.highlight_colour + "}" + t + "{\\c" + style.primary_colour + "}"
+                    t = pop + "{\\c" + style.highlight_colour + "}" + t
+                    if pop:  # reset scale so the rest of the line stays 100%
+                        t += "{\\fscx100\\fscy100}"
+                    t += "{\\c" + style.primary_colour + "}"
+                elif is_emph:
+                    t = "{\\c" + emph_c + "}" + t + "{\\c" + style.primary_colour + "}"
+                if is_emph:
+                    t = "{\\b1}" + t + "{\\b0}"
                 parts.append(t)
             events.append(f"Dialogue: 0,{ass_time(start)},{ass_time(end)},Cap,,0,0,0,,{' '.join(parts)}")
     return header + "\n".join(events) + "\n"

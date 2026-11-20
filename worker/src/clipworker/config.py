@@ -64,6 +64,10 @@ class CaptionStyle:
     outline: float
     margin_v: int
     words_per_line: int = 3
+    # Optional (D022: set from references/ or leave off). 100 = no pop.
+    pop_scale: int = 100            # active word starts at this % and settles to 100
+    pop_ms: int = 90
+    emphasis_colour: str | None = None  # judge's emphasis words; None = highlight_colour
 
 
 @dataclass(frozen=True)
