@@ -1,0 +1,10 @@
+# Device-specific Obsidian state
+.obsidian/workspace*.json
+.obsidian/cache/
+.trash/
+# Credentials must never enter the planning repository
+.env
+.env.*
+!.env.example
+*.pem
+*.key
