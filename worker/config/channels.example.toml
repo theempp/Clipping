@@ -49,10 +49,12 @@ facecam_height = 640
 platform = "twitch"
 login = "silky"
 streamer = "silky"
-[channels.layout]        # cut-out facecam bottom-right; chat top-right from x=1410
+[channels.layout]        # cut-out facecam bottom-right; chat top-right from x=1414
 facecam = { x = 1450, y = 800, w = 470, h = 280 }
-gameplay = { x = 506, y = 0, w = 908, h = 1080 }
-facecam_height = 640
+# Wider box keeps the full game subtitle (x 490-1424); taller facecam slot (720)
+# makes the gameplay slot wide enough to show all 960 px without side trim.
+gameplay = { x = 466, y = 0, w = 960, h = 1080 }
+facecam_height = 720
 
 [extra.kick_chatrooms]   # chatroom_id -> kick login (needed for the Pusher chat path)
 # "123456" = "example"
