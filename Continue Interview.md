@@ -1,5 +1,5 @@
 # Continue Interview
-Links: [[clipping]] � [[Decision Log]] � [[Interview Roadmap]]
+Links: [[clipping]] · [[Decision Log]] · [[Interview Roadmap]]
 
 Copy this into a new chat if automatic creation is unavailable:
 
@@ -21,7 +21,7 @@ https://www.youtube.com/watch?v=aaTqimE1J9w
 https://www.youtube.com/watch?v=-jFLlQSVA1c
 Previous retrieval and chat creation failed. Never claim these videos were analyzed without accessing their contents.
 
-Latest locked decisions: V1 revenue direction is creator campaigns through Content Rewards. Plan future campaign discovery/ranking that explains which to pursue or avoid and learns from feedback, editing strengths, streamer familiarity and channel outcomes; it is not running yet. Recurring operating budget is $100-$250/month, with a $250 planning ceiling; setup costs and actual coverage affordability remain unverified. V1 stream monitoring runs on my PC only while it is on. In the web dashboard, a "Wake Up" button/toggle transforms the whole page into a beautiful, polished, fully working clipping-system interface. Read Campaign Intelligence.md and Dashboard Experience.md. Continuous monitoring applies within active sessions while other jobs proceed; no PC-off monitoring is promised.
+Latest locked decisions: V1 revenue direction is creator campaigns through Content Rewards. Plan future campaign discovery/ranking that explains which to pursue or avoid and learns from feedback, editing strengths, streamer familiarity and channel outcomes; it is not running yet. Recurring operating budget is $100–$250/month, with a $250 planning ceiling; setup costs and actual coverage affordability remain unverified. V1 stream monitoring runs on my PC only while it is on. In the web dashboard, a "Wake Up" button/toggle transforms the whole page into a beautiful, polished, fully working clipping-system interface. Read Campaign Intelligence.md and Dashboard Experience.md. Continuous monitoring applies within active sessions while other jobs proceed; no PC-off monitoring is promised.
 
 We paused after the runtime question at my request so I could discuss an important topic in this new chat. Address the topic I provide first. Do not restart the interview or re-ask the locked revenue, budget or runtime choices. Once that topic is handled, continue the remaining platform/account readiness, source permissions, evidence-backed roster, editing, review, analytics, learning and visual questions efficiently. Concurrent stream capacity, activation/stop semantics and browser-close behavior are still open. Verify current official requirements before making eligibility or integration claims. Current official campaign research and limitations are saved in Campaign Intelligence.md; active campaigns for the proposed streamers have not been verified.
 

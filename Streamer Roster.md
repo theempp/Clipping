@@ -1,5 +1,5 @@
 # Streamer Roster
-Links: [[clipping]] � [[Research Agenda]] � [[Channel Strategy]]
+Links: [[clipping]] · [[Research Agenda]] · [[Channel Strategy]]
 
 Target: eight streamers. No final roster selected.
 User examples, not confirmed membership:

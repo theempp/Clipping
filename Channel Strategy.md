@@ -1,5 +1,5 @@
 # Channel Strategy
-Links: [[clipping]] � [[Decision Log]] � [[Streamer Roster]] � [[Research Agenda]]
+Links: [[clipping]] · [[Decision Log]] · [[Streamer Roster]] · [[Research Agenda]]
 
 Confirmed: mixed destination routing. Some channels may be streamer-specific; others may combine streamers. Exact count and divisions undecided.
 
@@ -14,6 +14,10 @@ Maintain destination accounts separately from source streamers. Map each streame
 - Whether GTA 6 warrants a dedicated channel or editorial series.
 - Country, account eligibility, originality requirements and source permissions.
 - Native platform metrics, limitations and attribution.
+
+## 2026-11-20 — TikTok/Instagram vs X/YouTube Shorts
+Directional vendor data (Metricool, Socialinsider; not streamer-specific): TikTok leads average views per video for established accounts; Reels about equal at 1M+ followers; Shorts strongest for small new accounts and long-tail reach; nothing found for X. No evidence X + Shorts outperform. Reach campaigns accept all four platforms.
+V1 = X + Shorts for API feasibility (TikTok posts private-only until audited; Instagram needs Business account + app review, 100 API posts/24h). Proposed: handoff panel for TikTok/Reels, then decide on automation after ~2 weeks of verified views per clip per platform. See D017.
 
 Broad reach is an objective, not evidence that all topics should share one channel. Evaluate segmented results; never promise monetization from reposting.
 

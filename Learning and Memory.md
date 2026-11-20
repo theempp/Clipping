@@ -1,5 +1,5 @@
 # Learning and Memory
-Links: [[clipping]] � [[Research Agenda]] � [[Agent Workflow]] � [[Decision Log]]
+Links: [[clipping]] · [[Research Agenda]] · [[Agent Workflow]] · [[Decision Log]]
 
 ## User intent
 The vault is the backend/brain where the software remembers decisions, learns from outcomes, audits itself and adapts to Zo's work style.
@@ -25,7 +25,7 @@ Which preferences can update automatically? Which strategy changes require Zo's 
 
 ## Ongoing knowledge capture
 
-### Campaign recommendation learning - requested 2026-11-20
+### Campaign recommendation learning — requested 2026-11-20
 See [[Campaign Intelligence]]. Explain both recommended and avoided campaigns to teach Zo. Preserve feedback and compare recommendations with actual content quality, streamer familiarity, channel performance, submission acceptance and settled earnings. Use uncertainty and measured tests; no learning service currently runs. Scoring, cold-start behavior and automatic adjustment boundaries are still to define.
 At the end of each clipping discussion update the session archive, decision log and relevant topic notes. Cross-chat capture needs explicit integration; these notes do not grant access to unrelated conversations.
 

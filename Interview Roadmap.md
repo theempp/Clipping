@@ -1,12 +1,12 @@
 # Interview Roadmap
-Links: [[clipping]] � [[Interview Record]] � [[Continue Interview]]
+Links: [[clipping]] · [[Interview Record]] · [[Continue Interview]]
 
 Continue in popup widgets, one question at a time. Prioritize questions that change scope, cost and architecture. Research recommendations before presenting them as evidence-backed.
 
 1. Revenue model and what success means.
    - 2026-11-20: creator campaigns through Content Rewards selected as direction. Campaign ranking/explanations and outcome-based improvement requested; detailed success metrics remain open. Next: monthly operating budget.
 2. Total monthly operating budget and acceptable setup cost.
-   - 2026-11-20: recurring budget $100-$250/month selected. Setup allowance remains open; next ask runtime to establish whether hardware spending is needed.
+   - 2026-11-20: recurring budget $100–$250/month selected. Setup allowance remains open; next ask runtime to establish whether hardware spending is needed.
 3. Where monitoring runs, uptime and concurrent streams.
    - Locked 2026-11-20: V1 monitoring on Zo's PC only while it is on. Simultaneous stream capacity and operational start/stop details remain open. Dashboard Wake Up transformation also locked; see [[Dashboard Experience]].
 4. Launch publishing platforms and actual account readiness.

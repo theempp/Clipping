@@ -7,7 +7,7 @@ Open this repository folder as a vault. The existing local vault is at `C:\Users
 
 ## Current decisions
 - Creator campaigns through Content Rewards guide V1 revenue research.
-- Recurring operating budget: $100-$250/month; actual costs remain to validate.
+- Recurring operating budget: $100–$250/month; actual costs remain to validate.
 - V1 stream monitoring runs on Zo's PC only while it is on.
 - A dashboard "Wake Up" control transforms the page into the active clipping interface.
 - Human review and approval precede publication to assigned accounts.

@@ -1,10 +1,10 @@
 # Agent Workflow
-Links: [[clipping]] � [[Vision and Requirements]] � [[Learning and Memory]]
+Links: [[clipping]] · [[Vision and Requirements]] · [[Learning and Memory]]
 
 ## Requested behavior
 Monitor streams continuously; clip moments and edit in parallel; send results to Zo; publish approved content to assigned destinations.
 
-### Locked V1 runtime - 2026-11-20
+### Locked V1 runtime — 2026-11-20
 Zo's PC monitors streams only while it is on. Continuous monitoring during clipping/editing means within active sessions, not 24/7 hosted coverage. The web dashboard's "Wake Up" control transforms the page into the operational interface; see [[Dashboard Experience]]. Local worker connection, start/stop semantics, browser-close behavior, sleep handling and recovery remain to specify. Other processing placement is not newly locked by the monitoring decision.
 
 ## Proposed architecture topics to validate

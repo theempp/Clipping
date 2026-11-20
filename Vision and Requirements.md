@@ -1,5 +1,5 @@
 # Vision and Requirements
-Links: [[clipping]] � [[Decision Log]] � [[Agent Workflow]] � [[Research Agenda]]
+Links: [[clipping]] · [[Decision Log]] · [[Agent Workflow]] · [[Research Agenda]]
 
 Build a private clipping tool that follows eight selected live streamers, detects promising moments, clips and edits in the background, and presents finished content for human review before publishing.
 
@@ -24,9 +24,9 @@ Budget, hosting, stream access, concurrency, detection quality, turnaround targe
 
 No guarantee of catching every viral moment. Measure coverage and failures rather than promising perfection.
 
-## Updated operating direction - 2026-11-20
+## Updated operating direction — 2026-11-20
 - Creator campaigns through Content Rewards are the V1 revenue priority; see [[Campaign Intelligence]].
-- Recurring operating budget: $100-$250/month across services, processing, storage and hosting. Setup allowance is undecided. Eight-source processing at this cost remains unvalidated.
+- Recurring operating budget: $100–$250/month across services, processing, storage and hosting. Setup allowance is undecided. Eight-source processing at this cost remains unvalidated.
 - V1 stream watching runs on Zo's PC only while it is on. No PC-off monitoring coverage is promised.
 - Web dashboard: switching on a "Wake Up" button/toggle transforms the whole page into the polished, fully functional clipping interface. See [[Dashboard Experience]] for locked direction and open details.
 
