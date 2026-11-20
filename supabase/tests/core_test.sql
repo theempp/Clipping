@@ -79,4 +79,41 @@ do $$ declare n int; s text; secs int; begin
     raise exception 'FAIL: duplicate publication';
   exception when unique_violation then null; end;
 end $$;
+
+-- Wake Up control (D055): owner flips it, non-owner cannot, worker reads it.
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000bb"}', false);
+do $$ begin
+  perform public.set_awake(true);
+  raise exception 'FAIL: non-owner woke the worker';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if;
+end $$;
+do $$ begin
+  if exists (select 1 from public.control) then raise exception 'FAIL: RLS leaked control to non-owner'; end if;
+  if public.is_owner() then raise exception 'FAIL: non-owner is_owner'; end if;
+end $$;
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000aa"}', false);
+select public.set_awake(true);
+do $$ begin
+  if not (select awake from public.control) then raise exception 'FAIL: owner could not wake'; end if;
+  if (select updated_by from public.control) <> '00000000-0000-0000-0000-0000000000aa' then
+    raise exception 'FAIL: wake not attributed'; end if;
+end $$;
+-- revision from the plain-English box: kind other, note = text, empty payload
+reset role;
+set role service_role;
+select set_config('request.jwt.claims', '{"role":"service_role"}', false);
+insert into public.clips(job_id, channel_key, moment_at, state) values ('job2', 'twitch:lacy', now(), 'pending_review');
+reset role;
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000aa"}', false);
+select public.review_clip((select id from public.clips where job_id = 'job2'), 'revise', 'cut the first two seconds', 'other', '{}');
+do $$ begin
+  if not exists (select 1 from public.revisions r join public.clips c on c.id = r.clip_id
+                 where c.job_id = 'job2' and r.kind = 'other' and r.note = 'cut the first two seconds'
+                 and r.payload = '{}' and c.state = 'revise') then
+    raise exception 'FAIL: revision box row wrong'; end if;
+end $$;
+reset role;
 select 'ALL SQL CHECKS PASSED';

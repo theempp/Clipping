@@ -61,4 +61,4 @@ Constraints:
 - Present the three side by side so Zo can pick or mix; record the choice here and in the Decision Log.
 
 ## Status
-Planning only. No dashboard, local worker or Wake Up control has been implemented.
+2026-11-20: Dashboard v1 built in `dashboard/` (see its README for running it on Windows, demo mode included). Wake Up semantics locked as D055; build decisions D053-D058 in [[Decision Log]]. Not yet connected to a real Supabase project.

@@ -77,6 +77,8 @@ class LiveRunner:
         self.clock = Clock()
         self.det = {c.key: SpikeDetector(c.key, c.detector, c.reaction_weights) for c in settings.channels}
         self.live: set[str] = set()
+        # Wake Up (D055): with Supabase the dashboard switch decides; offline runs stay on.
+        self.awake: bool = supabase is None
         self.caps: dict[str, Capture] = {}
         self._gap: dict[str, int] = {}
         self._pending: list[tuple] = []
@@ -115,7 +117,7 @@ class LiveRunner:
                     live.update({f"kick:{k}": v for k, v in
                                  st.kick_live(http, kk_tok, [c.login for c in kk]).items()})
                 permitted = {c.key for c in self.s.channels if self.pipe.rights.permit(c.streamer)}
-                self.live = {k for k, v in live.items() if v and k in permitted}
+                self.live = {k for k, v in live.items() if v and k in permitted} if self.awake else set()
                 self._sync_captures()
             except Exception as e:  # noqa: BLE001
                 log.warning("status poll failed: %s", e)
@@ -169,12 +171,29 @@ class LiveRunner:
                 log.warning("%s failed: %s", name, e)
             await asyncio.sleep(seconds)
 
+    def sync_awake(self):
+        """Read the Wake Up switch. Asleep = stop captures and detection; jobs already
+        rendering, in review or publishing keep going. Read errors keep the last value."""
+        try:
+            on = self.sb.awake()
+        except Exception as e:  # noqa: BLE001
+            log.warning("wake read failed: %s", e)
+            return
+        if on is None or on == self.awake:
+            return
+        self.awake = on
+        log.info("dashboard switched %s", "awake" if on else "asleep")
+        if not on:
+            self.live = set()
+            self._sync_captures()
+
     def heartbeat(self):
         if self.sb is None:
             return
+        self.sync_awake()
         depth = {s: n for s, n in self.store.db.execute(
             "SELECT stage, count(*) FROM jobs WHERE stage NOT IN ('uploaded','dropped') GROUP BY stage")}
-        self.sb.heartbeat(WORKER_ID, {"version": __version__, "live": sorted(self.live),
+        self.sb.heartbeat(WORKER_ID, {"version": __version__, "awake": self.awake, "live": sorted(self.live),
                                       "capturing": sorted(k for k, c in self.caps.items() if c.alive()),
                                       "queue": depth, "clock_drift_s": round(self.clock.check_drift(), 3)})
 
@@ -201,5 +220,7 @@ class LiveRunner:
         if rooms and env("KICK_PUSHER_KEY"):
             tasks.append(run_kick_pusher(env("KICK_PUSHER_KEY"), rooms, self._on_chat,
                                          self.clock.now, self._on_gap))
+        if self.sb is not None:
+            self.sync_awake()
         with keep_awake():
             await asyncio.gather(*tasks)

@@ -1,0 +1,3 @@
+{ "name": "Clipp", "short_name": "Clipp", "start_url": "/", "display": "standalone",
+  "background_color": "#000002", "theme_color": "#000002",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }] }
