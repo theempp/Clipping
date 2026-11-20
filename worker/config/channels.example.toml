@@ -20,22 +20,39 @@ outline = 6
 margin_v = 420
 words_per_line = 3
 
+# All three stream on Twitch (checked 2026-11-20: active Twitch VODs; Kick accounts idle).
+# Layouts measured on 1920x1080 frames from each streamer's GTA 6 VOD (2026-11-18/19).
+# Gameplay boxes avoid each overlay's chat, facecam and sub counter. Scenes without a
+# facecam (IRL, full-screen cam) still need a crop fix in review.
+
 [[channels]]
 platform = "twitch"
 login = "lacy"
 streamer = "lacy"        # streamers.slug in Supabase; must be in an ACTIVE campaign to capture
-# Layout set once by hand from a 1920x1080 frame (facecam top, gameplay below).
-# [channels.layout]
-# facecam = { x = 0, y = 0, w = 480, h = 270 }
-# gameplay = { x = 420, y = 0, w = 1080, h = 1080 }
-# facecam_height = 640
+[channels.layout]        # facecam top-left 494x278; chat top-right from x=1365
+facecam = { x = 0, y = 0, w = 494, h = 278 }
+gameplay = { x = 494, y = 0, w = 866, h = 1080 }
+facecam_height = 640
 [channels.reactions]     # per-channel emotes, merged over the defaults
 # lacyW = 1.0
 
 [[channels]]
-platform = "kick"
-login = "example"
-streamer = "example"
+platform = "twitch"
+login = "clix"
+streamer = "clix"
+[channels.layout]        # facecam top-left under the health bars; timer/subs top-right
+facecam = { x = 0, y = 80, w = 478, h = 269 }
+gameplay = { x = 506, y = 0, w = 908, h = 1080 }
+facecam_height = 640
+
+[[channels]]
+platform = "twitch"
+login = "silky"
+streamer = "silky"
+[channels.layout]        # cut-out facecam bottom-right; chat top-right from x=1410
+facecam = { x = 1450, y = 800, w = 470, h = 280 }
+gameplay = { x = 506, y = 0, w = 908, h = 1080 }
+facecam_height = 640
 
 [extra.kick_chatrooms]   # chatroom_id -> kick login (needed for the Pusher chat path)
 # "123456" = "example"
