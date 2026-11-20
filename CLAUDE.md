@@ -15,4 +15,4 @@ Private clip tool (Zo first). Vault notes (`*.md`) hold decisions; read `Decisio
 No default style. All visual values come from `references/` via Atlas. Empty = ask the user.
 
 ## Skills (`.claude/skills`)
-impeccable, apple-design (dashboard UI) · stageshow + video-breakdown (study breakdowns) · learn · campaign-scout · clip-detector-tuning · publish-approval-gate · clip-qa · caveman · investigate-first.
+impeccable, apple-design (dashboard UI) · stageshow + video-breakdown (study breakdowns) · learn · campaign-scout · clip-detector-tuning · publish-approval-gate · clip-qa · caveman · investigate-first · repo-audit · stream-ingest · clip-render.

@@ -38,5 +38,27 @@ Hosting choice and monthly cost within $100–250; phone type/OS; login method; 
 ### Inputs pending from Zo
 Pinterest board link or exported images into `references/`; additional videos/links to analyze (reference videos aaTqimE1J9w and -jFLlQSVA1c still NOT ANALYZED).
 
+## Next: three dashboard variants (Zo's request, 2026-11-20)
+Handoff for the main thread. Do NOT generate until Zo says go; Zo is adding a few references to the Pinterest board first.
+
+What Zo asked for, in Zo's words summarized:
+- Three visual dashboard variants to review and choose from, as the start of the overall dashboard design and layout (mood-board concepts).
+- Completely different from each other in layout, colors, widgets, buttons, components and overall feel. Creative, unique, and clearly standing apart.
+
+What each variant must show (from requirements already in this note and the plan):
+- Wake Up toggle and the transformed "active" state (D014), with true worker status, not just a visual change.
+- Streamer avatars with a green live glow; a per-stream page.
+- Live agent activity running at the same time (watching, detecting, transcribing, rendering), not one status.
+- Review queue: clip preview, approve, deny, revise (typed note: caption, trim, crop); then publish to X + YouTube Shorts (D017).
+- Content Rewards post link with the 30-minute submit countdown (D025).
+- Campaign panel from campaign-scout (pursue/avoid with reasons).
+- Analytics, Grok and storage spend against the $100-250/mo budget, PC/GPU status.
+- Works on phone and computer, synced; download an approved clip on the phone (D021).
+
+Constraints:
+- D022 and CLAUDE.md: visual values come only from Zo's Pinterest references in `references/`. If the folder is still empty when Zo says go, ask Zo for the board link or images first.
+- Use the impeccable and apple-design skills for the UI work; stageshow if a demo animation is wanted.
+- Present the three side by side so Zo can pick or mix; record the choice here and in the Decision Log.
+
 ## Status
 Planning only. No dashboard, local worker or Wake Up control has been implemented.

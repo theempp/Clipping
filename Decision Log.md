@@ -48,6 +48,12 @@ Small initial channel lineup followed by expansion from measured results. Do not
 - D025 — Locked by Zo (decision card): Zo submits clip URLs to Content Rewards by hand; the dashboard shows the post link and a 30-minute countdown. Whop bounty API not used for now.
 
 ### 2026-11-20 — Skills and token policy
-- D023 — Locked: token usage is a top-level priority without lowering output quality; policy in `CLAUDE.md`. Code/ffmpeg for deterministic work, model only for judgment; skills load on demand.
-- D024 — Locked: project skills = impeccable, apple-design, stageshow (video breakdowns), learn, campaign-scout, clip-detector-tuning, publish-approval-gate, clip-qa, caveman, investigate-first. See [[Tools and Repos]].
-- D025 — Locked: rtk and context-mode installed for token savings; rtk hook active next session.
+Renumbered 2026-11-20: these three were first written as D023-D025, which clashed with the integration decisions above. Same content, new IDs.
+- D026 — Locked: token usage is a top-level priority without lowering output quality; policy in `CLAUDE.md`. Code/ffmpeg for deterministic work, model only for judgment; skills load on demand.
+- D027 — Locked: project skills = impeccable, apple-design, stageshow (video breakdowns), learn, campaign-scout, clip-detector-tuning, publish-approval-gate, clip-qa, caveman, investigate-first. See [[Tools and Repos]].
+- D028 — Locked: rtk and context-mode installed for token savings; rtk hook active next session.
+
+## 2026-11-20 — Install plan and next design step
+- D029 — Planned, not installed: tool install order, own chat-spike detector (PeakCut as blueprint) and gap list in [[Install and Detector Plan]]. PC checked: RTX 5060 8 GB, driver 617.42, Windows 11 Pro. Phase 0 not started; Zo paused here.
+- D030 — Saved skills: repo-audit, stream-ingest, clip-render (added to `.claude/skills`).
+- D031 — Next step (main thread): three dashboard variants for Zo to choose from. Brief in [[Dashboard Experience]] under "Next: three dashboard variants". Nothing generated yet; wait for Zo to say go and for Pinterest references.

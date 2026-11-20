@@ -74,3 +74,21 @@ Verified via GitHub API (stars, license, last push only; code not audited).
 - context-mode 2.2.1 (mksglu, Elastic License 2.0, source-available): installed as user plugin.
 - Reference only, not installed: supabase/agent-skills (MIT), vercel-labs/agent-skills, anthropics/skills, remotion-dev/skills. Licenses unreported on some; check before copying.
 - Token policy lives in `CLAUDE.md`.
+
+## Top 10 newer / more-starred repos and skills (2026-11-20)
+Stars, created/last-push dates and license from the GitHub search API on 2026-11-20. "Fit" lines are from READMEs, not code audits (A). Compare: the older list above sits at 0–463 stars (clippy 10, stream-clipper 5, skate 23, captions-cli 0, opensource-clipping 463).
+
+| # | Repo | Stars | Last push | License | What it is / fit |
+|---|---|---|---|---|---|
+| 1 | [haziqahmedqasmi/PeakCut](https://github.com/haziqahmedqasmi/PeakCut) | 1.4k | 2026-11-17 | MIT | Twitch/Kick/YouTube link or live stream to 9:16 clips; live rolling buffer clipped by loudness + chat + transcript; word captions; Grok supported; posting with daily caps. Closest match to our whole design. Caution: repo created 2026-11-14, star count rose very fast (possible inflation), audit before use. |
+| 2 | [zhouxiaoka/autoclip](https://github.com/zhouxiaoka/autoclip) | 11.7k | 2026-11-20 | MIT | Desktop app: one link to clips with subtitles, covers, post copy. Podcast/talk focus, Chinese-first; no chat-spike detection. Reference for pipeline and UI. |
+| 3 | [Anil-matcha/AI-Youtube-Shorts-Generator](https://github.com/Anil-matcha/AI-Youtube-Shorts-Generator) | 6.3k | 2026-11-12 | MIT | Long video to Shorts: highlight detection, face auto-crop, captions. Good reference for reframe + caption steps. |
+| 4 | [FujiwaraChoki/supoclip](https://github.com/FujiwaraChoki/supoclip) | 3.7k | 2026-11-20 | SupoClip Noncommercial (not OSI) | Scores moments from podcasts/stream VODs, face-centred 9:16, word-synced subtitles, hook titles. License allows individual creators incl. monetized channels; companies/agencies need permission. Reference only unless license fits. |
+| 5 | [m-bain/whisperX](https://github.com/m-bain/whisperX) | 25.5k | 2026-11-12 | BSD-2-Clause | Word-level timestamps + diarization. Core caption component (FynCut uses it). |
+| 6 | [lay295/TwitchDownloader](https://github.com/lay295/TwitchDownloader) | 4.1k | 2026-11-15 | MIT | Twitch VOD/clip + chat download/render. Chat JSON feeds spike detection on VODs; chat render for overlays. Twitch only. |
+| 7 | [kajisho5/ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill) | 8.5k | 2026-11-20 | MIT | Claude Code skill / MCP: 42 local ffmpeg tools (9:16 fit-crop, karaoke captions, silence removal, loudness check). Fits "code/ffmpeg does rendering + QA". Created 2026-09-03; fast star growth, check. |
+| 8 | [ColinGPT9/clips-studio](https://github.com/ColinGPT9/clips-studio) ("Clips Kitty") | 474 | 2026-11-20 | AGPL-3.0 | Local PC clipper for chatting/gaming/sports streams (GTA examples), Windows Store build. Gaming-stream fit; AGPL means reference, not embed. |
+| 9 | [AgriciDaniel/claude-shorts](https://github.com/AgriciDaniel/claude-shorts) | 447 | 2026-07-11 | MIT | Claude Code skill: long-form to short-form with Remotion-rendered captions. Skill pattern reference. |
+| 10 | [nateherkai/herk-edit-kit](https://github.com/nateherkai/herk-edit-kit) | 3.0k | 2026-10-14 | Not stated (NOASSERTION) | 15 Codex/Claude Code editing skills: silence cut, captions, hooks, short-form rules. Talking-head focus; borrow caption/hook rules. Check license before copying. |
+
+Also seen, not ranked: iamajmeena/neonclipping (736 stars, created 2026-11-19, too new to trust), RafaelGodoyEbert/ViralCutter (505, GPL-3.0), artbyjazi/autoclip (471, MIT, MediaPipe speaker-tracked 9:16, inactive since 2026-08-01), bridge-mind/bridgeclip (476, MIT), OpenMontage (81.8k, AGPL-3.0, general agentic video production, too broad).
