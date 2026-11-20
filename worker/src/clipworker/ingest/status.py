@@ -37,11 +37,24 @@ class AppToken:
         return self._token
 
 
-def twitch_live(http: httpx.Client, token: AppToken, logins: list[str]) -> dict[str, bool]:
+def parse_twitch_streams(payload: dict) -> dict[str, dict]:
+    """login -> {"viewers": int|None, "started_at": iso|None} for live streams only."""
+    out = {}
+    for d in payload.get("data", []):
+        if d.get("type") == "live" and d.get("user_login"):
+            out[d["user_login"].lower()] = {"viewers": d.get("viewer_count"), "started_at": d.get("started_at")}
+    return out
+
+
+def twitch_streams(http: httpx.Client, token: AppToken, logins: list[str]) -> dict[str, dict]:
     r = http.get(TWITCH_STREAMS_URL, params=[("user_login", l) for l in logins],
                  headers={"Client-Id": token.client_id, "Authorization": f"Bearer {token.get()}"})
     r.raise_for_status()
-    live = {d["user_login"].lower() for d in r.json().get("data", []) if d.get("type") == "live"}
+    return parse_twitch_streams(r.json())
+
+
+def twitch_live(http: httpx.Client, token: AppToken, logins: list[str]) -> dict[str, bool]:
+    live = twitch_streams(http, token, logins)
     return {l: l in live for l in logins}
 
 
@@ -54,9 +67,25 @@ def parse_kick_channels(payload: dict) -> dict[str, bool]:
     return out
 
 
-def kick_live(http: httpx.Client, token: AppToken, slugs: list[str]) -> dict[str, bool]:
+def parse_kick_streams(payload: dict) -> dict[str, dict]:
+    """slug -> {"viewers", "started_at"} for live channels. Field names UNVERIFIED (tolerant)."""
+    out = {}
+    for d in payload.get("data", []):
+        slug = (d.get("slug") or d.get("broadcaster_slug") or "").lower()
+        stream = d.get("stream") or {}
+        if slug and stream.get("is_live", d.get("is_live", False)):
+            out[slug] = {"viewers": stream.get("viewer_count", stream.get("viewers")),
+                         "started_at": stream.get("start_time") or stream.get("started_at")}
+    return out
+
+
+def kick_streams(http: httpx.Client, token: AppToken, slugs: list[str]) -> dict[str, dict]:
     r = http.get(KICK_CHANNELS_URL, params=[("slug", s) for s in slugs],
                  headers={"Authorization": f"Bearer {token.get()}"})
     r.raise_for_status()
-    found = parse_kick_channels(r.json())
-    return {s: found.get(s, False) for s in slugs}
+    return parse_kick_streams(r.json())
+
+
+def kick_live(http: httpx.Client, token: AppToken, slugs: list[str]) -> dict[str, bool]:
+    live = kick_streams(http, token, slugs)
+    return {s: s in live for s in slugs}

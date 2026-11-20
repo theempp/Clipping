@@ -21,12 +21,20 @@ from .capture.buffer import capture_commands, parse_ebur128_line, prune
 from .clock import Clock
 from .config import Settings, env
 from .detector.spike import SpikeDetector
+from .gpu import snapshot as gpu_snapshot
 from .ingest import status as st
 from .ingest.kick_chat import run_kick_pusher
 from .ingest.twitch_irc import run_twitch_chat
 from .pipeline import Pipeline
 from .power import keep_awake
 from .store import Store
+
+
+def stream_fields(info: dict[str, dict]) -> dict:
+    """Heartbeat keys the dashboard rail reads: viewers and live_since per channel key."""
+    viewers = {k: v["viewers"] for k, v in info.items() if v.get("viewers") is not None}
+    since = {k: v["started_at"] for k, v in info.items() if v.get("started_at")}
+    return {"viewers": viewers, "live_since": since}
 
 log = logging.getLogger(__name__)
 WORKER_ID = os.environ.get("CLIP_WORKER_ID", "pc-main")
@@ -109,13 +117,15 @@ class LiveRunner:
                               env("KICK_CLIENT_SECRET", required=True), http) if kk else None)
         while True:
             try:
-                live = {}
+                info = {}
                 if tw:
-                    live.update({f"twitch:{k}": v for k, v in
-                                 st.twitch_live(http, tw_tok, [c.login for c in tw]).items()})
+                    info.update({f"twitch:{k}": v for k, v in
+                                 st.twitch_streams(http, tw_tok, [c.login for c in tw]).items()})
                 if kk:
-                    live.update({f"kick:{k}": v for k, v in
-                                 st.kick_live(http, kk_tok, [c.login for c in kk]).items()})
+                    info.update({f"kick:{k}": v for k, v in
+                                 st.kick_streams(http, kk_tok, [c.login for c in kk]).items()})
+                self.stream_info = info
+                live = {k: True for k in info}
                 permitted = {c.key for c in self.s.channels if self.pipe.rights.permit(c.streamer)}
                 self.live = {k for k, v in live.items() if v and k in permitted} if self.awake else set()
                 self._sync_captures()
@@ -195,7 +205,9 @@ class LiveRunner:
             "SELECT stage, count(*) FROM jobs WHERE stage NOT IN ('uploaded','dropped') GROUP BY stage")}
         self.sb.heartbeat(WORKER_ID, {"version": __version__, "awake": self.awake, "live": sorted(self.live),
                                       "capturing": sorted(k for k, c in self.caps.items() if c.alive()),
-                                      "queue": depth, "clock_drift_s": round(self.clock.check_drift(), 3)})
+                                      "queue": depth, "clock_drift_s": round(self.clock.check_drift(), 3),
+                                      **stream_fields(getattr(self, "stream_info", {})),
+                                      **({"gpu": g} if (g := gpu_snapshot()) else {})})
 
     def prune(self):
         now = self.clock.now()

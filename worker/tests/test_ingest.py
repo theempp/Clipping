@@ -94,3 +94,27 @@ def test_caption_style_hex_to_ass(tmp_path):
     assert s.caption_style.highlight_colour == "&H00BDF360" and s.caption_style.margin_v >= 320
     assert (s.caption_style.pop_scale, s.caption_style.pop_ms) == (115, 90)  # D050
     assert s.zoom.scale == 1.3 and s.zoom.min_gap_s == 4.0  # D051
+
+
+def test_twitch_streams_detail():
+    p = {"data": [{"user_login": "Lacy", "type": "live", "viewer_count": 18400,
+                   "started_at": "2026-11-20T18:00:00Z"}, {"user_login": "x", "type": ""}]}
+    assert status.parse_twitch_streams(p) == {"lacy": {"viewers": 18400, "started_at": "2026-11-20T18:00:00Z"}}
+
+
+def test_kick_streams_detail():
+    p = {"data": [{"slug": "silky", "stream": {"is_live": True, "viewer_count": 900, "start_time": "t"}},
+                  {"slug": "off", "stream": {"is_live": False}}]}
+    assert status.parse_kick_streams(p) == {"silky": {"viewers": 900, "started_at": "t"}}
+
+
+def test_stream_fields_and_gpu():
+    from types import SimpleNamespace
+    from clipworker import gpu
+    from clipworker.live import stream_fields
+    f = stream_fields({"twitch:lacy": {"viewers": 5, "started_at": "t"}, "kick:a": {"viewers": None, "started_at": None}})
+    assert f == {"viewers": {"twitch:lacy": 5}, "live_since": {"twitch:lacy": "t"}}
+    ok = lambda *a, **k: SimpleNamespace(returncode=0, stdout="NVIDIA GeForce RTX 5060, 62, 5222, 8151\n")
+    assert gpu.snapshot(ok) == {"name": "RTX 5060", "util": 62, "mem_used_gb": 5.1, "mem_total_gb": 8.0}
+    def missing(*a, **k): raise FileNotFoundError
+    assert gpu.snapshot(missing) is None
