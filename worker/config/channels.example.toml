@@ -1,0 +1,41 @@
+# Copy to config/channels.toml. Max 3 channels until CPU/GPU load is measured.
+max_channels = 3
+
+# Shared detector starting values (clip-detector-tuning owns changes; one at a time).
+[detector]
+threshold = 2.5
+cooldown_s = 45
+merge_s = 20
+
+# caption_style: values come from references/ (D022). Below = D048 proposal from the
+# dashboard "Stage" refs (pins 008, 011), locked by Zo. Poppins SemiBold must be
+# installed on the PC (SIL OFL, free). Colours: #RRGGBB or ASS &HAABBGGRR.
+[caption_style]
+font = "Poppins SemiBold"
+size = 78
+primary_colour = "#FFFFFF"
+highlight_colour = "#60F3BD"
+outline_colour = "#000002"
+outline = 6
+margin_v = 420
+words_per_line = 3
+
+[[channels]]
+platform = "twitch"
+login = "lacy"
+streamer = "lacy"        # streamers.slug in Supabase; must be in an ACTIVE campaign to capture
+# Layout set once by hand from a 1920x1080 frame (facecam top, gameplay below).
+# [channels.layout]
+# facecam = { x = 0, y = 0, w = 480, h = 270 }
+# gameplay = { x = 420, y = 0, w = 1080, h = 1080 }
+# facecam_height = 640
+[channels.reactions]     # per-channel emotes, merged over the defaults
+# lacyW = 1.0
+
+[[channels]]
+platform = "kick"
+login = "example"
+streamer = "example"
+
+[extra.kick_chatrooms]   # chatroom_id -> kick login (needed for the Pusher chat path)
+# "123456" = "example"
