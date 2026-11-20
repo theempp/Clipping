@@ -70,3 +70,4 @@ Code lives in `worker/` (Python 3.11 package `clipworker`) and `supabase/migrati
 - D046 — Locked: campaigns parsed from Discord are saved as drafts (or "avoid"). Only Zo activating a campaign opens the rights gate for its streamers.
 - D047 — Locked: dashboard access is an `owners` table plus row-level security; clips are private in Storage and reach the phone through signed links (D021).
 - D048 — Locked by Zo (decision card, 2026-11-20): caption style from the Stage references (D049): Poppins SemiBold 78 px, white text, mint #60F3BD active word, #000002 outline 6 px, no shadow, 420 px bottom margin, 3 words per line. Set in `worker/config/channels.example.toml`.
+- D050 — Locked by Zo (2026-11-20): caption pop. The active word starts at 115% and settles to 100% over 90 ms (`pop_scale`, `pop_ms` in `worker/config/channels.example.toml`). From the Clipper Video Upgrade Plan, P2.

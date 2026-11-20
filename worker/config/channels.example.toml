@@ -19,6 +19,9 @@ outline_colour = "#000002"
 outline = 6
 margin_v = 420
 words_per_line = 3
+# D050 (Zo, 2026-11-20): active word pops to 115% and settles to 100% over 90 ms.
+pop_scale = 115
+pop_ms = 90
 
 # All three stream on Twitch (checked 2026-11-20: active Twitch VODs; Kick accounts idle).
 # Layouts measured on 1920x1080 frames from each streamer's GTA 6 VOD (2026-11-18/19).
