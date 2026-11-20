@@ -14,6 +14,7 @@ from pathlib import Path
 from ..config import CaptionStyle, Layout
 from ..transcribe import Word
 from .captions import H, W, build_ass, shift_words
+from .motion import ZoomParams, shot_centres, track_crop_filter, zoom_times, zoompan_filter
 
 CAPTION_VERSION = "ass-v1"
 
@@ -39,16 +40,20 @@ def output_fps(src: float) -> int:
     return 60 if src >= 50 else 30
 
 
-def video_filter(layout: Layout | None, captions_file: str | None) -> str:
-    if layout is None:  # centre 9:16 crop fallback
-        g = f"[0:v]crop=ih*9/16:ih,scale={W}:{H},setsar=1[v]"
+def video_filter(layout: Layout | None, captions_file: str | None, zooms: list[float] | None = None,
+                 zoom: ZoomParams | None = None, fps: int = 30,
+                 centres: list[tuple[float, float, float]] | None = None) -> str:
+    zp = (lambda w, h: "," + zoompan_filter(zooms, zoom, w, h, fps)) if zooms and zoom else (lambda w, h: "")
+    if layout is None:  # full frame: face-tracked per shot when centres given, else centre crop
+        crop = track_crop_filter(centres) if centres else "crop=ih*9/16:ih"
+        g = f"[0:v]{crop},scale={W}:{H},setsar=1{zp(W, H)}[v]"
     else:
         fh = layout.facecam_height
         gh = H - fh
         f, p = layout.facecam, layout.gameplay
         g = (f"[0:v]split=2[a][b];"
              f"[a]crop={f.w}:{f.h}:{f.x}:{f.y},scale={W}:{fh}:force_original_aspect_ratio=increase,"
-             f"crop={W}:{fh},setsar=1[top];"
+             f"crop={W}:{fh},setsar=1{zp(W, fh)}[top];"
              f"[b]crop={p.w}:{p.h}:{p.x}:{p.y},scale={W}:{gh}:force_original_aspect_ratio=increase,"
              f"crop={W}:{gh},setsar=1[bot];[top][bot]vstack=inputs=2[v]")
     if captions_file:
@@ -57,10 +62,12 @@ def video_filter(layout: Layout | None, captions_file: str | None) -> str:
 
 
 def render_command(src: Path, out: Path, t_in: float, t_out: float, layout: Layout | None,
-                   captions_file: str | None, fps: int, ffmpeg: str = "ffmpeg") -> list[str]:
+                   captions_file: str | None, fps: int, ffmpeg: str = "ffmpeg",
+                   zooms: list[float] | None = None, zoom: ZoomParams | None = None,
+                   centres: list[tuple[float, float, float]] | None = None) -> list[str]:
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
             "-ss", f"{t_in:.3f}", "-to", f"{t_out:.3f}", "-i", str(src),
-            "-filter_complex", video_filter(layout, captions_file),
+            "-filter_complex", video_filter(layout, captions_file, zooms, zoom, fps, centres),
             "-map", "[v]", "-map", "0:a:0",
             "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
             "-r", str(fps), "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p",
@@ -72,7 +79,8 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
                 words: list[Word], layout: Layout | None, style: CaptionStyle | None,
                 emphasis: list[str] | None = None, hook_offset: float | None = None,
                 manifest_extra: dict | None = None, ffmpeg: str = "ffmpeg",
-                ffprobe: str = "ffprobe", run=subprocess.run) -> dict:
+                ffprobe: str = "ffprobe", run=subprocess.run, zoom: ZoomParams | None = None,
+                track: bool = False) -> dict:
     if style is None:
         raise ValueError("caption_style missing: design values must come from references/ (D022); "
                          "ask Zo before rendering")
@@ -80,17 +88,21 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
     rel = shift_words(words, t_in, t_out)
     (out_dir / "captions.ass").write_text(build_ass(rel, style, emphasis), encoding="utf-8")
     fps = output_fps(source_fps(probe(src, ffprobe, run)))
+    dur = t_out - t_in
+    zooms = zoom_times(rel, dur, zoom, hook_offset) if zoom else []
+    centres = (shot_centres(Path(src), t_in, t_out, out_dir / "shots", ffmpeg, run)
+               if track and layout is None else None)
     out = out_dir / "clip.mp4"
     # cwd=out_dir so the ass filter gets a bare filename (no Windows drive-colon escaping).
     run(render_command(Path(src).resolve(), out.resolve(), t_in, t_out, layout, "captions.ass", fps,
-                       ffmpeg), check=True, cwd=str(out_dir))
-    dur = t_out - t_in
+                       ffmpeg, zooms, zoom, centres), check=True, cwd=str(out_dir))
     thumb_t = min(max(0.0, hook_offset if hook_offset is not None else dur * 0.3), max(0.0, dur - 0.1))
     thumb = out_dir / "thumb.jpg"
     run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{thumb_t:.3f}", "-i", str(out),
          "-frames:v", "1", "-q:v", "3", str(thumb)], check=True)
     manifest = {"clip_id": clip_id, "source": str(src), "window": [t_in, t_out], "fps": fps,
                 "layout": asdict(layout) if layout else None, "caption_version": CAPTION_VERSION,
+                "zooms": zooms, "shots": centres,
                 "video": str(out), "thumbnail": str(thumb), "duration": round(dur, 3),
                 **(manifest_extra or {})}
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")

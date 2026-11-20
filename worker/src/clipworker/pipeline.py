@@ -156,18 +156,22 @@ class Pipeline:
         ch = self.channels[job.channel]
         j = {**job.data["judgment"], **(overrides or {})}
         words = [Word(**w) for w in job.data["words"]]
-        layout = ch.layout
+        layout, track = ch.layout, ch.layout is None
         if overrides and overrides.get("layout"):
             lay = overrides["layout"]
-            layout = Layout(Crop(**lay["facecam"]), Crop(**lay["gameplay"]),
-                            int(lay.get("facecam_height", 640)))
+            if lay.get("mode") == "track":  # IRL / full cam: face-tracked full frame
+                layout, track = None, True
+            else:
+                layout = Layout(Crop(**lay["facecam"]), Crop(**lay["gameplay"]),
+                                int(lay.get("facecam_height", 640)))
         peak_rel = job.data["peak_ts"] - job.data["capture"]["start_ts"] - j["trim_in"]
         title, desc, tags = self._metadata(job)
         manifest = self._render(job.id, Path(job.data["capture"]["video"]), self._job_dir(job),
                                 j["trim_in"], j["trim_out"], words, layout, self.s.caption_style,
                                 j.get("emphasis_words"), hook_offset=peak_rel,
                                 manifest_extra={"tags": tags, "channel": job.channel,
-                                                "revision": job.data.get("revision", 0)})
+                                                "revision": job.data.get("revision", 0)},
+                                zoom=self.s.zoom, track=track)
         self.store.advance(job.id, "rendered", {"manifest": manifest, "title": title,
                                                 "description": desc, "judgment": j})
         return True

@@ -71,6 +71,21 @@ class CaptionStyle:
 
 
 @dataclass(frozen=True)
+class ZoomParams:
+    """Punch-in zooms (P3). scale 1.0 = off; value from Zo / references (D022)."""
+    scale: float = 1.0
+    ramp_s: float = 0.2
+    hold_s: float = 1.2
+    min_gap_s: float = 4.0
+    max_zooms: int = 8
+    lead_s: float = 0.0
+
+    @property
+    def on(self) -> bool:
+        return self.scale > 1.0
+
+
+@dataclass(frozen=True)
 class DetectorParams:
     burst_s: float = 5.0
     baseline_s: float = 600.0
@@ -105,6 +120,7 @@ class Settings:
     channels: list[Channel]
     caption_style: CaptionStyle | None
     max_channels: int = 3
+    zoom: ZoomParams = field(default_factory=ZoomParams)
     extra: dict = field(default_factory=dict)
 
     @property
@@ -167,8 +183,11 @@ def parse_settings(data: dict, work_dir: Path) -> Settings:
         cs = {**cs, **{k: ass_colour(cs[k]) for k in
                        ("primary_colour", "highlight_colour", "outline_colour") if k in cs}}
         style = CaptionStyle(**cs)
+    zoom = ZoomParams(**data.get("zoom", {}))
+    if zoom.on and zoom.min_gap_s < 2 * zoom.ramp_s + zoom.hold_s:
+        raise ConfigError("zoom.min_gap_s must cover one full pulse (2*ramp_s + hold_s)")
     return Settings(work_dir=work_dir, channels=channels, caption_style=style,
-                    max_channels=max_channels, extra=data.get("extra", {}))
+                    max_channels=max_channels, zoom=zoom, extra=data.get("extra", {}))
 
 
 def load_settings(config_path: Path | None = None) -> Settings:
