@@ -75,6 +75,11 @@ class Supabase:
     def clips_in(self, state: str, limit: int = 20) -> list[dict]:
         return self.select("clips", state=f"eq.{state}", order="created_at.asc", limit=str(limit))
 
+    def awake(self) -> bool | None:
+        """Dashboard Wake Up switch (D055). None when the control row is missing."""
+        rows = self.select("control", select="awake", limit="1")
+        return bool(rows[0]["awake"]) if rows else None
+
     def heartbeat(self, worker_id: str, status: dict) -> None:
         self.insert("worker_heartbeat", {"worker_id": worker_id, "seen_at": _now_iso(), "status": status},
                     on_conflict="worker_id")

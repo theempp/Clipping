@@ -89,7 +89,8 @@ The video's tool is a transcript-first podcast clipper. Its value for us is the 
 ## 8. Where we left off (2026-11-20, 12:15 PM ET)
 - Built: P1 judge rubric, P2 captions, P3 zooms + IRL reframe, P4 SFX + revision note parsing. All in PR #2 (branch `claude/project-thread-0fq7m4`), stacked on PR #1 (backend, `claude/project-thread-zf79sa`), which sits on `claude/project-thread-v3f8qp` (vault). CI passing, 87 tests.
 - Locked: D050 caption pop 115%/90 ms, D051 zooms 130%, D052 SFX off by default. Next free ID D053.
-- Not started: P5 ops (file naming, speed benchmark on the RTX 5060), dashboard app code (Stage, D049; only the HTML concept exists in project files).
+- Not started: P5 ops (file naming, speed benchmark on the RTX 5060).
+- Dashboard v1 built (2026-11-20, D053-D058) in `dashboard/`, stacked on PR #2. Items 5 and 6 below are done in code; they need the Supabase project and keys to go live.
 
 ### Left to do before Zo can review and test the dashboard on the PC
 1. Review and merge PRs in order: vault branch -> #1 backend -> #2 clipper upgrades.
