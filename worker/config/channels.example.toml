@@ -8,7 +8,7 @@ cooldown_s = 45
 merge_s = 20
 
 # caption_style: values come from references/ (D022). Below = D048 proposal from the
-# dashboard "Stage" refs (pins 008, 011), pending Zo's OK. Poppins SemiBold must be
+# dashboard "Stage" refs (pins 008, 011), locked by Zo. Poppins SemiBold must be
 # installed on the PC (SIL OFL, free). Colours: #RRGGBB or ASS &HAABBGGRR.
 [caption_style]
 font = "Poppins SemiBold"
