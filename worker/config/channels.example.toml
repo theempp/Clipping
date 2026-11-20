@@ -31,7 +31,7 @@ ramp_s = 0.2
 hold_s = 1.2
 min_gap_s = 4.0
 
-# Whoosh on each zoom (P4). Synthesized locally, no licence risk. A campaign with
+# Whoosh on each zoom (P4). D052 (Zo, 2026-11-20): off by default. Synthesized locally, no licence risk. A campaign with
 # rules.allow_sfx = false always renders without it; a revision note can switch it per clip.
 [sfx]
 enabled = false
