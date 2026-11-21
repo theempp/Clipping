@@ -39,6 +39,13 @@ def stream_fields(info: dict[str, dict]) -> dict:
     return {"viewers": viewers, "live_since": since, "games": games}
 
 
+def streamer_rows(channels) -> list[dict]:
+    """streamers rows for the active roster; inserted with ignore-duplicates, so existing rows stay."""
+    return [{"slug": c.streamer, "display_name": c.name or c.login,
+             "twitch_login": c.login if c.platform == "twitch" else None,
+             "kick_slug": c.login if c.platform == "kick" else None} for c in channels]
+
+
 def roster_fields(channels) -> dict:
     """Active roster for the dashboard rail: channel key -> group (core | gta6_only)."""
     return {"roster": {c.key: c.group for c in channels}}
@@ -246,6 +253,11 @@ class LiveRunner:
             tasks.append(run_kick_pusher(env("KICK_PUSHER_KEY"), rooms, self._on_chat,
                                          self.clock.now, self._on_gap))
         if self.sb is not None:
+            try:  # the dashboard rail lists streamers from this table
+                self.sb.insert("streamers", streamer_rows(self.s.channels), on_conflict="slug",
+                               ignore_duplicates=True)
+            except Exception as e:  # noqa: BLE001
+                log.warning("streamer sync failed: %s", e)
             self.sync_awake()
         with keep_awake():
             await asyncio.gather(*tasks)

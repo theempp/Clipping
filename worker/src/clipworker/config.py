@@ -123,6 +123,7 @@ class Channel:
     detector: DetectorParams
     group: str = "core"       # core: every stream, GTA 6 boosted | gta6_only: only while on GTA 6
     gta6_boost: float = 1.0   # detector score multiplier while the stream's game is GTA 6
+    name: str = ""            # display name for the dashboard (streamers.display_name)
 
 
 GROUPS = ("core", "gta6_only")
@@ -209,7 +210,7 @@ def parse_settings(data: dict, work_dir: Path) -> Settings:
             raise ConfigError(f"gta6_boost for {c['login']} must be >= 1.0")
         ch = Channel(f"{platform}:{c['login'].lower()}", platform,
                      c["login"].lower(), c.get("streamer", c["login"].lower()),
-                     layout, weights, det, group, boost)
+                     layout, weights, det, group, boost, c.get("name") or c["login"])
         (channels if c.get("active", True) else archived).append(ch)
     keys = [c.key for c in channels]
     if len(keys) != len(set(keys)):

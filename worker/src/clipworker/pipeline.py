@@ -131,7 +131,9 @@ class Pipeline:
         j: Judgment = self.judge.judge(words, job.data["chat_sample"], {"score": job.score,
                                        **{k: v for k, v in job.data["features"].items()
                                           if isinstance(v, (int, float))}},
-                                       job.data["rules_summary"], dur, rules["min_s"], rules["max_s"])
+                                       job.data["rules_summary"], dur, rules["min_s"], rules["max_s"],
+                                       **({"peak_rel": job.data["peak_ts"] - cap["start_ts"]}
+                                          if getattr(self.judge, "wants_peak", False) else {}))
         if j.usage and self.sb is not None:
             self.sb.log_spend("grok", self.judge.cost_usd(j.usage),
                               j.usage.get("total_tokens"), {"job_id": job.id})

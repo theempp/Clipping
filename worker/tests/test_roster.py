@@ -23,15 +23,16 @@ def test_example_roster_groups_and_archive(tmp_path):
     s = example(tmp_path)
     core = [c.key for c in s.channels if c.group == "core"]
     only = [c.key for c in s.channels if c.group == "gta6_only"]
-    assert core == ["twitch:xqc", "kick:adinross", "twitch:stableronaldo"]
+    assert core == ["twitch:jynxzi", "twitch:lacy", "twitch:xqc", "kick:adinross", "twitch:stableronaldo"]
     assert only == ["twitch:kaicenat", "twitch:ishowspeed"]
     assert all(c.gta6_boost == 1.25 for c in s.channels if c.group == "core")
     assert all(c.gta6_boost == 1.0 for c in s.channels if c.group == "gta6_only")
     # archived streamers keep their crop boxes but are never captured
     arch = {c.login: c for c in s.archived}
-    assert set(arch) == {"lacy", "clix", "silky"} and arch["silky"].layout.facecam_height == 720
-    # unapproved crop boxes are not used yet
-    assert all(c.layout is None for c in s.channels)
+    assert set(arch) == {"clix", "silky"} and arch["silky"].layout.facecam_height == 720
+    # Lacy keeps his approved box; unapproved proposals are not used yet
+    assert [c.login for c in s.channels if c.layout is not None] == ["lacy"]
+    assert {c.login: c.name for c in s.channels}["adinross"] == "Adin Ross"
     assert s.max_channels == 3 and s.extra["kick_chatrooms"] == {"875062": "adinross"}
 
 
@@ -90,9 +91,9 @@ def test_cap_prefers_gta6_then_core_then_viewers(tmp_path):
 
 def test_unpermitted_and_archived_never_captured(tmp_path):
     s = example(tmp_path)
-    info = {"twitch:lacy": GTA, "twitch:xqc": GTA}
+    info = {"twitch:clix": GTA, "twitch:xqc": GTA}
     assert pick_captures(s.channels, info, set(), 3, s.gta6).capture == set()
-    assert pick_captures(s.channels, info, {"twitch:lacy", "twitch:xqc"}, 3, s.gta6).capture == {"twitch:xqc"}
+    assert pick_captures(s.channels, info, {"twitch:clix", "twitch:xqc"}, 3, s.gta6).capture == {"twitch:xqc"}
 
 
 def test_status_parsers_carry_game():
@@ -108,7 +109,7 @@ def test_status_parsers_carry_game():
 def test_heartbeat_roster_and_games(tmp_path):
     s = example(tmp_path)
     r = roster_fields(s.channels)["roster"]
-    assert r["twitch:kaicenat"] == "gta6_only" and r["kick:adinross"] == "core" and "twitch:lacy" not in r
+    assert r["twitch:kaicenat"] == "gta6_only" and r["kick:adinross"] == "core" and "twitch:clix" not in r
     assert stream_fields({"twitch:xqc": {"viewers": 1, "started_at": "t", "game": "GTA VI"}})["games"] == \
         {"twitch:xqc": "GTA VI"}
 
@@ -127,3 +128,32 @@ def test_detector_boost_scales_positive_scores(tmp_path):
             d.tick(float(t))
     hi = [(a.score, b.score) for a, b in zip(plain.ticks, boosted.ticks) if a.score > 0.5]
     assert hi and all(b == pytest.approx(a * 1.25) for a, b in hi)
+
+
+def test_roster_streamers_tracked_without_campaign():
+    from clipworker.remote.rights import RightsGate
+    camp = {"id": "c1", "status": "active", "streamer_slugs": ["xqc"], "score": 4,
+            "rules": {"min_s": 15, "max_s": 45, "required_tags": ["#x"]}}
+    gate = RightsGate(lambda: [camp], roster={"lacy", "xqc"})
+    own = gate.permit("lacy")
+    assert own.campaign_id is None and (own.rules.min_s, own.rules.max_s) == (10, 60)
+    assert gate.permit("xqc").campaign_id == "c1"          # a campaign, when active, wins
+    assert gate.permit("clix") is None                     # off the roster: still needs a campaign
+    assert RightsGate(lambda: []).permit("lacy") is None    # no roster given: old behaviour
+
+
+def test_streamer_rows_from_roster(tmp_path):
+    from clipworker.live import streamer_rows
+    rows = {r["slug"]: r for r in streamer_rows(example(tmp_path).channels)}
+    assert rows["adinross"] == {"slug": "adinross", "display_name": "Adin Ross", "twitch_login": None,
+                                "kick_slug": "adinross"}
+    assert rows["jynxzi"]["twitch_login"] == "jynxzi" and "clix" not in rows
+
+
+def test_heuristic_judge_cuts_around_peak():
+    from clipworker.judge.heuristic import HeuristicJudge
+    from clipworker.transcribe import Word
+    words = [Word(i * 0.5, i * 0.5 + 0.4, f"w{i}") for i in range(120)]
+    j = HeuristicJudge().judge(words, [], {"score": 3.0}, "", 60.0, 10, 60, peak_rel=30.0)
+    assert j.keep and j.title.startswith("UNJUDGED")
+    assert 10 <= j.trim_out - j.trim_in <= 60 and j.trim_in <= 30.0 - 15 and j.trim_out >= 30.0

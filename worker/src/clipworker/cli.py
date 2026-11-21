@@ -77,11 +77,18 @@ def _build(a, need_judge=True):
     store = Store(s.db_path)
     judge = tr = None
     if need_judge:
-        judge = GrokJudge(env("XAI_API_KEY", required=True), env("GROK_MODEL", required=True), s.cache_dir,
-                          httpx.Client(timeout=60), float(env("GROK_PRICE_IN_PER_MTOK", "0")),
-                          float(env("GROK_PRICE_OUT_PER_MTOK", "0")))
+        if env("XAI_API_KEY"):
+            judge = GrokJudge(env("XAI_API_KEY"), env("GROK_MODEL", required=True), s.cache_dir,
+                              httpx.Client(timeout=60), float(env("GROK_PRICE_IN_PER_MTOK", "0")),
+                              float(env("GROK_PRICE_OUT_PER_MTOK", "0")))
+        else:  # D071: no key -> keep every moment, cut around the peak, titles say UNJUDGED
+            from .judge.heuristic import HeuristicJudge
+            logging.warning("XAI_API_KEY not set: clips are NOT judged (heuristic cut, UNJUDGED titles)")
+            judge = HeuristicJudge()
         tr = CachedTranscriber(WhisperXTranscriber.auto(), s.cache_dir)
-    pipe = Pipeline(s, store, RightsGate(sb.active_campaigns), tr, judge, sb)
+    # D070: roster streamers are always tracked; an active campaign is an extra
+    gate = RightsGate(sb.active_campaigns, roster={c.streamer for c in s.channels})
+    pipe = Pipeline(s, store, gate, tr, judge, sb)
     return s, sb, store, pipe
 
 

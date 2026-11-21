@@ -60,9 +60,34 @@ volume_db = -18.0
 # ---- core ----
 
 [[channels]]
+platform = "twitch"      # Zo's "Jinxie" (confirmed 2026-11-21). Live on Twitch GTA VI 2026-11-21
+login = "jynxzi"
+streamer = "jynxzi"
+name = "Jynxzi"
+group = "core"
+[channels.layout_proposed]   # cut-out facecam bottom-right (x 1335-1920, y 645-1080); chat top-right; viewers top-left
+facecam = { x = 1300, y = 640, w = 620, h = 436 }
+gameplay = { x = 330, y = 0, w = 1005, h = 1080 }
+facecam_height = 760
+
+[[channels]]
+platform = "twitch"      # Zo's "Lisi" (confirmed 2026-11-21). GTA 6 marathons on Twitch
+login = "lacy"
+streamer = "lacy"        # crop box approved earlier (measured 2026-11-18/19 GTA 6 VOD)
+name = "Lacy"
+group = "core"
+[channels.layout]        # facecam top-left 494x278; chat top-right from x=1365
+facecam = { x = 0, y = 0, w = 494, h = 278 }
+gameplay = { x = 494, y = 0, w = 866, h = 1080 }
+facecam_height = 640
+[channels.reactions]     # per-channel emotes, merged over the defaults
+# lacyW = 1.0
+
+[[channels]]
 platform = "twitch"      # Twitch VOD 2026-11-20 on GTA VI; also has a Kick channel (multistreams)
 login = "xqc"
 streamer = "xqc"
+name = "xQc"
 group = "core"
 [channels.layout_proposed]   # bordered facecam left-middle (x 0-398, y 474-790); no chat overlay
 facecam = { x = 0, y = 505, w = 398, h = 265 }
@@ -73,6 +98,7 @@ facecam_height = 720
 platform = "kick"        # Kick: daily "PLAYING GTA 6" VODs; Twitch last VOD 2026-10-16. Zo wrote "Aiden Ross"
 login = "adinross"
 streamer = "adinross"
+name = "Adin Ross"
 group = "core"
 [channels.layout_proposed]   # GTA layout: pink-bordered facecam top-left; casino streams use a different scene
 facecam = { x = 10, y = 8, w = 486, h = 258 }
@@ -83,14 +109,12 @@ facecam_height = 640
 platform = "twitch"      # live on Twitch GTA VI 2026-11-21
 login = "stableronaldo"
 streamer = "stableronaldo"
+name = "Stable Ronaldo"
 group = "core"
 [channels.layout_proposed]   # cut-out facecam bottom-left; chat top-right from x=1328
 facecam = { x = 0, y = 540, w = 450, h = 300 }
 gameplay = { x = 360, y = 0, w = 960, h = 1080 }
 facecam_height = 720
-
-# Jinxie and Lisi: no matching active channel found on Twitch or Kick (2026-11-21).
-# Add them here once Zo confirms the exact channel links.
 
 # ---- GTA 6 only ----
 
@@ -98,6 +122,7 @@ facecam_height = 720
 platform = "twitch"      # Twitch VOD 2026-11-21 on GTA VI
 login = "kaicenat"
 streamer = "kaicenat"
+name = "Kai Cenat"
 group = "gta6_only"
 [channels.layout_proposed]   # facecam left (x 3-393, y 432-655); chat under it; viewer count right
 facecam = { x = 4, y = 433, w = 388, h = 222 }
@@ -108,6 +133,7 @@ facecam_height = 640
 platform = "twitch"      # Twitch VOD 2026-11-20 (GTA 6 day 3); his main home is YouTube, which the worker can't capture
 login = "ishowspeed"
 streamer = "ishowspeed"
+name = "IShowSpeed"
 group = "gta6_only"
 [channels.layout_proposed]   # facecam left (x 3-390, y 460-702); chat top-right; timer bottom-right
 facecam = { x = 4, y = 462, w = 386, h = 238 }
@@ -119,20 +145,9 @@ facecam_height = 640
 
 [[channels]]
 platform = "twitch"
-login = "lacy"
-streamer = "lacy"
-active = false
-[channels.layout]        # facecam top-left 494x278; chat top-right from x=1365
-facecam = { x = 0, y = 0, w = 494, h = 278 }
-gameplay = { x = 494, y = 0, w = 866, h = 1080 }
-facecam_height = 640
-[channels.reactions]     # per-channel emotes, merged over the defaults
-# lacyW = 1.0
-
-[[channels]]
-platform = "twitch"
 login = "clix"
 streamer = "clix"
+name = "Clix"
 active = false
 [channels.layout]        # facecam top-left under the health bars; timer/subs top-right
 facecam = { x = 0, y = 80, w = 478, h = 269 }
@@ -143,6 +158,7 @@ facecam_height = 640
 platform = "twitch"
 login = "silky"
 streamer = "silky"
+name = "Silky"
 active = false
 [channels.layout]        # cut-out facecam bottom-right; chat top-right from x=1414
 facecam = { x = 1450, y = 800, w = 470, h = 280 }
