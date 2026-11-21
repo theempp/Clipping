@@ -80,7 +80,10 @@ class Capture:
             hit = parse_ebur128_line(line)
             if hit and int(hit[0]) != last:
                 last = int(hit[0])
-                self.on_loud(anchor + hit[0], hit[1])
+                try:  # this thread must keep draining ffmpeg's stderr or capture stalls
+                    self.on_loud(anchor + hit[0], hit[1])
+                except Exception as e:  # noqa: BLE001
+                    log.warning("loudness sink failed for %s: %s", self.login, e)
         self.on_exit()
 
     def alive(self) -> bool:

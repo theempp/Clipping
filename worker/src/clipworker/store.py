@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,11 +54,41 @@ class Job:
     last_error: str | None
 
 
+class _LockedDB:
+    """One sqlite connection shared by the event loop, executor and capture threads.
+    Every call holds a lock: unsynchronised use raised "cannot commit - no transaction
+    is active" with 3 live captures (2026-11-21)."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._c, self._lock = conn, threading.RLock()
+
+    def _call(self, name, *a):
+        with self._lock:
+            out = getattr(self._c, name)(*a)
+            # materialise cursors inside the lock so rows are read safely
+            return _Rows(out.fetchall(), out.lastrowid, out.rowcount) if isinstance(out, sqlite3.Cursor) else out
+
+    def execute(self, *a): return self._call("execute", *a)
+    def executemany(self, *a): return self._call("executemany", *a)
+    def executescript(self, *a): return self._call("executescript", *a)
+    def commit(self): return self._call("commit")
+    def close(self): return self._call("close")
+
+
+class _Rows(list):
+    def __init__(self, rows, lastrowid, rowcount):
+        super().__init__(rows)
+        self.lastrowid, self.rowcount = lastrowid, rowcount
+
+    def fetchall(self): return list(self)
+    def fetchone(self): return self[0] if self else None
+
+
 class Store:
     def __init__(self, path: Path | str):
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(str(path), check_same_thread=False)
+        self.db = _LockedDB(sqlite3.connect(str(path), check_same_thread=False))
         self.db.executescript(SCHEMA)
 
     # chat / signals
