@@ -60,6 +60,33 @@ export function streamerViews(snap: Snapshot, now: number): StreamerView[] {
     .sort((a, b) => Number(b.live) - Number(a.live) || a.s.display_name.localeCompare(b.s.display_name));
 }
 
+export type LivePlayer = {
+  platform: "twitch" | "kick";
+  src: string;            // embeddable player, muted autoplay
+  chat: string | null;    // embeddable chat (Twitch only; Kick blocks framing its chat)
+  watch: string;          // the channel page, for "open in a new tab"
+};
+
+/** Live player for a streamer. Uses the platform that is live right now, else Twitch, else Kick.
+ * Twitch needs `parent` = the page's hostname or it refuses to play. */
+export function livePlayer(s: Streamer, liveKey: string | null, host: string): LivePlayer | null {
+  const want = liveKey?.split(":")[0];
+  const tw = s.twitch_login, kk = s.kick_slug;
+  const useKick = kk && (want === "kick" || !tw);
+  if (useKick) {
+    const k = encodeURIComponent(kk);
+    return { platform: "kick", src: `https://player.kick.com/${k}?autoplay=true&muted=true`, chat: null, watch: `https://kick.com/${k}` };
+  }
+  if (!tw || !host) return null;
+  const c = encodeURIComponent(tw), p = encodeURIComponent(host);
+  return {
+    platform: "twitch",
+    src: `https://player.twitch.tv/?channel=${c}&parent=${p}&muted=true&autoplay=true`,
+    chat: `https://www.twitch.tv/embed/${c}/chat?parent=${p}&darkpopout`,
+    watch: `https://www.twitch.tv/${c}`,
+  };
+}
+
 export function fmtViewers(n: number | null): string {
   if (n == null) return "";
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);

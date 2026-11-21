@@ -9,11 +9,11 @@ const S = (id: string, slug: string, name: string, kick = false): Streamer => ({
 export function demoSnapshot(now = Date.now()): Snapshot {
   const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
   const min = 60_000;
-  // Roster D069: core five (Jinxie and Lisi pending channel confirmation) + GTA-6-only two.
-  const streamers = [S("s-xqc", "xqc", "xQc"), S("s-adinross", "adinross", "Adin Ross", true),
+  // Roster D069/D070: core five + GTA-6-only two.
+  const streamers = [S("s-jynxzi", "jynxzi", "Jynxzi"), S("s-lacy", "lacy", "Lacy"), S("s-xqc", "xqc", "xQc"), S("s-adinross", "adinross", "Adin Ross", true),
     S("s-stableronaldo", "stableronaldo", "Stable Ronaldo"), S("s-kaicenat", "kaicenat", "Kai Cenat"),
     S("s-ishowspeed", "ishowspeed", "IShowSpeed")];
-  const roster = { "twitch:xqc": "core", "kick:adinross": "core", "twitch:stableronaldo": "core",
+  const roster = { "twitch:jynxzi": "core", "twitch:lacy": "core", "twitch:xqc": "core", "kick:adinross": "core", "twitch:stableronaldo": "core",
     "twitch:kaicenat": "gta6_only", "twitch:ishowspeed": "gta6_only" } as const;
   let n = 0;
   const clip = (p: Partial<Clip> & { streamer_id: string; title: string }): Clip => {

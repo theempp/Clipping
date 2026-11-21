@@ -19,28 +19,31 @@ export function Shell({ children }: { children: ReactNode }) {
   const sections = rosterSections(views, !!snap.heartbeat?.status.roster);
   const queue = rankQueue(snap.clips);
   const approved = snap.clips.filter((c) => c.state === "approved").length;
-  const liveN = sections.core.filter((v) => v.live).length;
-  const row = (v: StreamerView) => {
-    const on = path === `/live/${v.s.slug}`;
-    return (
-      <Link key={v.s.id} href={`/live/${v.s.slug}`}
-        className={`sr ${v.live ? "lv" : ""} ${on ? "on" : ""}`} aria-current={on ? "page" : undefined}>
-        <Avatar s={v.s} live={v.live} />
-        <b>{v.s.display_name}</b>
-        {v.live
-          ? <span className="tg"><span className="eq"><i /><i /><i /></span>LIVE</span>
-          : <span className="tg off">OFF</span>}
-        <span className="meta">
-          <span className="hs">{v.heat.map((h, i) => <i key={i} className={h ? `h${h}` : ""} />)}</span>
-          {v.live ? fmtViewers(v.viewers) : v.queued ? `${v.queued} queued` : "offline"}
-        </span>
-      </Link>
-    );
-  };
+  const games = snap.heartbeat?.status.games ?? {};
   const awake = snap.control.awake;
   const st = pcState(snap.heartbeat, awake, now);
   const gpu = snap.heartbeat?.status.gpu;
   const spend = monthSpend(snap);
+
+  const row = (v: StreamerView) => {
+    const on = path === `/live/${v.s.slug}`;
+    const game = v.live && v.key ? games[v.key] : undefined;
+    return (
+      <Link key={v.s.id} href={`/live/${v.s.slug}`} title={game ? `${v.s.display_name} · ${game}` : v.s.display_name}
+        className={`sr${v.live ? " lv" : ""}${on ? " on" : ""}`} aria-current={on ? "page" : undefined}>
+        <Avatar s={v.s} live={v.live} size={34} />
+        <span className="sr-t">
+          <b>{v.s.display_name}</b>
+          <span>{v.live
+            ? <>{fmtViewers(v.viewers) ? `${fmtViewers(v.viewers)} watching` : "live now"}</>
+            : v.queued ? `${v.queued} in queue` : "offline"}</span>
+        </span>
+        {v.live
+          ? <span className="tag live"><span className="eq" aria-hidden="true"><i /><i /><i /></span>LIVE</span>
+          : <span className="hs" aria-hidden="true">{v.heat.slice(-6).map((h, i) => <i key={i} className={h ? `h${h}` : ""} />)}</span>}
+      </Link>
+    );
+  };
 
   if (error === "not-owner") {
     return (
@@ -54,63 +57,71 @@ export function Shell({ children }: { children: ReactNode }) {
     );
   }
 
+  const liveCore = sections.core.filter((v) => v.live).length;
+  const liveGta = sections.gta6.filter((v) => v.live).length;
+
   return (
     <div className={`app ${awake ? "awake" : "asleep"}`}>
-      <nav className="NV" aria-label="Main">
-        <div className="br">
+      <nav className="rail" aria-label="Main">
+        <div className="brand">
           <span className="mk"><Icon name="bolt" size={18} /></span>
           <b>Clipp</b>
           <small>{demo ? "demo" : "v1"}</small>
         </div>
-        <h6>Review</h6>
-        <Link href="/" className={`ni ${path === "/" ? "on" : ""}`}>
-          <Icon name="queue" /> Queue <span className="ct">{queue.length}</span>
-        </Link>
-        <Link href="/#approved" className="ni">
-          <Icon name="download" /> Approved <span className="ct">{approved}</span>
-        </Link>
-        <h6>Streamers <em>{liveN} live</em></h6>
+
+        <div className="nav">
+          <Link href="/" className={path === "/" ? "on" : ""} aria-current={path === "/" ? "page" : undefined}>
+            <Icon name="queue" /> <span>Review queue</span> <em>{queue.length}</em>
+          </Link>
+          <Link href="/#approved">
+            <Icon name="download" /> <span>Approved</span> <em>{approved}</em>
+          </Link>
+        </div>
+
+        <h6><span>Streamers</span>{liveCore > 0 && <em>{liveCore} live</em>}</h6>
         <div className="srs">
           {sections.core.map(row)}
-          {views.length === 0 && <p className="empty-s">No streamers yet. The worker adds them from its channel config.</p>}
+          {views.length === 0 && <p className="quiet">No streamers yet. The worker adds them from its channel config.</p>}
         </div>
         {sections.gta6.length > 0 && <>
-          <h6>GTA 6 only <em>{sections.gta6.filter((v) => v.live).length} live</em></h6>
+          <h6><span>GTA 6 only</span>{liveGta > 0 && <em>{liveGta} live</em>}</h6>
           <div className="srs">{sections.gta6.map(row)}</div>
         </>}
-        <h6>Machine</h6>
-        <div className="mc">
-          <div className="r1"><Icon name="chip" /> {PC_NAME}
-            <span className={`pc-${st}`}>{st === "offline" ? "off" : gpu?.util != null ? `${gpu.util}%` : st}</span>
+
+        <div className="rail-end">
+          <div className={`mach pc-${st}`}>
+            <div className="r1">
+              <Icon name="chip" />
+              <b>{PC_NAME}</b>
+              <span className="state">{st === "offline" ? "offline" : st === "watching" ? "watching" : st}</span>
+            </div>
+            <div className="gb" aria-hidden="true"><i style={{ width: `${st === "offline" ? 0 : gpu?.util ?? 6}%` }} /></div>
+            <div className="r2">
+              <span>{gpu?.name ?? "GPU"}{st !== "offline" && gpu?.util != null ? ` · ${gpu.util}%` : ""}</span>
+              <span>{st === "offline"
+                ? snap.heartbeat ? ago(snap.heartbeat.seen_at, now) : "never seen"
+                : gpu?.mem_used_gb != null ? `${gpu.mem_used_gb}/${gpu.mem_total_gb} GB` : "online"}</span>
+            </div>
           </div>
-          <div className="gb"><i style={{ width: `${st === "offline" ? 2 : gpu?.util ?? 8}%` }} /></div>
-          <div className="r2">
-            <span>{gpu?.name ?? "GPU"}</span>
-            <span>{st === "offline"
-              ? snap.heartbeat ? ago(snap.heartbeat.seen_at, now) : "never seen"
-              : gpu?.mem_used_gb != null ? `${gpu.mem_used_gb} / ${gpu.mem_total_gb} GB` : "online"}</span>
+          <div className="rail-foot">
+            <span>${spend.total.toFixed(0)} spent this month</span>
+            {!demo && <button type="button" onClick={() => void signOut()} aria-label="Sign out"><Icon name="out" /></button>}
           </div>
         </div>
-        <div className="r-foot">
-          <span>${spend.total.toFixed(0)} this month</span>
-          {!demo && <button type="button" onClick={() => void signOut()}><Icon name="out" /> Sign out</button>}
-        </div>
-        <Link href="/" className="go">
-          {queue.length ? `Review ${queue.length} ready` : "Queue is clear"}
-          <span className="ar"><Icon name="arrow" /></span>
-        </Link>
       </nav>
 
       <header className="mhead">
         <div className="mrow">
-          <Link href="/" className="mbrand"><span className="mk"><Icon name="bolt" size={16} /></span>Clipp{demo && <small className="mdemo">demo</small>}</Link>
+          <Link href="/" className="mbrand"><span className="mk"><Icon name="bolt" size={16} /></span>Clipp{demo && <small>demo</small>}</Link>
+          <Link href="/" className="mq"><Icon name="queue" /> {queue.length}</Link>
           <WakeToggle compact />
         </div>
         <div className="strip" role="list">
           {[...sections.core, ...sections.gta6].map((v) => (
-            <Link key={v.s.id} href={`/live/${v.s.slug}`} role="listitem" aria-label={v.s.display_name}
-              className={path === `/live/${v.s.slug}` ? "on" : ""}>
-              <Avatar s={v.s} live={v.live} size={40} />
+            <Link key={v.s.id} href={`/live/${v.s.slug}`} role="listitem" aria-label={`${v.s.display_name}${v.live ? " (live)" : ""}`}
+              className={`${path === `/live/${v.s.slug}` ? "on" : ""}${v.live ? " lv" : ""}`}>
+              <Avatar s={v.s} live={v.live} size={42} />
+              <span>{v.s.display_name.split(" ")[0]}</span>
             </Link>
           ))}
         </div>

@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // NEXT_DIST_DIR lets a second dev server (e.g. demo mode) run beside the main one.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
+  devIndicators: false,
   poweredByHeader: false,
   async headers() {
     return [{

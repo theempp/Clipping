@@ -20,18 +20,21 @@ export function usePipeline() {
   ];
 }
 
-export function PipelineTiles() {
+/** The four worker stages as one card. `compact` = vertical list for the streamer page side column. */
+export function PipelineTiles({ compact = false }: { compact?: boolean }) {
   const steps = usePipeline();
   return (
-    <div className="tiles">
-      {steps.map((s) => (
-        <div key={s.k} className={`tile ${s.n ? "act" : ""}`}>
-          <span className="ic"><Icon name={s.icon} /></span>
-          <span className="st" />
-          <b>{s.label}{s.n ? ` · ${s.n}` : ""}</b>
-          <span>{s.sub}</span>
-        </div>
-      ))}
-    </div>
+    <section className={`card pipe${compact ? " compact" : ""}`} aria-label="Pipeline">
+      <div className="card-h"><h2>Pipeline</h2><span className="lbl">on the PC</span></div>
+      <ol className="steps">
+        {steps.map((s) => (
+          <li key={s.k} className={s.n ? "act" : ""}>
+            <span className="ic"><Icon name={s.icon} /></span>
+            <span className="tx"><b>{s.label}</b><span>{s.sub}</span></span>
+            <em>{s.n ? (s.k === "watch" ? `${s.n} live` : s.n) : "idle"}</em>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }

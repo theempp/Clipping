@@ -7,7 +7,7 @@ import { Icon } from "./Icon";
 
 const EXAMPLES = ["cut the first 2 seconds", "zoom on his face at 0:12", "end right after the kill", "add the whoosh"];
 
-/** Deny / Revise / Approve under the clip, keys D / R / A. Revise opens the plain-English box. */
+/** Deny / Revise / Approve, keys D / R / A. Revise opens the plain-English box in the flow, under the buttons. */
 export function ReviewDock({ clip }: { clip: Clip | null }) {
   const { act } = useStore();
   const [open, setOpen] = useState(false);
@@ -39,8 +39,19 @@ export function ReviewDock({ clip }: { clip: Clip | null }) {
 
   return (
     <div className="dock-wrap">
+      <div className="dock" aria-label="Review actions">
+        <button type="button" disabled={!clip} className="deny" onClick={() => clip && act(clip, "reject")}>
+          <Icon name="x" /> Deny <kbd>D</kbd>
+        </button>
+        <button type="button" disabled={!clip} className={open ? "sel" : ""} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          <Icon name="pen" /> Revise <kbd>R</kbd>
+        </button>
+        <button type="button" disabled={!clip} className="approve" onClick={() => clip && act(clip, "approve")}>
+          <Icon name="check" /> Approve <kbd>A</kbd>
+        </button>
+      </div>
       {open && clip && (
-        <div className="revise" role="dialog" aria-label="Ask for a revision">
+        <div className="revise" role="group" aria-label="Ask for a revision">
           <div className="revise-h">
             <b>What should change?</b>
             <button type="button" className="x" aria-label="Close" onClick={() => setOpen(false)}><Icon name="x" /></button>
@@ -59,21 +70,10 @@ export function ReviewDock({ clip }: { clip: Clip | null }) {
           </div>
           <div className="revise-f">
             <span>{text.length}/500 · Ctrl+Enter sends</span>
-            <button type="button" className="btn light" disabled={!note} onClick={send}>Send revision</button>
+            <button type="button" className="btn light sm" disabled={!note} onClick={send}>Send revision</button>
           </div>
         </div>
       )}
-      <div className="dock" aria-label="Review actions">
-        <button type="button" disabled={!clip} onClick={() => clip && act(clip, "reject")}>
-          Deny <kbd>D</kbd>
-        </button>
-        <button type="button" disabled={!clip} className={open ? "sel" : ""} onClick={() => setOpen((o) => !o)}>
-          Revise <kbd>R</kbd>
-        </button>
-        <button type="button" disabled={!clip} className="approve" onClick={() => clip && act(clip, "approve")}>
-          Approve <kbd>A</kbd>
-        </button>
-      </div>
     </div>
   );
 }
