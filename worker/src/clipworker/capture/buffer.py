@@ -26,8 +26,9 @@ def stream_url(platform: str, login: str) -> str:
 def capture_commands(platform: str, login: str, out_dir: Path,
                      streamlink: str = "streamlink", ffmpeg: str = "ffmpeg") -> tuple[list[str], list[str]]:
     """Two argv lists, to be piped: streamlink stdout -> ffmpeg stdin."""
-    sl = [streamlink, "--stdout", "--twitch-disable-ads", "--hls-live-restart=false",
-          stream_url(platform, login), "best"]
+    # Live edge is streamlink's default; "--hls-live-restart=false" is rejected by streamlink 8.x
+    # ("ignored explicit argument") and made every capture exit at once.
+    sl = [streamlink, "--stdout", "--twitch-disable-ads", stream_url(platform, login), "best"]
     if platform != "twitch":
         sl.remove("--twitch-disable-ads")
     ff = [ffmpeg, "-hide_banner", "-loglevel", "info", "-i", "pipe:0",
