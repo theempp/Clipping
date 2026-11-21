@@ -34,6 +34,8 @@ Stop the server with **Ctrl+C**.
 
 ### 1. Supabase project (one time)
 
+> Done for Clipp (D059-D062): project `clipp` (`https://aqmufpztmzsolpanrgsq.supabase.co`), all migrations applied, `clips` bucket private, owner row is added automatically when the owner login is created. Only steps 3, 4 and 6 below are left to click.
+
 1. Create a project at https://supabase.com.
 2. Run the SQL files in `supabase/migrations/` in order (SQL Editor, paste each file, Run), or `supabase db push` with the Supabase CLI.
 3. **Authentication > Sign In / Providers**: keep Email on, turn **off** "Allow new users to sign up".
@@ -43,7 +45,8 @@ Stop the server with **Ctrl+C**.
    insert into public.owners(user_id)
    select id from auth.users where email = 'YOUR EMAIL';
    ```
-6. **Authentication > URL Configuration**: set Site URL to your dashboard address and add `http://localhost:3000/auth/callback` and `https://<your-vercel-domain>/auth/callback` to Redirect URLs.
+6. **Authentication > Emails > Magic Link**: add `Code: {{ .Token }}` to the template so you can sign in by code on any device (D063).
+7. **Authentication > URL Configuration**: set Site URL to your dashboard address and add `http://localhost:3000/auth/callback` and `https://<your-vercel-domain>/auth/callback` to Redirect URLs.
 
 ### 2. Keys on the PC
 
@@ -66,7 +69,7 @@ Open http://localhost:3000, enter your email, and click the link in the email on
 
 1. Import the GitHub repo in Vercel and set **Root Directory** to `dashboard`.
 2. Add the same two `NEXT_PUBLIC_SUPABASE_*` variables under Project Settings > Environment Variables.
-3. Deploy, then add the Vercel address to Supabase Redirect URLs (step 1.6).
+3. Deploy, then add the Vercel address to Supabase Redirect URLs (step 1.7).
 4. On the phone, open the site and use **Add to Home Screen**.
 
 ## How access is protected
