@@ -27,14 +27,21 @@ from .ingest.kick_chat import run_kick_pusher
 from .ingest.twitch_irc import run_twitch_chat
 from .pipeline import Pipeline
 from .power import keep_awake
+from .roster import pick_captures
 from .store import Store
 
 
 def stream_fields(info: dict[str, dict]) -> dict:
-    """Heartbeat keys the dashboard rail reads: viewers and live_since per channel key."""
+    """Heartbeat keys the dashboard rail reads: viewers, live_since and game per channel key."""
     viewers = {k: v["viewers"] for k, v in info.items() if v.get("viewers") is not None}
     since = {k: v["started_at"] for k, v in info.items() if v.get("started_at")}
-    return {"viewers": viewers, "live_since": since}
+    games = {k: v["game"] for k, v in info.items() if v.get("game")}
+    return {"viewers": viewers, "live_since": since, "games": games}
+
+
+def roster_fields(channels) -> dict:
+    """Active roster for the dashboard rail: channel key -> group (core | gta6_only)."""
+    return {"roster": {c.key: c.group for c in channels}}
 
 log = logging.getLogger(__name__)
 WORKER_ID = os.environ.get("CLIP_WORKER_ID", "pc-main")
@@ -125,9 +132,13 @@ class LiveRunner:
                     info.update({f"kick:{k}": v for k, v in
                                  st.kick_streams(http, kk_tok, [c.login for c in kk]).items()})
                 self.stream_info = info
-                live = {k: True for k in info}
                 permitted = {c.key for c in self.s.channels if self.pipe.rights.permit(c.streamer)}
-                self.live = {k for k, v in live.items() if v and k in permitted} if self.awake else set()
+                pick = pick_captures(self.s.channels, info, permitted, self.s.max_channels, self.s.gta6)
+                for key, b in pick.boost.items():
+                    self.det[key].boost = b
+                if pick.skipped:
+                    log.info("capture cap %d reached; not capturing %s", self.s.max_channels, pick.skipped)
+                self.live = pick.capture if self.awake else set()
                 self._sync_captures()
             except Exception as e:  # noqa: BLE001
                 log.warning("status poll failed: %s", e)
@@ -168,6 +179,7 @@ class LiveRunner:
             for key in self.live:
                 m = self.det[key].tick(now)
                 if m:
+                    m.features["game"] = getattr(self, "stream_info", {}).get(key, {}).get("game")
                     job = self.pipe.on_moment(m)
                     log.info("moment %s score %.2f -> job %s", key, m.peak_score, job)
             await asyncio.sleep(max(0.0, 1.0 - (self.clock.now() - now)))
@@ -207,6 +219,7 @@ class LiveRunner:
                                       "capturing": sorted(k for k, c in self.caps.items() if c.alive()),
                                       "queue": depth, "clock_drift_s": round(self.clock.check_drift(), 3),
                                       **stream_fields(getattr(self, "stream_info", {})),
+                                      **roster_fields(self.s.channels),
                                       **({"gpu": g} if (g := gpu_snapshot()) else {})})
 
     def prune(self):

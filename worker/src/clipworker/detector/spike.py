@@ -69,6 +69,7 @@ class SpikeDetector:
         self._last_start: float = float("-inf")
         self.ticks: list[Tick] = []  # kept for tuning/replay; trim in live use
         self.keep_ticks = False
+        self.boost = 1.0             # GTA 6 boost (D069), set by the live runner per status poll
 
     # feed
     def add_message(self, ts: float, user: str, text: str) -> None:
@@ -114,6 +115,8 @@ class SpikeDetector:
         self._h_react.append(react)
         score = (self.p.w_chat * z_chat + self.p.w_unique * z_uniq
                  + self.p.w_reaction * z_react + self.p.w_audio * z_audio)
+        if score > 0:
+            score *= self.boost
         if self.keep_ticks:
             self.ticks.append(Tick(now, score, z_chat, z_uniq, z_react, z_audio, rate))
 
@@ -132,7 +135,7 @@ class SpikeDetector:
                                     features={"rate": rate, "uniq": uniq, "react": react,
                                               "audio_lufs": audio, "z_chat": z_chat,
                                               "z_uniq": z_uniq, "z_react": z_react,
-                                              "z_audio": z_audio})
+                                              "z_audio": z_audio, "boost": self.boost})
                 self._last_start = self._above_since
         else:
             self._above_since = None

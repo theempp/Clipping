@@ -121,6 +121,23 @@ class Channel:
     layout: Layout | None
     reaction_weights: dict[str, float]
     detector: DetectorParams
+    group: str = "core"       # core: every stream, GTA 6 boosted | gta6_only: only while on GTA 6
+    gta6_boost: float = 1.0   # detector score multiplier while the stream's game is GTA 6
+
+
+GROUPS = ("core", "gta6_only")
+
+
+@dataclass(frozen=True)
+class Gta6Match:
+    """How a stream's category is recognised as GTA 6 (Twitch game_id or category name)."""
+    category_ids: tuple[str, ...] = ()
+    name_pattern: str = r"\b(grand theft auto (vi|6)|gta ?(vi|6))\b"
+
+    def matches(self, game_id: str | None, game_name: str | None) -> bool:
+        if game_id and str(game_id) in self.category_ids:
+            return True
+        return bool(game_name) and re.search(self.name_pattern, game_name, re.I) is not None
 
 
 @dataclass
@@ -128,7 +145,9 @@ class Settings:
     work_dir: Path
     channels: list[Channel]
     caption_style: CaptionStyle | None
-    max_channels: int = 3
+    max_channels: int = 3     # max captured AT ONCE (D-plan step 9); more can be configured
+    gta6: Gta6Match = field(default_factory=Gta6Match)
+    archived: list[Channel] = field(default_factory=list)  # active = false: kept for their crop boxes
     zoom: ZoomParams = field(default_factory=ZoomParams)
     sfx: SfxParams = field(default_factory=SfxParams)
     extra: dict = field(default_factory=dict)
@@ -167,7 +186,9 @@ def _crop(d: dict) -> Crop:
 
 def parse_settings(data: dict, work_dir: Path) -> Settings:
     base_det = data.get("detector", {})
-    channels = []
+    g = data.get("gta6", {})
+    default_boost = float(g.get("boost", 1.0))
+    channels, archived = [], []
     for c in data.get("channels", []):
         layout = None
         if "layout" in c:
@@ -180,13 +201,24 @@ def parse_settings(data: dict, work_dir: Path) -> Settings:
         platform = c["platform"].lower()
         if platform not in ("twitch", "kick"):
             raise ConfigError(f"unsupported platform {platform}")
-        channels.append(Channel(f"{platform}:{c['login'].lower()}", platform,
-                                c["login"].lower(), c.get("streamer", c["login"].lower()),
-                                layout, weights, det))
+        group = c.get("group", "core")
+        if group not in GROUPS:
+            raise ConfigError(f"unknown group {group!r} for {c['login']}: use one of {GROUPS}")
+        boost = float(c.get("gta6_boost", default_boost if group == "core" else 1.0))
+        if boost < 1.0:
+            raise ConfigError(f"gta6_boost for {c['login']} must be >= 1.0")
+        ch = Channel(f"{platform}:{c['login'].lower()}", platform,
+                     c["login"].lower(), c.get("streamer", c["login"].lower()),
+                     layout, weights, det, group, boost)
+        (channels if c.get("active", True) else archived).append(ch)
+    keys = [c.key for c in channels]
+    if len(keys) != len(set(keys)):
+        raise ConfigError("a channel is listed twice among active channels")
     max_channels = int(data.get("max_channels", 3))
-    if len(channels) > max_channels:
-        raise ConfigError(f"{len(channels)} channels configured; max is {max_channels} "
-                          "until CPU/GPU load is measured")
+    if max_channels < 1:
+        raise ConfigError("max_channels must be at least 1")
+    gta6 = Gta6Match(tuple(str(i) for i in g.get("category_ids", ())),
+                     g.get("name_pattern", Gta6Match.name_pattern))
     style = None
     cs = data.get("caption_style")
     if cs:
@@ -197,8 +229,8 @@ def parse_settings(data: dict, work_dir: Path) -> Settings:
     if zoom.on and zoom.min_gap_s < 2 * zoom.ramp_s + zoom.hold_s:
         raise ConfigError("zoom.min_gap_s must cover one full pulse (2*ramp_s + hold_s)")
     return Settings(work_dir=work_dir, channels=channels, caption_style=style,
-                    max_channels=max_channels, zoom=zoom, sfx=SfxParams(**data.get("sfx", {})),
-                    extra=data.get("extra", {}))
+                    max_channels=max_channels, gta6=gta6, archived=archived,
+                    zoom=zoom, sfx=SfxParams(**data.get("sfx", {})), extra=data.get("extra", {}))
 
 
 def load_settings(config_path: Path | None = None) -> Settings:

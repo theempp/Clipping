@@ -10,7 +10,16 @@ export type StreamerView = {
   since: string | null;
   heat: number[];               // 12 buckets x 5 min, levels 0-3
   queued: number;
+  group: "core" | "gta6_only";
+  inRoster: boolean;
 };
+
+/** Rail sections (D069): the core roster, then the GTA-6-only streamers. With a roster in
+ * the heartbeat, streamers not on it (archived) are left out; older workers show everyone as core. */
+export function rosterSections(views: StreamerView[], hasRoster: boolean) {
+  const on = hasRoster ? views.filter((v) => v.inRoster) : views;
+  return { core: on.filter((v) => v.group === "core"), gta6: on.filter((v) => v.group === "gta6_only") };
+}
 
 /** 12-step heat strip: best detector score per 5-minute bucket over the last hour. */
 export function heatStrip(cands: Candidate[], keys: string[], now: number, steps = 12, bucketMin = 5): number[] {
@@ -30,11 +39,15 @@ export function heatStrip(cands: Candidate[], keys: string[], now: number, steps
 export function streamerViews(snap: Snapshot, now: number): StreamerView[] {
   const live = liveKeys(snap.heartbeat, now);
   const queue = rankQueue(snap.clips);
+  const roster = snap.heartbeat?.status.roster ?? {};
   return snap.streamers
-    .map((s) => {
+    .map((s): StreamerView => {
       const keys = streamerKeys(s);
       const k = keys.find((x) => live.has(x)) ?? null;
+      const rk = keys.find((x) => x in roster);
       return {
+        group: rk ? roster[rk] : "core",
+        inRoster: rk !== undefined,
         s,
         live: k !== null,
         key: k ?? keys[0] ?? null,

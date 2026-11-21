@@ -38,11 +38,12 @@ class AppToken:
 
 
 def parse_twitch_streams(payload: dict) -> dict[str, dict]:
-    """login -> {"viewers": int|None, "started_at": iso|None} for live streams only."""
+    """login -> {"viewers", "started_at", "game_id", "game"} for live streams only."""
     out = {}
     for d in payload.get("data", []):
         if d.get("type") == "live" and d.get("user_login"):
-            out[d["user_login"].lower()] = {"viewers": d.get("viewer_count"), "started_at": d.get("started_at")}
+            out[d["user_login"].lower()] = {"viewers": d.get("viewer_count"), "started_at": d.get("started_at"),
+                                            "game_id": d.get("game_id") or None, "game": d.get("game_name") or None}
     return out
 
 
@@ -68,14 +69,18 @@ def parse_kick_channels(payload: dict) -> dict[str, bool]:
 
 
 def parse_kick_streams(payload: dict) -> dict[str, dict]:
-    """slug -> {"viewers", "started_at"} for live channels. Field names UNVERIFIED (tolerant)."""
+    """slug -> {"viewers", "started_at", "game_id", "game"} for live channels.
+    `category` {id, name, thumbnail} seen on the real payload 2026-11-21; stream fields still tolerant."""
     out = {}
     for d in payload.get("data", []):
         slug = (d.get("slug") or d.get("broadcaster_slug") or "").lower()
         stream = d.get("stream") or {}
         if slug and stream.get("is_live", d.get("is_live", False)):
+            cat = d.get("category") or stream.get("category") or {}
             out[slug] = {"viewers": stream.get("viewer_count", stream.get("viewers")),
-                         "started_at": stream.get("start_time") or stream.get("started_at")}
+                         "started_at": stream.get("start_time") or stream.get("started_at"),
+                         "game_id": str(cat["id"]) if cat.get("id") else None,
+                         "game": cat.get("name") or None}
     return out
 
 

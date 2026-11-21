@@ -180,7 +180,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ...s,
         control: { awake: on, updated_at: new Date().toISOString() },
         heartbeat: s.heartbeat && { ...s.heartbeat, seen_at: new Date().toISOString(),
-          status: { ...s.heartbeat.status, awake: on, live: on ? ["twitch:lacy", "twitch:clix"] : [],
+          status: { ...s.heartbeat.status, awake: on, live: on ? ["twitch:xqc", "twitch:stableronaldo", "twitch:kaicenat"] : [],
             gpu: { ...s.heartbeat.status.gpu, util: on ? 62 : 4 } } },
       }));
       return;

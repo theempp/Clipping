@@ -132,8 +132,12 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_replay(a)
         if a.cmd == "check":
             s = load_settings(Path(a.config) if a.config else None)
-            print(f"work dir {s.work_dir}; {len(s.channels)} channel(s): "
-                  + ", ".join(c.key for c in s.channels))
+            print(f"work dir {s.work_dir}; {len(s.channels)} channel(s), up to {s.max_channels} captured at once")
+            for grp in ("core", "gta6_only"):
+                print(f"  {grp}: " + (", ".join(f"{c.key}" + (f" (GTA 6 x{c.gta6_boost:g})" if c.gta6_boost > 1 else "")
+                                                for c in s.channels if c.group == grp) or "none"))
+            if s.archived:
+                print("  archived: " + ", ".join(c.key for c in s.archived))
             print("caption style: " + ("set" if s.caption_style else "MISSING (needs references/, D022)"))
             for k in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "XAI_API_KEY", "GROK_MODEL",
                       "TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET"):

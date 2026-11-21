@@ -1,5 +1,16 @@
-# Copy to config/channels.toml. Max 3 channels until CPU/GPU load is measured.
+# Copy to config/channels.toml. Any number of channels may be listed; at most
+# max_channels are CAPTURED AT ONCE until CPU/GPU load is measured (GTA 6 streams
+# first, then core before gta6_only, then most viewers). D069.
 max_channels = 3
+
+# GTA 6 recognition and boost (D069). Twitch category "Grand Theft Auto VI" = 1867279146
+# (seen on live Helix data 2026-11-21). Kick has no stable id yet, so its category name
+# is matched by name_pattern (default: "Grand Theft Auto VI/6", "GTA VI/6").
+# boost multiplies the detector score of CORE channels while they play GTA 6
+# (more moments pass the threshold and they rank higher). Tune with clip-detector-tuning.
+[gta6]
+category_ids = ["1867279146"]
+boost = 1.25
 
 # Shared detector starting values (clip-detector-tuning owns changes; one at a time).
 [detector]
@@ -37,15 +48,80 @@ min_gap_s = 4.0
 enabled = false
 volume_db = -18.0
 
-# All three stream on Twitch (checked 2026-11-20: active Twitch VODs; Kick accounts idle).
+# Roster (Zo, 2026-11-21, D069). Platforms checked 2026-11-21 against Twitch Helix
+# (users, channels, latest VODs) and kick.com channel pages.
+# group = "core"      every stream; GTA 6 boosted.      group = "gta6_only"  only while on GTA 6.
+# streamer = streamers.slug in Supabase; it must be in an ACTIVE campaign to capture (D016).
+#
+# Crop boxes: `layout_proposed` = measured on 1920x1080 frames from each streamer's
+# 2026-11-20/21 GTA 6 VOD, NOT yet approved by Zo, so the worker ignores it (renders
+# fall back to the tracked full-frame crop). Rename to `layout` once Zo approves.
+
+# ---- core ----
+
+[[channels]]
+platform = "twitch"      # Twitch VOD 2026-11-20 on GTA VI; also has a Kick channel (multistreams)
+login = "xqc"
+streamer = "xqc"
+group = "core"
+[channels.layout_proposed]   # bordered facecam left-middle (x 0-398, y 474-790); no chat overlay
+facecam = { x = 0, y = 505, w = 398, h = 265 }
+gameplay = { x = 480, y = 0, w = 960, h = 1080 }
+facecam_height = 720
+
+[[channels]]
+platform = "kick"        # Kick: daily "PLAYING GTA 6" VODs; Twitch last VOD 2026-10-16. Zo wrote "Aiden Ross"
+login = "adinross"
+streamer = "adinross"
+group = "core"
+[channels.layout_proposed]   # GTA layout: pink-bordered facecam top-left; casino streams use a different scene
+facecam = { x = 10, y = 8, w = 486, h = 258 }
+gameplay = { x = 504, y = 0, w = 912, h = 1080 }
+facecam_height = 640
+
+[[channels]]
+platform = "twitch"      # live on Twitch GTA VI 2026-11-21
+login = "stableronaldo"
+streamer = "stableronaldo"
+group = "core"
+[channels.layout_proposed]   # cut-out facecam bottom-left; chat top-right from x=1328
+facecam = { x = 0, y = 540, w = 450, h = 300 }
+gameplay = { x = 360, y = 0, w = 960, h = 1080 }
+facecam_height = 720
+
+# Jinxie and Lisi: no matching active channel found on Twitch or Kick (2026-11-21).
+# Add them here once Zo confirms the exact channel links.
+
+# ---- GTA 6 only ----
+
+[[channels]]
+platform = "twitch"      # Twitch VOD 2026-11-21 on GTA VI
+login = "kaicenat"
+streamer = "kaicenat"
+group = "gta6_only"
+[channels.layout_proposed]   # facecam left (x 3-393, y 432-655); chat under it; viewer count right
+facecam = { x = 4, y = 433, w = 388, h = 222 }
+gameplay = { x = 504, y = 0, w = 912, h = 1080 }
+facecam_height = 640
+
+[[channels]]
+platform = "twitch"      # Twitch VOD 2026-11-20 (GTA 6 day 3); his main home is YouTube, which the worker can't capture
+login = "ishowspeed"
+streamer = "ishowspeed"
+group = "gta6_only"
+[channels.layout_proposed]   # facecam left (x 3-390, y 460-702); chat top-right; timer bottom-right
+facecam = { x = 4, y = 462, w = 386, h = 238 }
+gameplay = { x = 504, y = 0, w = 912, h = 1080 }
+facecam_height = 640
+
+# ---- archived (active = false): off the roster, crop boxes kept for reuse ----
 # Layouts measured on 1920x1080 frames from each streamer's GTA 6 VOD (2026-11-18/19).
-# Gameplay boxes avoid each overlay's chat, facecam and sub counter. Scenes without a
-# facecam (IRL, full-screen cam) still need a crop fix in review.
 
 [[channels]]
 platform = "twitch"
 login = "lacy"
-streamer = "lacy"        # streamers.slug in Supabase; must be in an ACTIVE campaign to capture
+streamer = "lacy"
+active = false
 [channels.layout]        # facecam top-left 494x278; chat top-right from x=1365
 facecam = { x = 0, y = 0, w = 494, h = 278 }
 gameplay = { x = 494, y = 0, w = 866, h = 1080 }
@@ -57,6 +133,7 @@ facecam_height = 640
 platform = "twitch"
 login = "clix"
 streamer = "clix"
+active = false
 [channels.layout]        # facecam top-left under the health bars; timer/subs top-right
 facecam = { x = 0, y = 80, w = 478, h = 269 }
 gameplay = { x = 506, y = 0, w = 908, h = 1080 }
@@ -66,6 +143,7 @@ facecam_height = 640
 platform = "twitch"
 login = "silky"
 streamer = "silky"
+active = false
 [channels.layout]        # cut-out facecam bottom-right; chat top-right from x=1414
 facecam = { x = 1450, y = 800, w = 470, h = 280 }
 # Wider box keeps the full game subtitle (x 490-1424); taller facecam slot (720)
@@ -74,4 +152,4 @@ gameplay = { x = 466, y = 0, w = 960, h = 1080 }
 facecam_height = 720
 
 [extra.kick_chatrooms]   # chatroom_id -> kick login (needed for the Pusher chat path)
-# "123456" = "example"
+"875062" = "adinross"    # from kick.com/api/v2/channels/adinross, 2026-11-21

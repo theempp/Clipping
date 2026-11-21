@@ -59,6 +59,8 @@ export type Heartbeat = {
     queue?: Record<string, number>;
     live_since?: Record<string, string>;
     viewers?: Record<string, number>;
+    games?: Record<string, string>;                      // channel key -> current category
+    roster?: Record<string, "core" | "gta6_only">;       // active roster (D069); absent on older workers
     gpu?: { name?: string; util?: number; mem_used_gb?: number; mem_total_gb?: number };
   };
 };

@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { PC_NAME } from "@/lib/env";
 import { ago, pcState, rankQueue } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
-import { fmtViewers, monthSpend, streamerViews } from "@/lib/view";
+import { fmtViewers, monthSpend, rosterSections, streamerViews, type StreamerView } from "@/lib/view";
 import { Avatar } from "./Avatar";
 import { Icon } from "./Icon";
 import { UndoToast } from "./UndoToast";
@@ -16,9 +16,27 @@ export function Shell({ children }: { children: ReactNode }) {
   const now = useNow(5000);
   const path = usePathname();
   const views = streamerViews(snap, now);
+  const sections = rosterSections(views, !!snap.heartbeat?.status.roster);
   const queue = rankQueue(snap.clips);
   const approved = snap.clips.filter((c) => c.state === "approved").length;
-  const liveN = views.filter((v) => v.live).length;
+  const liveN = sections.core.filter((v) => v.live).length;
+  const row = (v: StreamerView) => {
+    const on = path === `/live/${v.s.slug}`;
+    return (
+      <Link key={v.s.id} href={`/live/${v.s.slug}`}
+        className={`sr ${v.live ? "lv" : ""} ${on ? "on" : ""}`} aria-current={on ? "page" : undefined}>
+        <Avatar s={v.s} live={v.live} />
+        <b>{v.s.display_name}</b>
+        {v.live
+          ? <span className="tg"><span className="eq"><i /><i /><i /></span>LIVE</span>
+          : <span className="tg off">OFF</span>}
+        <span className="meta">
+          <span className="hs">{v.heat.map((h, i) => <i key={i} className={h ? `h${h}` : ""} />)}</span>
+          {v.live ? fmtViewers(v.viewers) : v.queued ? `${v.queued} queued` : "offline"}
+        </span>
+      </Link>
+    );
+  };
   const awake = snap.control.awake;
   const st = pcState(snap.heartbeat, awake, now);
   const gpu = snap.heartbeat?.status.gpu;
@@ -53,25 +71,13 @@ export function Shell({ children }: { children: ReactNode }) {
         </Link>
         <h6>Streamers <em>{liveN} live</em></h6>
         <div className="srs">
-          {views.map((v) => {
-            const on = path === `/live/${v.s.slug}`;
-            return (
-              <Link key={v.s.id} href={`/live/${v.s.slug}`}
-                className={`sr ${v.live ? "lv" : ""} ${on ? "on" : ""}`} aria-current={on ? "page" : undefined}>
-                <Avatar s={v.s} live={v.live} />
-                <b>{v.s.display_name}</b>
-                {v.live
-                  ? <span className="tg"><span className="eq"><i /><i /><i /></span>LIVE</span>
-                  : <span className="tg off">OFF</span>}
-                <span className="meta">
-                  <span className="hs">{v.heat.map((h, i) => <i key={i} className={h ? `h${h}` : ""} />)}</span>
-                  {v.live ? fmtViewers(v.viewers) : v.queued ? `${v.queued} queued` : "offline"}
-                </span>
-              </Link>
-            );
-          })}
+          {sections.core.map(row)}
           {views.length === 0 && <p className="empty-s">No streamers yet. The worker adds them from its channel config.</p>}
         </div>
+        {sections.gta6.length > 0 && <>
+          <h6>GTA 6 only <em>{sections.gta6.filter((v) => v.live).length} live</em></h6>
+          <div className="srs">{sections.gta6.map(row)}</div>
+        </>}
         <h6>Machine</h6>
         <div className="mc">
           <div className="r1"><Icon name="chip" /> {PC_NAME}
@@ -101,7 +107,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <WakeToggle compact />
         </div>
         <div className="strip" role="list">
-          {views.map((v) => (
+          {[...sections.core, ...sections.gta6].map((v) => (
             <Link key={v.s.id} href={`/live/${v.s.slug}`} role="listitem" aria-label={v.s.display_name}
               className={path === `/live/${v.s.slug}` ? "on" : ""}>
               <Avatar s={v.s} live={v.live} size={40} />

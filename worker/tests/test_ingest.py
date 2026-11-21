@@ -99,13 +99,13 @@ def test_caption_style_hex_to_ass(tmp_path):
 def test_twitch_streams_detail():
     p = {"data": [{"user_login": "Lacy", "type": "live", "viewer_count": 18400,
                    "started_at": "2026-11-20T18:00:00Z"}, {"user_login": "x", "type": ""}]}
-    assert status.parse_twitch_streams(p) == {"lacy": {"viewers": 18400, "started_at": "2026-11-20T18:00:00Z"}}
+    assert status.parse_twitch_streams(p) == {"lacy": {"viewers": 18400, "started_at": "2026-11-20T18:00:00Z", "game_id": None, "game": None}}
 
 
 def test_kick_streams_detail():
     p = {"data": [{"slug": "silky", "stream": {"is_live": True, "viewer_count": 900, "start_time": "t"}},
                   {"slug": "off", "stream": {"is_live": False}}]}
-    assert status.parse_kick_streams(p) == {"silky": {"viewers": 900, "started_at": "t"}}
+    assert status.parse_kick_streams(p) == {"silky": {"viewers": 900, "started_at": "t", "game_id": None, "game": None}}
 
 
 def test_stream_fields_and_gpu():
@@ -113,7 +113,7 @@ def test_stream_fields_and_gpu():
     from clipworker import gpu
     from clipworker.live import stream_fields
     f = stream_fields({"twitch:lacy": {"viewers": 5, "started_at": "t"}, "kick:a": {"viewers": None, "started_at": None}})
-    assert f == {"viewers": {"twitch:lacy": 5}, "live_since": {"twitch:lacy": "t"}}
+    assert f == {"viewers": {"twitch:lacy": 5}, "live_since": {"twitch:lacy": "t"}, "games": {}}
     ok = lambda *a, **k: SimpleNamespace(returncode=0, stdout="NVIDIA GeForce RTX 5060, 62, 5222, 8151\n")
     assert gpu.snapshot(ok) == {"name": "RTX 5060", "util": 62, "mem_used_gb": 5.1, "mem_total_gb": 8.0}
     def missing(*a, **k): raise FileNotFoundError
