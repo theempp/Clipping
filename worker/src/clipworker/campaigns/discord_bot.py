@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 def handle_post(sb: Supabase, msg_id: str, channel_id: str, author: str, content: str,
                 posted_at_iso: str, attachments: list[str], roster: list[str],
-                familiar: set[str]) -> dict | None:
+                familiar: set[str], gta6_only: set[str] = frozenset()) -> dict | None:
     rows = sb.insert("campaign_posts", {"discord_message_id": msg_id, "discord_channel_id": channel_id,
                                         "author": author, "content": content,
                                         "attachments": attachments, "posted_at": posted_at_iso},
@@ -27,14 +27,15 @@ def handle_post(sb: Supabase, msg_id: str, channel_id: str, author: str, content
         return None  # already seen
     post = rows[0]
     b = parse_brief(content, roster)
-    total, verdict, why = score(b, familiar)
+    total, verdict, why = score(b, familiar, gta6_only=gta6_only)
     title = content.strip().splitlines()[0][:120] if content.strip() else f"Discord post {msg_id}"
     camp = sb.insert("campaigns", to_campaign_row(b, title, post["id"], total, verdict, why))
     sb.update("campaign_posts", {"id": post["id"]}, {"parsed_at": posted_at_iso})
     return camp[0] if camp else None
 
 
-def run_bot(sb: Supabase, token: str, channel_id: int, roster: list[str], familiar: set[str]) -> None:
+def run_bot(sb: Supabase, token: str, channel_id: int, roster: list[str], familiar: set[str],
+            gta6_only: set[str] = frozenset()) -> None:
     import discord  # optional extra: pip install .[discord]
 
     intents = discord.Intents.default()
@@ -51,7 +52,7 @@ def run_bot(sb: Supabase, token: str, channel_id: int, roster: list[str], famili
             return
         camp = handle_post(sb, str(message.id), str(channel_id), str(message.author),
                            message.content or "", message.created_at.isoformat(),
-                           [a.url for a in message.attachments], roster, familiar)
+                           [a.url for a in message.attachments], roster, familiar, gta6_only)
         if camp:
             log.info("campaign draft %s: %s", camp["id"], camp["recommendation"])
 

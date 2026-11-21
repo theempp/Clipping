@@ -163,9 +163,10 @@ def main(argv: list[str] | None = None) -> int:
         if a.cmd == "discord":
             from .campaigns.discord_bot import run_bot
             s, sb, _, _ = _build(a, need_judge=False)
-            roster = [st["slug"] for st in sb.streamers()]
+            roster = [c.streamer for c in s.channels]   # D072: only the active roster counts
+            gta6_only = {c.streamer for c in s.channels if c.group == "gta6_only"}
             run_bot(sb, env("DISCORD_BOT_TOKEN", required=True),
-                    int(env("DISCORD_CAMPAIGN_CHANNEL_ID", required=True)), roster, set(roster))
+                    int(env("DISCORD_CAMPAIGN_CHANNEL_ID", required=True)), roster, set(roster), gta6_only)
             return 0
     except ConfigError as e:
         print(f"config error: {e}", file=sys.stderr)
