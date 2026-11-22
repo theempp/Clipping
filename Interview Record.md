@@ -1,5 +1,5 @@
 # Interview Record
-Links: [[clipping]] · [[Decision Log]] · [[Interview Roadmap]]
+Links: [[clipping]] · [[Decision Log]]
 
 ## Q1 — Business direction
 Options: A personal operation; B dedicated fan channels; C single media brand; D clipping service; E hybrid/private tool first with flexible destinations.

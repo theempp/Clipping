@@ -92,3 +92,8 @@ Stars, created/last-push dates and license from the GitHub search API on 2026-11
 | 10 | [nateherkai/herk-edit-kit](https://github.com/nateherkai/herk-edit-kit) | 3.0k | 2026-10-14 | Not stated (NOASSERTION) | 15 Codex/Claude Code editing skills: silence cut, captions, hooks, short-form rules. Talking-head focus; borrow caption/hook rules. Check license before copying. |
 
 Also seen, not ranked: iamajmeena/neonclipping (736 stars, created 2026-11-19, too new to trust), RafaelGodoyEbert/ViralCutter (505, GPL-3.0), artbyjazi/autoclip (471, MIT, MediaPipe speaker-tracked 9:16, inactive since 2026-08-01), bridge-mind/bridgeclip (476, MIT), OpenMontage (81.8k, AGPL-3.0, general agentic video production, too broad).
+
+## 2026-11-22: Cole Medin edit-video audit
+- coleam00/skills `edit-video` at commit `8c30da9`, MIT. Verdict: **fail, reference only**. Not installed or run.
+- Blockers: optional torch 2.8.0 (GHSA-63cw-57p8-fm3p, fixed 2.10), `shell=True` string interpolation in render/finalize/export, unpinned `npx hyperframes` and GSAP from CDN without integrity.
+- Re-audit only after those are fixed upstream, in an isolated test. Clone deleted; re-clone at the pinned commit if needed.

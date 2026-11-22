@@ -1,17 +1,16 @@
-# Clipper planning vault
+# Clipp
 
-Planning and research for Zo's private clipping tool. No application code has been built.
+Zo's private clipping tool: a PC worker detects and renders clips from roster streams, a Next.js dashboard reviews them, and nothing publishes without approval. This folder is also the Obsidian vault; start at [clipping.md](clipping.md) and the [Decision Log](Decision%20Log.md).
 
-## Open in Obsidian
-Open this repository folder as a vault. The existing local vault is at `C:\Users\HOME!\Desktop\clipping`. Start with [clipping.md](clipping.md); Obsidian renders the topic links and Graph view.
+- `worker/` Python clip worker (`clipworker`), tests in `worker/tests`
+- `dashboard/` Next.js review dashboard
+- `supabase/` migrations and SQL tests
+- `ops/discord-bot/` Discord bot runner
+- `docs/` project overview PDF (`node docs/build.js` rebuilds it)
+- `references/pinterest/` design references (only source of visual values)
+- `logo-concepts/zwoclippe-final/` final logo files
 
-## Current decisions
-- Creator campaigns through Content Rewards guide V1 revenue research.
-- Recurring operating budget: $100–$250/month; actual costs remain to validate.
-- V1 stream monitoring runs on Zo's PC only while it is on.
-- A dashboard "Wake Up" control transforms the page into the active clipping interface.
-- Human review and approval precede publication to assigned accounts.
-
-Read Decision Log.md for decision history and Continue Interview.md for the current handoff. The interview is paused pending Zo's next topic. Campaign integrations, roster, publishing coverage and final implementation plan remain unfinished. Reference videos have not been analyzed.
-
-Keep credentials and operational media outside these notes. Versioned Obsidian settings are included; per-device workspace layouts are excluded.
+## Run on the PC
+- Use `main` in `C:\clip-work\Clipping` (the Desktop path's `!` breaks Webpack).
+- Dashboard: double-click `Start Dashboard.cmd`, open http://localhost:3000 after Ready, log in from Chrome on the PC.
+- Secrets live only in `worker/.env` and `dashboard/.env.local` (gitignored).

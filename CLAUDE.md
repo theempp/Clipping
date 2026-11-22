@@ -1,5 +1,5 @@
 # Clipping project
-Private clip tool (Zo first). Vault notes (`*.md`) hold decisions; read `Decision Log.md` first. Planning here; implementation via Claude Code.
+Private clip tool (Zo first). Vault notes (`*.md`) hold decisions; read `Decision Log.md` first. Code: `worker/`, `dashboard/`, `supabase/`; run from `C:\clip-work\Clipping`.
 
 ## Token policy (top priority; quality never traded away)
 - Terse output; answer first; invoke `caveman` skill. Plain prose for security, irreversible actions, and anything written to files/commits.
@@ -13,6 +13,3 @@ Private clip tool (Zo first). Vault notes (`*.md`) hold decisions; read `Decisio
 
 ## Design
 No default style. All visual values come from `references/` via Atlas. Empty = ask the user.
-
-## Skills (`.claude/skills`)
-impeccable, apple-design (dashboard UI) · stageshow + video-breakdown (study breakdowns) · learn · campaign-scout · clip-detector-tuning · publish-approval-gate · clip-qa · caveman · investigate-first · repo-audit · stream-ingest · clip-render.
