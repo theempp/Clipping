@@ -9,7 +9,7 @@ const path = require('path'); const fs = require('fs');
   const bad = await p.evaluate(() => [...document.querySelectorAll('.page')].map((el, i) => {
     let over = el.scrollHeight - el.clientHeight; // content taller than the page
     const r = el.getBoundingClientRect(); let maxB = 0;
-    el.querySelectorAll('*').forEach(c => { if (c.closest('.pn,.run')) return; const cr = c.getBoundingClientRect(); if (cr.height) maxB = Math.max(maxB, cr.bottom - r.top); });
+    el.querySelectorAll('*').forEach(c => { if (c.closest('.foot')) return; const cr = c.getBoundingClientRect(); if (cr.height) maxB = Math.max(maxB, cr.bottom - r.top); });
     const limit = r.height - 8 * 3.78; // keep clear of the footer line
     return { page: i + 1, scrollOver: over, bottomPx: Math.round(maxB), limitPx: Math.round(limit), tooLow: maxB > limit };
   }).filter(x => x.scrollOver > 0 || x.tooLow));
