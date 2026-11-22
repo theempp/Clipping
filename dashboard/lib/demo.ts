@@ -1,6 +1,6 @@
 // Sample day for demo mode (D057). Times are relative to page load so the
 // countdown and "live for" clocks move. Nothing here touches the network.
-import type { Candidate, Clip, Snapshot, Streamer } from "./types.ts";
+import type { Candidate, Clip, LongformVideo, Snapshot, Streamer } from "./types.ts";
 
 const S = (id: string, slug: string, name: string, kick = false): Streamer => ({
   id, slug, display_name: name, twitch_login: kick ? null : slug, kick_slug: kick ? slug : null, avatar_url: null,
@@ -62,6 +62,21 @@ export function demoSnapshot(now = Date.now()): Snapshot {
         outcome: spike ? "kept" : "dropped" });
     }
   }
+  // Long-form TikTok (D079-D082): one in review, one approved and posted.
+  clips.push(
+    clip({ streamer_id: "s-lacy", title: "Lacy cannot stop driving off bridges", score_10: 9, duration_s: 72,
+      category: "longform", hook_type: "story_start", hook: "Lacy found a new bridge", moment_at: iso(80 * min),
+      created_at: iso(4 * min), job_id: "long-demo1", qa: { passed: true, coverage: 0.44 },
+      judge: { why: "Narrated recap of 3 moments from today's stream. Narration 44% of runtime." } }),
+    clip({ streamer_id: "s-jynxzi", title: "Jynxzi's worst ranked night, retold", score_10: 8, duration_s: 68,
+      category: "longform", state: "approved", reviewed_at: iso(70 * min), job_id: "long-demo2" }),
+  );
+  const longform: LongformVideo[] = [
+    { id: "demo1", clip_id: clips[clips.length - 2].id, channel: "zwoclipp", format: "recap", pacing: "short",
+      caption_style: "A", voice: "ai", layout: "switch", runtime_s: 72, coverage: 0.44, tiktok_url: null, posted_at: null, notice: "none" },
+    { id: "demo2", clip_id: clips[clips.length - 1].id, channel: "zwoclipp", format: "topn", pacing: "short",
+      caption_style: "B", voice: "ai", layout: "switch", runtime_s: 68, coverage: 0.42, tiktok_url: null, posted_at: null, notice: "none" },
+  ];
   return {
     streamers,
     clips,
@@ -90,6 +105,13 @@ export function demoSnapshot(now = Date.now()): Snapshot {
     rules: [{ id: "demo-rule-1", key: "zoom_style", value: "smooth", label: "Smooth camera: eased zooms only on big moments",
       note: "the zoom in and out is way too sharp, make it smoother", clip_id: "demo-4", active: true,
       fixed_count: 2, created_at: iso(47 * min) }],
+    longform,
+    results: [
+      { format: "recap", pacing: "short", caption_style: "A", voice: "ai", layout: "switch", posts: 6, notices: 0,
+        avg_watch_s: 31.2, hold_5s_pct: 71.0, follows_per_1k: 4.8, rpm_usd: null },
+      { format: "topn", pacing: "short", caption_style: "A", voice: "ai", layout: "switch", posts: 6, notices: 1,
+        avg_watch_s: 27.5, hold_5s_pct: 66.0, follows_per_1k: 3.1, rpm_usd: null },
+    ],
   };
 }
 

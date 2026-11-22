@@ -371,7 +371,9 @@ class Pipeline:
             try:
                 job = self.store.job(clip["job_id"])
             except KeyError:
-                log.warning("revise for %s but local job is gone", clip["job_id"])
+                log.warning("revise for %s but local job is gone%s", clip["job_id"],
+                            " (long video: revise by denying it; the next plan re-scripts)"
+                            if clip.get("category") == "longform" else "")
                 continue
             overrides, title = {}, None  # typed notes: trim | crop | caption | title
             for r in revs:

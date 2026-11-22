@@ -9,6 +9,7 @@ import { Countdown } from "@/components/Countdown";
 import { Icon } from "@/components/Icon";
 import { PipelineTiles } from "@/components/Pipeline";
 import { ReviewDock } from "@/components/ReviewDock";
+import { TikTokPanel, tagLine } from "@/components/TikTokPanel";
 import { WakeToggle } from "@/components/WakeToggle";
 import { WeekPulse } from "@/components/WeekPulse";
 import { mmss, rankQueue } from "@/lib/logic";
@@ -45,6 +46,7 @@ export default function ReviewPage() {
   const openRev = snap.revisions.filter((r) => r.clip_id === clip?.id);
   const score = clip?.score_10 ?? null;
   const spendPct = Math.min(100, (spend.total / BUDGET) * 100);
+  const long = clip?.category === "longform" ? snap.longform.find((v) => v.clip_id === clip.id) : undefined;
 
   return (
     <div className="rv">
@@ -74,7 +76,9 @@ export default function ReviewPage() {
           <p className="why">{clip ? why ?? "No judge note for this clip." : "New clips show up here the moment the PC finishes rendering and QA."}</p>
           {clip && (
             <div className="chips">
-              {clip.hook_type && <span className="chip">{HOOK[clip.hook_type] ?? clip.hook_type}</span>}
+              {long && <span className="chip">TikTok · Zwoclipp</span>}
+              {long && tagLine(long).map((t) => <span key={t} className="chip">{t}</span>)}
+              {!long && clip.hook_type && <span className="chip">{HOOK[clip.hook_type] ?? clip.hook_type}</span>}
               {clip.detector_score != null && <span className="chip">Chat spike {clip.detector_score.toFixed(1)}×</span>}
               {openRev[0] && <span className="chip note" title={openRev[0].note}>Last note: {openRev[0].note}</span>}
             </div>
@@ -150,6 +154,7 @@ export default function ReviewPage() {
       </div>
 
       <ApprovedList />
+      <TikTokPanel />
       <p className="keys" aria-hidden="true"><Icon name="bolt" /> Keys: <kbd>A</kbd> approve · <kbd>D</kbd> deny · <kbd>R</kbd> revise · <kbd>U</kbd> undo</p>
     </div>
   );
