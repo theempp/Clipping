@@ -36,7 +36,7 @@ def test_whoosh_synth_cached(tmp_path):
 def test_render_with_sfx_passes_loudness_qa(source_video, tmp_path):
     words = [Word(0.5, 0.9, "no"), Word(0.9, 1.4, "way."), Word(6.0, 6.5, "again."), Word(9.0, 9.4, "end")]
     m = render_clip("s1", source_video, tmp_path / "r", 3.0, 18.0, words, TEST_LAYOUT, TEST_STYLE,
-                    zoom=ZoomParams(scale=1.3), sfx=ON)
+                    zoom=ZoomParams(scale=1.12, drift=0.03), hook_offset=2.0, sfx=ON)
     assert m["sfx"] is True and m["zooms"]
     res = check_clip(tmp_path / "r" / "clip.mp4", tmp_path / "r" / "captions.ass",
                      CampaignRules(min_s=10, max_s=60, permitted=True), title="t")

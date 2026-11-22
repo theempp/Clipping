@@ -72,13 +72,21 @@ class CaptionStyle:
 
 @dataclass(frozen=True)
 class ZoomParams:
-    """Punch-in zooms (P3). scale 1.0 = off; value from Zo / references (D022)."""
+    """Punch-in zooms (P3). scale 1.0 = off; value from Zo / references (D022).
+
+    D077 (Zo, 2026-11-22): zooms read as robotic. Eased (cosine) in/out instead of linear,
+    gentler, and only on moments that earn it: the detector peak plus shouted lines
+    (`moments = "emphasis"`), not every sentence end. `drift` adds a slow, continuous push-in
+    across the whole clip so the frame never sits dead still."""
     scale: float = 1.0
-    ramp_s: float = 0.2
-    hold_s: float = 1.2
-    min_gap_s: float = 4.0
-    max_zooms: int = 8
+    ramp_s: float = 0.6
+    hold_s: float = 1.8
+    min_gap_s: float = 8.0
+    max_zooms: int = 2
     lead_s: float = 0.0
+    moments: str = "emphasis"   # peak | emphasis | sentences
+    ease: str = "smooth"        # smooth | linear
+    drift: float = 0.0          # extra scale reached by the end of the clip (0.04 = 4 %)
 
     @property
     def on(self) -> bool:

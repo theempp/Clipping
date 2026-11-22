@@ -29,6 +29,10 @@ export type Clip = {
   duration_s: number | null;
   storage_path: string | null;
   thumb_path: string | null;
+  /** The untouched 16:9 stream window, for before/after (D077). Older clips have none. */
+  source_path?: string | null;
+  /** Set while the PC re-edits this clip to meet a learned rule; hidden from review meanwhile (D078). */
+  fixing?: { rules: string[]; since: string } | null;
   qa: Record<string, unknown>;
   judge: Record<string, unknown>;
   revision: number;
@@ -73,6 +77,12 @@ export type Spend = { kind: string; usd: number };
 
 export type Revision = { id: string; clip_id: string; kind: string; note: string; created_at: string; resolved_at: string | null };
 
+/** A standing edit learned from one of Zo's revision notes (D078). */
+export type EditRule = {
+  id: string; key: string; value: unknown; label: string; note: string;
+  clip_id: string | null; active: boolean; fixed_count: number; created_at: string;
+};
+
 export type Snapshot = {
   streamers: Streamer[];
   clips: Clip[];
@@ -82,6 +92,7 @@ export type Snapshot = {
   candidates: Candidate[];
   spend: Spend[];
   revisions: Revision[];
+  rules: EditRule[];
 };
 
 export type ReviewAction = "approve" | "revise" | "reject";
