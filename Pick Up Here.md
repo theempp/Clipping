@@ -1,24 +1,20 @@
-# Pick up here (2026-11-20, evening)
+# Pick up here (2026-11-21, evening)
 
 ## Where things stand
-- Dashboard is wired to the real Supabase project `clipp` (ref `aqmufpztmzsolpanrgsq`, us-east-1). Zo signed in on the PC at 7:31 PM on 2026-11-20.
-- Code: PR #4 (branch `claude/project-thread-646sy2`), stacked on #3, #2, #1. CI green, nothing merged to main.
-- Decisions D059-D063 in [[Decision Log]]. Next free ID: D064.
-- The older Supabase project supabase-cyan-notebook is paused (free-tier cap). Restore it from the Supabase dashboard if that app is needed.
-
-## Running the dashboard on the PC
-- Code lives in `C:\clip-work\Clipping` (a clone of the PR #4 branch, not this vault).
-- Start: PowerShell, `cd C:\clip-work\Clipping\dashboard`, `npm run dev`, then open http://localhost:3000. Closing that window stops it.
-- `.env.local` there holds the Supabase URL and the public anon key only.
-
-## Logging in
-- Request the link at localhost:3000/login on the PC, then open the email at icloud.com/mail **in the same Chrome on the PC**. Links opened on the phone fail (localhost = the phone).
-- Supabase's built-in mailer sends about 2 emails an hour.
-- The 6-digit code sign-in (D063) needs a custom SMTP sender (e.g. Resend), because the email template is locked on the built-in mailer.
+- Everything is committed and pushed to `main` on GitHub. No open PRs. Both clones (this vault and `C:\clip-work\Clipping`) match `origin/main`.
+- Dashboard redesign (Stage v2) is in place, but Zo wants more visual revisions. Continue from there next session.
+- Decisions run through D072 in [[Decision Log]]. Next free ID: D073.
 
 ## Open items
-1. Delete or Deny the 3 `seed-*` test clips in the queue.
-2. Optional: set up Resend SMTP so login works from the phone.
-3. Worker `.env` on the PC: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (from Supabase > Project Settings > API keys), plus Twitch/Kick/Grok/YouTube/X keys.
-4. Review and merge PRs #1-#4 in order.
-5. Zo's new focus: clipping GTA 6 (raised 2026-11-20, not planned yet).
+1. **Dashboard visual revisions**: Zo's next focus. Visual values come only from `references/` via Atlas.
+2. **Grok key**: `XAI_API_KEY` (plus `GROK_MODEL` and the two price fields) is still empty in the worker `.env`. Until it is set, the worker uses the code-only stand-in judge (D071).
+3. **Crop box approvals**: the proposed per-streamer crop boxes for the roster are still pending Zo's approval.
+4. **Lacy UNJUDGED clips**: review the Lacy clips the stand-in judge left UNJUDGED.
+
+## Worker status
+- Not running right now (no worker process on the PC as of 2026-11-21 evening).
+- `.env` at `C:\clip-work\Clipping\worker\.env` has Supabase, Twitch, Kick, YouTube, X, Discord and ffmpeg/streamlink paths set. Only the Grok fields are empty.
+
+## Running the dashboard on the PC
+- PowerShell: `cd C:\clip-work\Clipping\dashboard`, `npm run dev`, then open http://localhost:3000. Closing that window stops it.
+- Log in from the same Chrome on the PC (magic link links fail on the phone, since localhost is the phone there).
