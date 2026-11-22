@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "mcp__plugin_discord_discord__reply",
+      "mcp__plugin_discord_discord__react",
+      "mcp__plugin_discord_discord__edit_message",
+      "mcp__plugin_discord_discord__fetch_messages",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__claude_ai_Supabase__list_tables",
+      "PowerShell(Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 http://localhost:3000*)"
+    ],
+    "deny": [
+      "Read(//c/Users/HOME!/.claude/channels/discord/.env)",
+      "Read(**/.env)",
+      "Read(**/.env.*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__claude_ai_Supabase__execute_sql",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/Users/HOME!/Desktop/clipping/ops/discord-bot/guard-sql.mjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

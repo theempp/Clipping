@@ -15,3 +15,6 @@ __pycache__/
 .pytest_cache/
 worker/config/channels.toml
 *.sqlite3
+
+# discord ops bot log
+ops/discord-bot/bot.log
