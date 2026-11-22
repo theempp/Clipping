@@ -1,6 +1,15 @@
 # Campaign Intelligence
 Links: [[clipping]] | [[Channel Strategy]] | [[Research Agenda]] | [[Learning and Memory]] | [[Decision Log]]
 
+## Campaign rules — decided by Zo 2026-11-21 (D070, tightened by D072)
+- Scope: only campaigns tied to the roster streamers. Core: Jynxzi, xQc, Adin Ross, Lacy, Stable Ronaldo (all content, GTA 6 first). GTA 6 only: Kai Cenat, IShowSpeed (a campaign for them counts only if it pays for GTA 6 clips).
+- Read ALL rules before ranking: payout per 1K, caps/budget left, minimum views, platforms, length/format, source footage, tags/captions/disclosure, approval, payment timing, status, red flags.
+- HARD RULE: pays MORE than $1.00 per 1,000 views, or stay away. Exactly $1.00 fails. Pools: effective rate = pool / total views, plus the minimum-views bar.
+- Rank qualifying campaigns by payout, rule friendliness, budget left, fit with YouTube @zwoclipp, X @ZwoAgency, Kick zwostudio.
+- None qualify: grow and monetize own channels. Re-scan daily during GTA 6 launch week.
+- Access note: cloud fetch can't reach contentrewards.com; the PC's built-in browser reads public campaign pages. Whop discovery needs Zo's login.
+- First scan result: [[Campaign Ranking 2026-11-21]] (none qualify).
+
 ## User direction — 2026-11-20
 V1 revenue should prioritize creator campaigns through Content Rewards. Zo requests a future agent or skill that repeatedly checks campaigns associated with top streamers, studies which to pursue or avoid, and explains why so Zo learns alongside the system.
 
