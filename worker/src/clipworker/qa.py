@@ -96,9 +96,10 @@ def check_clip(video: Path, captions: Path | None, rules: CampaignRules, title: 
         if sz:
             size, outline = int(sz.group(1)), float(sz.group(2))
             pops = [int(x) for x in re.findall(r"\\fscx(\d+)", text)] or [100]
-            widest = max((text_width(re.sub(r"\{[^}]*\}", "", line.split(",", 9)[9]), size,
-                                     outline, max(pops))
-                          for line in text.splitlines() if line.startswith("Dialogue:")), default=0)
+            widest = max((text_width(part, size, outline, max(pops))
+                          for line in text.splitlines() if line.startswith("Dialogue:")
+                          for part in re.sub(r"\{[^}]*\}", "", line.split(",", 9)[9]).split(r"\N")),
+                         default=0)  # \N = forced line break: each line is measured on its own
             m["caption_max_width_px"] = round(widest)
             if widest > W - 2 * SIDE_MARGIN:
                 fails.append(f"captions: line ~{widest:.0f}px wide overflows the {W}px frame")

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { demoSnapshot } from "./demo";
 import { IS_DEMO } from "./env";
 import { browserClient } from "./supabase/client";
-import type { Clip, ReviewAction, Snapshot } from "./types";
+import type { Clip, LongformVideo, ReviewAction, Snapshot, TiktokStats } from "./types";
 
 export const UNDO_MS = 4000;
 
@@ -22,12 +22,17 @@ type Store = {
   setAwake: (on: boolean) => Promise<void>;
   markSubmitted: (id: string) => Promise<void>;
   mediaUrl: (path: string | null, download?: string) => Promise<string | null>;
+  /** TikTok is uploaded by hand (D074); these record the post, its stats and any eligibility notice. */
+  markTiktokPosted: (id: string, url: string) => Promise<boolean>;
+  addTiktokStats: (id: string, stats: TiktokStats) => Promise<boolean>;
+  setNotice: (id: string, notice: LongformVideo["notice"]) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const EMPTY: Snapshot = {
   streamers: [], clips: [], submissions: [], heartbeat: null,
   control: { awake: false, updated_at: new Date(0).toISOString() }, candidates: [], spend: [], revisions: [],
+  longform: [], results: [],
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -53,7 +58,7 @@ async function loadLive(): Promise<Snapshot> {
   const since6h = new Date(Date.now() - 6 * 3600_000).toISOString();
   const since24h = new Date(Date.now() - 24 * 3600_000).toISOString();
   const month = new Date(); month.setUTCDate(1); month.setUTCHours(0, 0, 0, 0);
-  const [st, cl, su, hb, co, ca, sp, rv] = await Promise.all([
+  const [st, cl, su, hb, co, ca, sp, rv, lf, lr] = await Promise.all([
     sb.from("streamers").select("id,slug,display_name,twitch_login,kick_slug,avatar_url").order("display_name"),
     sb.from("clips").select("*").order("created_at", { ascending: false }).limit(300),
     sb.from("submissions_live").select("*").gte("created_at", since24h).order("deadline_at"),
@@ -64,8 +69,11 @@ async function loadLive(): Promise<Snapshot> {
     sb.from("spend_month").select("kind,usd").gte("month", month.toISOString()),
     sb.from("revisions").select("id,clip_id,kind,note,created_at,resolved_at")
       .order("created_at", { ascending: false }).limit(200),
+    sb.from("longform_videos").select("id,clip_id,channel,format,pacing,caption_style,voice,layout,runtime_s,coverage,tiktok_url,posted_at,notice")
+      .order("created_at", { ascending: false }).limit(200),
+    sb.from("longform_results").select("*"),
   ]);
-  const err = [st, cl, su, hb, co, ca, sp, rv].find((r) => r.error)?.error;
+  const err = [st, cl, su, hb, co, ca, sp, rv, lf, lr].find((r) => r.error)?.error;
   if (err) throw new Error(err.message);
   return {
     streamers: st.data ?? [],
@@ -76,6 +84,8 @@ async function loadLive(): Promise<Snapshot> {
     candidates: ca.data ?? [],
     spend: (sp.data ?? []).map((r) => ({ kind: r.kind, usd: Number(r.usd) })),
     revisions: rv.data ?? [],
+    longform: lf.data ?? [],
+    results: lr.data ?? [],
   };
 }
 
@@ -113,7 +123,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     let t: ReturnType<typeof setTimeout> | null = null;
     const bump = () => { if (t) clearTimeout(t); t = setTimeout(() => void refresh(), 400); };
     const ch = sb.channel("clipp-dashboard");
-    for (const table of ["clips", "worker_heartbeat", "submissions", "control"]) {
+    for (const table of ["clips", "worker_heartbeat", "submissions", "control", "longform_videos"]) {
       ch.on("postgres_changes", { event: "*", schema: "public", table }, bump);
     }
     ch.subscribe();
@@ -214,6 +224,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return data.signedUrl;
   }, []);
 
+  const markTiktokPosted = useCallback(async (id: string, url: string) => {
+    const at = new Date().toISOString();
+    if (IS_DEMO) {
+      setSnap((s) => ({ ...s, longform: s.longform.map((v) => (v.id === id ? { ...v, tiktok_url: url, posted_at: at } : v)) }));
+      return true;
+    }
+    const { error: e } = await browserClient().rpc("mark_tiktok_posted", { p_video: id, p_url: url });
+    if (e) { setError(e.message); return false; }
+    await refresh();
+    return true;
+  }, [refresh]);
+
+  const addTiktokStats = useCallback(async (id: string, stats: TiktokStats) => {
+    if (IS_DEMO) return true;
+    const { error: e } = await browserClient().from("tiktok_stats").insert({ video_id: id, ...stats });
+    if (e) { setError(e.message); return false; }
+    await refresh();
+    return true;
+  }, [refresh]);
+
+  const setNotice = useCallback(async (id: string, notice: LongformVideo["notice"]) => {
+    setSnap((s) => ({ ...s, longform: s.longform.map((v) => (v.id === id ? { ...v, notice } : v)) }));
+    if (IS_DEMO) return;
+    const { error: e } = await browserClient().rpc("set_tiktok_notice", { p_video: id, p_notice: notice });
+    if (e) setError(e.message);
+    await refresh();
+  }, [refresh]);
+
   const signOut = useCallback(async () => {
     if (IS_DEMO) return;
     await browserClient().auth.signOut();
@@ -221,8 +259,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Store>(() => ({
-    demo: IS_DEMO, ready, error, snap, pending, act, undo, setAwake, markSubmitted, mediaUrl, signOut,
-  }), [ready, error, snap, pending, act, undo, setAwake, markSubmitted, mediaUrl, signOut]);
+    demo: IS_DEMO, ready, error, snap, pending, act, undo, setAwake, markSubmitted, mediaUrl,
+    markTiktokPosted, addTiktokStats, setNotice, signOut,
+  }), [ready, error, snap, pending, act, undo, setAwake, markSubmitted, mediaUrl, markTiktokPosted,
+    addTiktokStats, setNotice, signOut]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

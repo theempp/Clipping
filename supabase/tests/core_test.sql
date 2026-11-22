@@ -116,4 +116,40 @@ do $$ begin
     raise exception 'FAIL: revision box row wrong'; end if;
 end $$;
 reset role;
+-- long-form TikTok (D075-D078): post only after approval; stats roll up per test cell
+set role service_role;
+select set_config('request.jwt.claims', '{"role":"service_role"}', false);
+insert into public.clips(job_id, channel_key, moment_at, state, category)
+  values ('long-p1', 'twitch:lacy', now(), 'pending_review', 'longform');
+insert into public.longform_videos(id, clip_id, format, pacing, caption_style, voice, layout, runtime_s)
+  values ('p1', (select id from public.clips where job_id = 'long-p1'), 'recap', 'short', 'A', 'ai', 'switch', 72);
+do $$ begin
+  begin
+    insert into public.longform_videos(id, format, pacing, caption_style, voice, layout, runtime_s)
+      values ('p2', 'recap', 'short', 'A', 'ai', 'switch', 58);
+    raise exception 'FAIL: sub-minute long video accepted';
+  exception when check_violation then null; end;
+end $$;
+reset role;
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000aa"}', false);
+do $$ begin
+  begin
+    perform public.mark_tiktok_posted('p1', 'https://www.tiktok.com/@zwoclipp/video/1');
+    raise exception 'FAIL: unapproved video marked posted';
+  exception when raise_exception then
+    if sqlerrm like 'FAIL%' then raise; end if;
+  end;
+end $$;
+select public.review_clip((select id from public.clips where job_id = 'long-p1'), 'approve');
+select public.mark_tiktok_posted('p1', 'https://www.tiktok.com/@zwoclipp/video/1');
+insert into public.tiktok_stats(video_id, views, follows, qualified_views, rewards_usd, avg_watch_s)
+  values ('p1', 10000, 50, 8000, 4.40, 31);
+do $$ begin
+  if (select follows_per_1k from public.longform_results where format = 'recap') <> 5.00 then
+    raise exception 'FAIL: follows per 1k wrong'; end if;
+  if (select rpm_usd from public.longform_results where format = 'recap') <> 0.55 then
+    raise exception 'FAIL: rpm wrong'; end if;
+end $$;
+reset role;
 select 'ALL SQL CHECKS PASSED';

@@ -6,6 +6,7 @@
   clipworker live                   run everything (PC on = monitoring on)
   clipworker publish-once           one publisher pass (approved clips only)
   clipworker discord                campaign watcher bot
+  clipworker longform-once          plan/script/voice/render/QA today's Zwoclipp long videos (D075-D078)
 """
 from __future__ import annotations
 
@@ -131,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("live")
     sub.add_parser("publish-once")
     sub.add_parser("discord")
+    sub.add_parser("longform-once")
     a = p.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -167,6 +169,27 @@ def main(argv: list[str] | None = None) -> int:
             gta6_only = {c.streamer for c in s.channels if c.group == "gta6_only"}
             run_bot(sb, env("DISCORD_BOT_TOKEN", required=True),
                     int(env("DISCORD_CAMPAIGN_CHANNEL_ID", required=True)), roster, set(roster), gta6_only)
+            return 0
+        if a.cmd == "longform-once":
+            import httpx
+
+            from .longform.runner import LongformRunner
+            from .longform.script import GrokWriter
+            from .longform.voice import SapiVoice
+            s, sb, store, _ = _build(a, need_judge=False)
+            writer = None
+            if env("XAI_API_KEY"):
+                writer = GrokWriter(env("XAI_API_KEY"), env("GROK_MODEL", required=True), s.cache_dir,
+                                    httpx.Client(timeout=90), float(env("GROK_PRICE_IN_PER_MTOK", "0")),
+                                    float(env("GROK_PRICE_OUT_PER_MTOK", "0")))
+            else:
+                logging.warning("XAI_API_KEY not set: long videos wait at 'planned' (no narration, no video)")
+            voice = SapiVoice(env("CLIPP_TTS_VOICE") or None) if sys.platform == "win32" else None
+            r = LongformRunner(s, store, writer, voice, sb)
+            r.run_once()
+            for pl in r.plans():
+                print(f"{pl.id} {pl.tags.format}/{pl.tags.pacing}/{pl.tags.caption_style}/{pl.tags.voice}/"
+                      f"{pl.tags.layout}: {pl.state}" + (f" ({pl.error})" if pl.error else ""))
             return 0
     except ConfigError as e:
         print(f"config error: {e}", file=sys.stderr)
