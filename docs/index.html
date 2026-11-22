@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clipp: project overview</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#4b5563"/></marker>
+  <marker id="ahp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#7a4fd0"/></marker>
+</defs></svg>
+
+<!-- 1 COVER -->
+<section class="page cover">
+  <div>
+    <div class="tag">Project overview · 2026-11-22</div>
+    <h1 style="margin-top:8mm">Clipp</h1>
+    <p class="lead" style="margin-top:4mm">A private tool that watches live streams, cuts the best moments into vertical captioned clips, and puts every clip in front of one human before anything is posted.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:12mm;align-items:end">
+    <div class="lead" style="font-size:10.5pt">
+      <p>What it is · What it does · How it works</p>
+      <p>Annotated screenshots of the real dashboard (demo mode), architecture and data-flow diagrams, the current skills and automations, proposed future skills and Grok agents, and an honest list of what is not yet proven.</p>
+    </div>
+    <div class="meta">
+      Repository: theempp/clipping<br>
+      Source of this PDF: docs/index.html + docs/style.css<br>
+      Build: node docs/build.js<br>
+      Facts come from code and notes in the repo. Each claim is tagged<br>
+      <span style="color:#60f3bd">VERIFIED IN CODE</span> · <span style="color:#8ec5ff">RAN HERE</span> · <span style="color:#c9b3ff">PROPOSAL</span> · <span style="color:#ff9d92">UNVERIFIED</span>
+    </div>
+  </div>
+</section>
+
+<!-- 2 AT A GLANCE -->
+<section class="page">
+  <div class="kicker">1 · At a glance</div>
+  <h1>What Clipp is, in plain English</h1>
+  <p class="lead">Clipp is built for one owner (Zo). It follows a short list of Twitch and Kick streamers, spots exciting moments from chat and audio, cuts them into 9:16 clips with word-by-word captions, and queues them in a private web dashboard. Zo approves, denies or asks for changes. Only approved clips are posted, to X and YouTube Shorts.</p>
+  <div class="cols c3" style="margin-top:3mm">
+    <div class="card"><h3>What it does</h3>
+      <ul>
+        <li>Watches up to 3 live channels at once on Zo's PC.</li>
+        <li>Detects chat/audio spikes with plain code (no AI needed for that).</li>
+        <li>Asks Grok to judge only a short text shortlist: keep or drop, where to trim, title.</li>
+        <li>Renders and quality-checks clips with ffmpeg.</li>
+        <li>Holds every clip for human approval, then posts and starts a 30-minute Content Rewards countdown.</li>
+      </ul></div>
+    <div class="card"><h3>How it is built</h3>
+      <ul>
+        <li><b>Worker</b>: Python 3.11 package <code>clipworker</code> on the PC.</li>
+        <li><b>Database + files + login</b>: Supabase (Postgres, private Storage, Realtime, Auth).</li>
+        <li><b>Dashboard</b>: Next.js 15 / React 19, built for Vercel; phone and desktop.</li>
+        <li><b>Rules live in the database</b>: a Postgres trigger, not just code, blocks any post without approval.</li>
+        <li><b>Planning vault</b>: ~20 Obsidian notes; <code>Decision Log.md</code> holds decisions D001-D078.</li>
+      </ul></div>
+    <div class="card"><h3>Where it stands</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3mm">
+        <div class="stat">120<small>worker tests passed here</small></div>
+        <div class="stat">11<small>dashboard tests passed here</small></div>
+        <div class="stat">~4.1k<small>lines of worker Python</small></div>
+        <div class="stat">5<small>SQL migrations</small></div>
+      </div>
+      <p style="margin-top:2.5mm" class="sub">Last handoff note (<code>Pick Up Here.md</code>, 2026-11-21): worker not running; <code>XAI_API_KEY</code> still empty, so a code-only stand-in judge is used.</p></div>
+  </div>
+  <div class="cols c2" style="margin-top:4mm">
+    <div>
+      <h3>How to read the tags in this document</h3>
+      <p><span class="badge b-ok">Verified in code</span> I read the code or config that does this.<br>
+      <span class="badge b-ran">Ran here</span> I executed it in this session (tests, demo dashboard, guard script).<br>
+      <span class="badge b-prop">Proposal</span> Not built. A suggestion only.<br>
+      <span class="badge b-unv">Unverified</span> Could not be checked from this environment (live streams, real accounts, Windows PC, third-party APIs).</p>
+    </div>
+    <div class="note"><b>Mismatch to know about.</b> The root <code>README.md</code> still says "No application code has been built". That is out of date: <code>worker/</code>, <code>dashboard/</code> and <code>supabase/</code> exist and pass their tests. Trust the code and <code>Decision Log.md</code>, not that sentence.</div>
+  </div>
+  <div class="run">Clipp project overview</div><div class="pn">2</div>
+</section>
+
+<!-- 3 PIPELINE -->
+<section class="page">
+  <div class="kicker">2 · How it works</div>
+  <h2>From live stream to posted clip</h2>
+  <p>Code does the deterministic work. The model (Grok) is used once, on a text shortlist. A human gate sits in the middle. <span class="badge b-ok">Verified in code</span> <span class="sub">(<code>worker/README.md</code>, <code>live.py</code>, <code>pipeline.py</code>)</span></p>
+  <div class="grow">
+  <svg viewBox="0 0 1000 395">
+    <g class="t2">
+      <rect class="nb ext" x="15" y="30" width="130" height="80"/><text class="t1" x="25" y="52">Live sources</text><text x="25" y="70" class="sm">Twitch IRC (anon)</text><text x="25" y="83" class="sm">Kick chat socket</text><text x="25" y="96" class="sm">streamlink video</text>
+      <rect class="nb code" x="160" y="30" width="130" height="80"/><text class="t1" x="170" y="52">Ingest</text><text x="170" y="70" class="sm">ffmpeg 10 s segments</text><text x="170" y="83" class="sm">10-min rolling buffer</text><text x="170" y="96" class="sm">chat+loudness in SQLite</text>
+      <rect class="nb code" x="305" y="30" width="130" height="80"/><text class="t1" x="315" y="52">Detector</text><text x="315" y="70" class="sm">5 s burst vs 10 min base</text><text x="315" y="83" class="sm">4 weighted signals</text><text x="315" y="96" class="sm">score ≥ 2.5 for ≥ 2 s</text>
+      <rect class="nb code" x="450" y="30" width="130" height="80"/><text class="t1" x="460" y="52">Rights gate</text><text x="460" y="70" class="sm">roster = always clip</text><text x="460" y="83" class="sm">off-roster needs an</text><text x="460" y="96" class="sm">active campaign</text>
+      <rect class="nb code" x="595" y="30" width="130" height="80"/><text class="t1" x="605" y="52">Capture window</text><text x="605" y="70" class="sm">cut ≈ −25 s … +15 s</text><text x="605" y="83" class="sm">from the buffer</text><text x="605" y="96" class="sm">(cap 90 s)</text>
+      <rect class="nb code" x="740" y="30" width="120" height="80"/><text class="t1" x="750" y="52">whisperX</text><text x="750" y="70" class="sm">word timestamps</text><text x="750" y="83" class="sm">GPU, cached</text><text x="750" y="96" class="sm">by audio hash</text>
+      <rect class="nb model" x="875" y="30" width="110" height="80"/><text class="t1" x="885" y="52">Grok judge</text><text x="885" y="70" class="sm">text only, JSON</text><text x="885" y="83" class="sm">keep · trim · hook</text><text x="885" y="96" class="sm">title · score ≥ 6</text>
+    </g>
+    <path class="arr" d="M145 70H160"/><path class="arr" d="M290 70H305"/><path class="arr" d="M435 70H450"/><path class="arr" d="M580 70H595"/><path class="arr" d="M725 70H740"/><path class="arr" d="M860 70H875"/>
+    <path class="arr" d="M930 110V160H80V190"/>
+    <g class="t2">
+      <rect class="nb code" x="15" y="190" width="130" height="86"/><text class="t1" x="25" y="212">Render</text><text x="25" y="230" class="sm">1080×1920, captions</text><text x="25" y="243" class="sm">eased zooms, loudnorm</text><text x="25" y="256" class="sm">keeps 16:9 source too</text>
+      <rect class="nb code" x="160" y="190" width="130" height="86"/><text class="t1" x="170" y="212">clip-qa</text><text x="170" y="230" class="sm">ffprobe + ebur128</text><text x="170" y="243" class="sm">size, audio, captions,</text><text x="170" y="256" class="sm">rights, tags, banned</text>
+      <rect class="nb code" x="305" y="190" width="130" height="86"/><text class="t1" x="315" y="212">Upload</text><text x="315" y="230" class="sm">private Storage bucket</text><text x="315" y="243" class="sm">row → pending_review</text><text x="315" y="256" class="sm">audit row by trigger</text>
+      <rect class="nb human" x="450" y="190" width="130" height="86"/><text class="t1" x="460" y="212">Zo reviews</text><text x="460" y="230" class="sm">Approve / Deny / Revise</text><text x="460" y="243" class="sm">in the dashboard</text><text x="460" y="256" class="sm">(RPC, owner only)</text>
+      <rect class="nb code" x="595" y="190" width="130" height="86"/><text class="t1" x="605" y="212">Publisher</text><text x="605" y="230" class="sm">approved → scheduled</text><text x="605" y="243" class="sm">→ published | failed</text><text x="605" y="256" class="sm">never double-posts</text>
+      <rect class="nb ext" x="740" y="190" width="120" height="86"/><text class="t1" x="750" y="212">X + YouTube</text><text x="750" y="230" class="sm">Shorts, resumable /</text><text x="750" y="243" class="sm">chunked upload</text><text x="750" y="256" class="sm">cap 10/day each</text>
+      <rect class="nb human" x="875" y="190" width="110" height="86"/><text class="t1" x="885" y="212">Content Rewards</text><text x="885" y="230" class="sm">Zo submits the link</text><text x="885" y="243" class="sm">by hand; dashboard</text><text x="885" y="256" class="sm">shows 30-min timer</text>
+    </g>
+    <path class="arr" d="M145 233H160"/><path class="arr" d="M290 233H305"/><path class="arr" d="M435 233H450"/><path class="arr" d="M580 233H595"/><path class="arr" d="M725 233H740"/><path class="arr" d="M860 233H875"/>
+    <path class="arr d" style="stroke:#b86a00" d="M515 276V320H80V278"/>
+    <text x="300" y="338" class="t2" style="fill:#b86a00" text-anchor="middle">Revise: typed note → only the changed step re-runs → back to review; style asks become standing rules</text>
+  </svg>
+  <div class="legend">
+    <span><i style="background:var(--code-bg);border-color:var(--code)"></i>Code / ffmpeg (no model)</span>
+    <span><i style="background:var(--model-bg);border-color:var(--model)"></i>Model call (Grok, text only)</span>
+    <span><i style="background:var(--human-bg);border-color:var(--human)"></i>Human step</span>
+    <span><i style="background:var(--ext-bg);border-color:var(--ext)"></i>External service</span>
+  </div>
+  <div class="cols c3" style="margin-top:3mm">
+    <div class="card"><h3>Everything runs at once</h3><p class="sub" style="margin:0">Watching, transcribing, judging and rendering are separate loops. Editing one clip never pauses the watch on live streams (the dashboard tiles show all four).</p></div>
+    <div class="card"><h3>Restart-safe</h3><p class="sub" style="margin:0">Each job's stage is saved in SQLite. If the PC restarts, jobs resume from the last finished stage; transcripts and Grok answers are cached, so no work or money is repeated.</p></div>
+    <div class="card"><h3>Cheap on purpose</h3><p class="sub" style="margin:0">Grok sees about 40 s of text for a few candidates per hour, never video. Heavy work (GPU captions, ffmpeg) is local, which keeps cost inside the $100-$250/month planning budget.</p></div>
+  </div>
+  </div>
+  <div class="note ok" style="margin:3mm 0 0"><b>Design rule (CLAUDE.md, D026):</b> detection, QA, state and rendering are code; the model only ranks, classifies and writes captions/titles. Feed it text windows, never full VODs. Results are cached by content hash and spend is logged.</div>
+  <div class="run">Clipp project overview</div><div class="pn">3</div>
+</section>
+
+<!-- 4 ARCHITECTURE -->
+<section class="page">
+  <div class="kicker">3 · Architecture</div>
+  <h2>Components and where they run</h2>
+  <p>Three homes: Zo's PC does the heavy work, Supabase is the shared source of truth, and the dashboard is a thin web client. <span class="badge b-ok">Verified in code</span> <span class="badge b-unv">Deployment status unverified</span></p>
+  <div class="grow">
+  <svg viewBox="0 0 1000 420">
+    <rect class="zone" x="8" y="8" width="360" height="404"/><text class="t1" x="22" y="30">Zo's PC (Windows 11, RTX 5060 8 GB, "Daddys")</text>
+    <g class="t2">
+      <rect class="nb code" x="24" y="46" width="328" height="96"/><text class="t1" x="36" y="68">clipworker live runner (Python 3.11)</text>
+      <text x="36" y="86" class="sm">loops: status 60 s · detector 1 s · pipeline 2 s · revisions 30 s</text>
+      <text x="36" y="100" class="sm">publisher 30 s · heartbeat 15 s · wake-switch read · prune 60 s</text>
+      <text x="36" y="114" class="sm">CLI: check · replay · live · publish-once · discord</text>
+      <text x="36" y="130" class="sm">blocks PC sleep only while a channel is captured</text>
+      <rect class="nb ext" x="24" y="154" width="158" height="62"/><text class="t1" x="34" y="176">ffmpeg + streamlink</text><text x="34" y="192" class="sm">capture, render, ebur128</text><text x="34" y="205" class="sm">NVENC present (D064)</text>
+      <rect class="nb code" x="194" y="154" width="158" height="62"/><text class="t1" x="204" y="176">whisperX (GPU)</text><text x="204" y="192" class="sm">large-v3 fp16; CPU</text><text x="204" y="205" class="sm">fallback medium int8</text>
+      <rect class="nb code" x="24" y="228" width="158" height="62"/><text class="t1" x="34" y="250">SQLite store</text><text x="34" y="266" class="sm">chat, loudness, gaps,</text><text x="34" y="279" class="sm">job stages, kv</text>
+      <rect class="nb code" x="194" y="228" width="158" height="62"/><text class="t1" x="204" y="250">Local files</text><text x="204" y="266" class="sm">buffer, renders, caches</text><text x="204" y="279" class="sm">(transcripts, Grok)</text>
+      <rect class="nb model" x="24" y="302" width="328" height="64"/><text class="t1" x="36" y="324">Discord ops bot (Claude Code --channels)</text>
+      <text x="36" y="340" class="sm">read-only status commands over DM · auto-restarts</text>
+      <text x="36" y="353" class="sm">SQL guard hook · Windows scheduled task at logon</text>
+      <rect class="nb code" x="24" y="376" width="328" height="26"/><text x="36" y="393" class="t2">Optional: local dashboard (npm run dev)</text>
+    </g>
+    <rect class="zone" x="392" y="8" width="270" height="256"/><text class="t1" x="406" y="30">Supabase (project "clipp")</text>
+    <g class="t2">
+      <rect class="nb okb" x="406" y="42" width="242" height="62"/><text class="t1" x="416" y="62">Postgres</text><text x="416" y="78" class="sm">15 tables, state-guard + audit</text><text x="416" y="91" class="sm">triggers, owner-only RLS, RPCs</text>
+      <rect class="nb okb" x="406" y="112" width="242" height="44"/><text class="t1" x="416" y="131">Storage: private bucket "clips"</text><text x="416" y="147" class="sm">signed links, 1 h expiry</text>
+      <rect class="nb okb" x="406" y="164" width="242" height="38"/><text class="t1" x="416" y="181">Auth</text><text x="416" y="195" class="sm">email magic link / 6-digit code, sign-ups off</text>
+      <rect class="nb okb" x="406" y="210" width="242" height="42"/><text class="t1" x="416" y="228">Realtime</text><text x="416" y="242" class="sm">dashboard refreshes on changes (+30 s poll)</text>
+    </g>
+    <rect class="zone" x="392" y="278" width="270" height="134"/><text class="t1" x="406" y="300">Browser / phone</text>
+    <g class="t2">
+      <rect class="nb code" x="406" y="312" width="242" height="86"/><text class="t1" x="416" y="332">Next.js 15 dashboard</text><text x="416" y="348" class="sm">hosted on Vercel (Root Dir "dashboard")</text><text x="416" y="361" class="sm">uses only the public anon key + login</text><text x="416" y="374" class="sm">Add to Home Screen on phone</text><text x="416" y="388" class="sm">(live deploy not verified)</text>
+    </g>
+    <rect class="zone" x="686" y="8" width="306" height="404"/><text class="t1" x="700" y="30">External services</text>
+    <g class="t2">
+      <rect class="nb ext" x="700" y="42" width="278" height="46"/><text class="t1" x="710" y="61">Twitch</text><text x="710" y="77" class="sm">IRC chat (anonymous), Helix status poll</text>
+      <rect class="nb ext" x="700" y="96" width="278" height="46"/><text class="t1" x="710" y="115">Kick</text><text x="710" y="131" class="sm">public chat socket (unofficial), status</text>
+      <rect class="nb model" x="700" y="150" width="278" height="46"/><text class="t1" x="710" y="169">xAI Grok API</text><text x="710" y="185" class="sm">chat completions, JSON schema</text>
+      <rect class="nb ext" x="700" y="204" width="278" height="46"/><text class="t1" x="710" y="223">YouTube Data API · X API</text><text x="710" y="239" class="sm">OAuth uploads, only approved clips</text>
+      <rect class="nb ext" x="700" y="258" width="278" height="46"/><text class="t1" x="710" y="277">Discord (Zo's own server)</text><text x="710" y="293" class="sm">follows Reach announcements; bot + ops DMs</text>
+      <rect class="nb human" x="700" y="312" width="278" height="46"/><text class="t1" x="710" y="331">Reach / Whop Content Rewards</text><text x="710" y="347" class="sm">manual submission by Zo; no scraping</text>
+      <rect class="nb ext" x="700" y="366" width="278" height="36"/><text class="t1" x="710" y="389">GitHub Actions (CI) · Obsidian vault</text>
+    </g>
+    <path class="arr" d="M352 94H406"/>
+    <path class="arr" d="M527 312V252" /><text x="534" y="290" class="sm m">anon key + JWT</text>
+  </svg>
+  <div class="legend">
+    <span><i style="background:var(--ok-bg);border-color:var(--ok)"></i>Supabase</span>
+    <span><i style="background:var(--code-bg);border-color:var(--code)"></i>Own code</span>
+    <span><i style="background:var(--model-bg);border-color:var(--model)"></i>Model-driven</span>
+    <span><i style="background:var(--ext-bg);border-color:var(--ext)"></i>Third party</span>
+    </div>
+  <div class="cols c3" style="margin-top:4mm">
+    <div class="card"><h3>Worker holds</h3><p class="sub" style="margin:0">The Supabase service-role key plus Twitch, Kick, xAI, YouTube/X OAuth and Discord bot credentials, all in its local <code>.env</code> (names in <code>.env.example</code>). It also talks straight to the external services on the right (arrows omitted to keep the picture readable).</p></div>
+    <div class="card"><h3>Dashboard holds</h3><p class="sub" style="margin:0">Only the public Supabase URL and anon key. It can read what RLS allows, and write only through four owner-checked functions (review, mark submitted, wake switch, rule toggle).</p></div>
+    <div class="card"><h3>Ops bot holds</h3><p class="sub" style="margin:0">A Supabase MCP connector limited to read-only SQL by a hook, and a Discord plugin token stored outside the repo. Its settings deny reading any <code>.env</code>.</p></div>
+  </div>
+  </div>
+  <div class="run">Clipp project overview</div><div class="pn">4</div>
+</section>
+
+<!-- 5 STATES -->
+<section class="page">
+  <div class="kicker">4 · Data flow and states</div>
+  <h2>Two state machines keep the gate honest</h2>
+  <p>A local job moves through restart-safe stages in SQLite. Separately, each clip in Supabase has a state, and Postgres itself rejects illegal moves. <span class="badge b-ok">Verified in code</span> <span class="sub">(<code>states.py</code>, <code>20261120120000_core.sql</code>)</span></p>
+  <svg viewBox="0 0 1000 330">
+    <text class="t1" x="10" y="20">Local job stages (SQLite, resumes after a crash)</text>
+    <g class="t2">
+      <rect class="nb code" x="10" y="32" width="116" height="38"/><text x="68" y="56" text-anchor="middle">detected</text>
+      <rect class="nb code" x="150" y="32" width="116" height="38"/><text x="208" y="56" text-anchor="middle">captured</text>
+      <rect class="nb code" x="290" y="32" width="116" height="38"/><text x="348" y="56" text-anchor="middle">transcribed</text>
+      <rect class="nb code" x="430" y="32" width="116" height="38"/><text x="488" y="56" text-anchor="middle">judged</text>
+      <rect class="nb code" x="570" y="32" width="116" height="38"/><text x="628" y="56" text-anchor="middle">rendered</text>
+      <rect class="nb code" x="710" y="32" width="116" height="38"/><text x="768" y="56" text-anchor="middle">qa_passed</text>
+      <rect class="nb code" x="850" y="32" width="116" height="38"/><text x="908" y="56" text-anchor="middle">uploaded</text>
+    </g>
+    <path class="arr" d="M126 51H150"/><path class="arr" d="M266 51H290"/><path class="arr" d="M406 51H430"/><path class="arr" d="M546 51H570"/><path class="arr" d="M686 51H710"/><path class="arr" d="M826 51H850"/>
+    <text class="sm" x="10" y="92">Any stage can end as dropped (duplicate / rights / judge said no), qa_failed, or error. Duplicates are caught before judging.</text>
+
+    <text class="t1" x="10" y="128">Clip states in Supabase (one row per clip; every change writes an audit row)</text>
+    <g class="t2">
+      <rect class="nb code" x="10" y="190" width="120" height="40"/><text x="70" y="214" text-anchor="middle">qa_passed</text>
+      <rect class="nb code" x="190" y="190" width="130" height="40"/><text x="255" y="214" text-anchor="middle">pending_review</text>
+      <rect class="nb human" x="390" y="140" width="110" height="40"/><text x="445" y="164" text-anchor="middle">approved</text>
+      <rect class="nb human" x="390" y="205" width="110" height="40"/><text x="445" y="229" text-anchor="middle">revise</text>
+      <rect class="nb human" x="390" y="270" width="110" height="40"/><text x="445" y="294" text-anchor="middle">rejected</text>
+      <rect class="nb code" x="590" y="140" width="110" height="40"/><text x="645" y="164" text-anchor="middle">scheduled</text>
+      <rect class="nb okb" x="790" y="140" width="110" height="40"/><text x="845" y="164" text-anchor="middle">published</text>
+      <rect class="nb ext" x="790" y="205" width="110" height="40"/><text x="845" y="229" text-anchor="middle">failed</text>
+    </g>
+    <path class="arr" d="M130 210H190"/>
+    <path class="arr" style="stroke:#b86a00" d="M320 200L390 160"/><path class="arr" style="stroke:#b86a00" d="M320 212L390 222"/><path class="arr" style="stroke:#b86a00" d="M320 222L390 285"/>
+    <path class="arr d" d="M390 232C340 270 270 270 262 232"/>
+    <path class="arr" d="M500 160H590"/><path class="arr" d="M700 160H790"/><path class="arr" d="M700 172L790 218"/>
+    <path class="arr d" d="M845 245C845 300 645 300 645 182"/>
+    <text class="sm" x="528" y="152">publisher</text><text class="sm" x="150" y="292" style="fill:#5b6574">revise: re-render, back to review</text>
+    <text class="sm" x="660" y="300">failed → scheduled: retry only this way</text>
+  </svg>
+  <div class="cols c3">
+    <div class="card"><h3 style="color:var(--human)">Human moves (amber)</h3><p class="sub" style="margin:0">Only Zo, through the dashboard function <code>review_clip</code>: pending_review → approved / revise / rejected, and approved → revise / rejected.</p></div>
+    <div class="card"><h3 style="color:var(--code)">Worker moves (blue)</h3><p class="sub" style="margin:0">Only these: qa_passed → pending_review, revise → pending_review, approved → scheduled → published / failed, failed → scheduled. The worker can never approve.</p></div>
+    <div class="card"><h3>Defence in depth</h3><p class="sub" style="margin:0">The same table is enforced in Python and in a Postgres trigger. A <code>publications</code> row is refused unless a human approved the clip. Interrupted posts are never auto-retried (could double-post).</p></div>
+  </div>
+  <div class="run">Clipp project overview</div><div class="pn">5</div>
+</section>
+
+<!-- 6 UNDER THE HOOD -->
+<section class="page">
+  <div class="kicker">5 · Under the hood</div>
+  <h2>What each stage actually does</h2>
+  <table>
+    <tr><th style="width:24mm">Stage</th><th>Behaviour (from code)</th><th style="width:48mm">Where</th></tr>
+    <tr><td>Ingest</td><td>Twitch chat over anonymous IRC; Kick chat over its public socket (unofficial, may break); Twitch live status polled every 60 s. Video: streamlink → ffmpeg 10 s segments, last 10 min kept. Loudness (ebur128) on the same clock; gaps are recorded explicitly.</td><td><code>ingest/</code> <code>capture/</code> <code>clock.py</code></td></tr>
+    <tr><td>Detector</td><td>Every second per channel: score = 0.45·chat burst + 0.20·unique chatters + 0.15·emote weight + 0.20·loudness (robust z-scores vs a 10-min baseline). One chatter counts max 2 messages per burst (spam guard). Trigger at ≥ 2.5; triggers within 20 s merge; 45 s cooldown. Core streamers get ×1.25 while on GTA 6.</td><td><code>detector/spike.py</code> <code>signals.py</code> <code>dedupe.py</code></td></tr>
+    <tr><td>Rights gate</td><td>Roster streamers are always captured for Zo's own channels (D070). An active campaign naming the streamer wins and brings its rules. Off-roster streamers need an active campaign. Draft campaigns do not count.</td><td><code>remote/rights.py</code> <code>roster.py</code></td></tr>
+    <tr><td>Transcribe</td><td>whisperX only on candidate windows, cached by audio hash. English only.</td><td><code>transcribe.py</code></td></tr>
+    <tr><td>Judge</td><td>Grok gets ≈40 s of transcript + 30 chat lines + scores, returns strict JSON (keep, category, hook type, trim in/out, title, caption, hashtags, emphasis words, score 1-10). Score &lt; 6 is dropped; trims snap to word boundaries. No <code>XAI_API_KEY</code> → stand-in judge keeps every moment, ~40 s around the chat peak, titled "UNJUDGED".</td><td><code>judge/grok.py</code> <code>heuristic.py</code></td></tr>
+    <tr><td>Render</td><td>1080×1920 H.264, ASS captions (Poppins SemiBold 78 px, mint active word, 3 words/line, 90 ms pop), eased 112% zooms (max 2/clip), slow 3% push, loudnorm ≈ −14 LUFS, bitrate cap 6 Mbps. Gaming layouts crop facecam + gameplay; IRL uses a gliding face-tracked crop. Keeps the untouched 16:9 window for before/after.</td><td><code>render/</code> <code>config/channels.example.toml</code></td></tr>
+    <tr><td>clip-qa</td><td>Fails on: not 1080×1920 / yuv420p, duration outside campaign min-max, size &gt; 50 MB, no audio, loudness outside −14 ±2.5 LUFS, true peak clipping, missing or off-screen captions, required tag missing, banned word, streamer not permitted.</td><td><code>qa.py</code></td></tr>
+    <tr><td>Review loop</td><td>Revise notes are read by a keyword parser (Grok adds to it when a key is set). Style asks (zoom, SFX, caption colour, max length) become standing rules in <code>edit_rules</code>; queued clips that break a rule are hidden and re-edited before Zo sees them.</td><td><code>rules.py</code> <code>pipeline.py</code></td></tr>
+    <tr><td>Publish</td><td>YouTube resumable upload and X chunked upload through OAuth. One <code>publications</code> row per clip × destination is the idempotency key. Up to 3 retries with 5-min backoff for retryable errors; default cap 10 posts/day per destination.</td><td><code>publish/</code></td></tr>
+  </table>
+  <p class="sub" style="margin-top:2mm"><span class="badge b-ran">Ran here</span> The worker test suite exercises these paths with real ffmpeg renders and fakes for network services: 120 passed in 184 s. <span class="badge b-unv">Unverified</span> No live Twitch/Kick/Grok/YouTube/X call was made in this session.</p>
+  <div class="run">Clipp project overview</div><div class="pn">6</div>
+</section>
+
+<!-- 7 SCREENS 1 -->
+<section class="page">
+  <div class="kicker">6 · The dashboard (demo mode)</div>
+  <h2>Workflow 1: the page starts asleep, "Wake up" turns it on</h2>
+  <div class="two-shot">
+    <div>
+      <div class="fig" style="--w:1440;--h:900"><img src="assets/01-asleep.png" alt="Dashboard asleep">
+        <i class="pin" style="--x:853;--y:27">1</i><i class="pin" style="--x:330;--y:98">2</i><i class="pin" style="--x:1335;--y:98">3</i><i class="pin" style="--x:140;--y:330">4</i><i class="pin" style="--x:140;--y:815">5</i><i class="pin" style="--x:680;--y:520">6</i></div>
+      <div class="cap"><b>Figure 1 · Asleep.</b> The whole page is dimmed until Wake up is pressed.</div>
+    </div>
+    <div>
+      <div class="fig" style="--w:1440;--h:900"><img src="assets/02-awake.png" alt="Dashboard awake">
+        <i class="pin" style="--x:1310;--y:75">7</i><i class="pin" style="--x:140;--y:250">8</i><i class="pin" style="--x:140;--y:512">9</i><i class="pin" style="--x:140;--y:815">10</i></div>
+      <div class="cap"><b>Figure 2 · Awake.</b> Same page after the switch: colours, LIVE tags and the pipeline come alive.</div>
+    </div>
+  </div>
+  <div class="cols c2" style="margin-top:3mm">
+    <ol class="leg">
+      <li><b>Demo ribbon.</b> Appears when no Supabase keys exist or <code>NEXT_PUBLIC_CLIPP_DEMO=1</code>: nothing is saved or posted (D057).</li>
+      <li><b>Sleep banner.</b> "No streams are being watched or clipped. Your queue and approved clips still work."</li>
+      <li><b>Wake up.</b> Writes <code>control.awake</code> via <code>set_awake</code>; the PC reads it and starts or stops capture (D055).</li>
+      <li><b>Streamer rail.</b> Core roster on top; offline streamers show a faint chat-heat strip.</li>
+      <li><b>Machine card.</b> The PC's own heartbeat: state, GPU use, VRAM. Demo values are sample data.</li>
+      <li><b>Queue still usable while asleep</b>: review does not need the PC.</li>
+    </ol>
+    <ol class="leg" style="counter-reset:n 6">
+      <li><b>Wake pill.</b> Shows what the PC reports ("watching 3 live"), so the switch never fakes a running PC.</li>
+      <li><b>LIVE rows.</b> Viewers, animated equaliser tag; clicking opens the streamer's Cinema page.</li>
+      <li><b>"GTA 6 only" group.</b> Captured only while the category is GTA 6 (D069).</li>
+      <li><b>Machine card, awake.</b> GPU bar and VRAM move while working.</li>
+    </ol>
+  </div>
+  <div class="run">Clipp project overview · screenshots are real renders of dashboard/ in demo mode (sample data)</div><div class="pn">7</div>
+</section>
+
+<!-- 8 REVIEW SCREEN -->
+<section class="page">
+  <div class="kicker">6 · The dashboard (demo mode)</div>
+  <h2>Workflow 2: review the best clip first</h2>
+  <div style="display:grid;grid-template-columns:196mm 1fr;gap:6mm;align-items:start">
+    <div>
+      <div class="fig" style="--w:1440;--h:900"><img src="assets/02-awake.png" alt="Review screen">
+        <i class="pin" style="--x:765;--y:155">1</i><i class="pin" style="--x:775;--y:197">2</i><i class="pin" style="--x:535;--y:271">3</i>
+        <i class="pin" style="--x:430;--y:355">4</i><i class="pin" style="--x:1010;--y:355">5</i><i class="pin" style="--x:365;--y:715">6</i><i class="pin" style="--x:547;--y:850">7</i>
+        <i class="pin" style="--x:1262;--y:146">8</i><i class="pin" style="--x:1405;--y:490">9</i></div>
+      <div class="cap"><b>Figure 3 · Review queue.</b> The top clip is selected; the queue is ordered by score, then confidence, then age (D053).</div>
+    </div>
+    <ol class="leg">
+      <li><b>Context chip.</b> Which streamer, live now or not, time live, viewers.</li>
+      <li><b>Title + reason.</b> Grok's title and a one-line why ("chat spike +340%, payoff at 0:31").</li>
+      <li><b>Tags.</b> Hook type and detector strength (4.4× the baseline).</li>
+      <li><b>Before.</b> The untouched 16:9 stream window (kept since D077).</li>
+      <li><b>After.</b> The 9:16 clip with word-by-word captions. "Play both" runs them together.</li>
+      <li><b>Score ring + facts.</b> Score /10, hook timing, confidence, caption engine, QA result.</li>
+      <li><b>Deny · Revise · Approve.</b> Keys D, R, A. Approve and Deny wait 4 s with Undo (D058).</li>
+      <li><b>Up next.</b> Remaining clips, best first.</li>
+      <li><b>Learned from your notes.</b> Standing edit rules with on/off switches.</li>
+    </ol>
+  </div>
+  <p class="sub" style="margin-top:2mm">In the demo, clips are three small sample videos; <code>$74 spent</code>, viewer counts and streak numbers are sample data, not real usage. The "Stream" embed on the live page is the official Twitch/Kick player (see Figure 8).</p>
+  <div class="run">Clipp project overview</div><div class="pn">8</div>
+</section>
+
+<!-- 9 REVISE / UNDO -->
+<section class="page">
+  <div class="kicker">6 · The dashboard (demo mode)</div>
+  <h2>Workflow 3: ask for a change, or approve with a safety net</h2>
+  <div class="two-shot">
+    <div>
+      <div class="fig" style="--w:1440;--h:1250"><img src="assets/03-revise.png" alt="Revision box">
+        <i class="pin" style="--x:705;--y:918">1</i><i class="pin" style="--x:705;--y:999">2</i><i class="pin" style="--x:347;--y:1060">3</i><i class="pin" style="--x:570;--y:1137">4</i></div>
+      <div class="cap"><b>Figure 4 · Revise (press R).</b> Plain-English note. Typed here: "the zoom is too sharp, make it smoother and keep it under 30 seconds".</div>
+      <ol class="leg" style="margin-top:2mm">
+        <li><b>Free text box</b> (500 chars, Ctrl+Enter sends).</li>
+        <li><b>Quick chips</b>: smoother zooms, no zooms, under 30 seconds, no sound effects, blue captions.</li>
+        <li><b>"Fix this on every clip".</b> On by default: style asks become standing rules (D078); per-clip asks (title, trim) never do.</li>
+        <li><b>Send revision.</b> Creates a <code>revisions</code> row; the PC re-renders only what changed and the clip returns to review.</li>
+      </ol>
+    </div>
+    <div>
+      <div class="fig" style="--w:1440;--h:1250"><img src="assets/04-approve-undo.png" alt="Approve with undo">
+        <i class="pin" style="--x:745;--y:872">1</i><i class="pin" style="--x:925;--y:1201">2</i><i class="pin" style="--x:330;--y:748">3</i><i class="pin" style="--x:1262;--y:146">4</i></div>
+      <div class="cap"><b>Figure 5 · Approve (press A).</b> The next clip loads immediately while the decision waits 4 seconds.</div>
+      <ol class="leg" style="margin-top:2mm">
+        <li><b>Approve.</b> Calls <code>review_clip</code>; Postgres re-checks the owner and the allowed state move.</li>
+        <li><b>Undo toast.</b> Cancels before anything reaches the database (key U).</li>
+        <li><b>Next clip</b> (84% confidence, score 8) is already selected.</li>
+        <li><b>Counts update at once</b> (5 waiting, Up next 4). The database call is held for 4 s; after that the clip becomes "scheduled" for the publisher.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="run">Clipp project overview</div><div class="pn">9</div>
+</section>
+
+<!-- 10 LOWER DASHBOARD -->
+<section class="page">
+  <div class="kicker">6 · The dashboard (demo mode)</div>
+  <h2>Workflow 4: track the day, the pipeline, the countdown and the budget</h2>
+  <div style="display:grid;grid-template-columns:200mm 1fr;gap:6mm;align-items:start">
+    <div>
+      <div class="fig crop" style="--w:1440;--ch:740;--off:960;--oy:960"><img src="assets/02b-awake-full.png" alt="Lower dashboard">
+        <i class="pin" style="--x:300;--y:1000">1</i><i class="pin" style="--x:850;--y:1120">2</i><i class="pin" style="--x:800;--y:1236">3</i>
+        <i class="pin" style="--x:690;--y:1395">4</i><i class="pin" style="--x:1200;--y:1395">5</i><i class="pin" style="--x:1100;--y:1589">6</i></div>
+      <div class="cap"><b>Figure 6 · Below the review card</b> (same page, 1440×1700 capture, cropped). Keyboard: A approve · D deny · R revise · U undo..</div>
+    </div>
+    <ol class="leg">
+      <li><b>Approve streak + week.</b> Clips and approvals per day; today highlighted.</li>
+      <li><b>7-day numbers.</b> Approved count, approval rate, average score.</li>
+      <li><b>Pipeline tiles.</b> Watching → Transcribing → Judging → Rendering, with counts, from the worker heartbeat. They run at the same time, not one at a time.</li>
+      <li><b>Content Rewards countdown.</b> 30 min after posting. Copy / Open the post link, then Submitted (D025: Zo submits by hand).</li>
+      <li><b>Spend meter.</b> Month total vs a $100 budget constant in the page code, split Grok / other.</li>
+      <li><b>Approved list.</b> "Ready on phone" with Save (downloads <code>streamer-title.mp4</code>).</li>
+    </ol>
+  </div>
+  <div class="note" style="margin-top:3mm"><b>Check:</b> the planning ceiling in D012 is $250/month, but the dashboard hard-codes <code>BUDGET = 100</code> (<code>dashboard/app/(app)/page.tsx</code>). The meter will look over-budget earlier than the decision requires. Worth aligning.</div>
+  <div class="run">Clipp project overview</div><div class="pn">10</div>
+</section>
+
+<!-- 11 CINEMA + PHONE -->
+<section class="page">
+  <div class="kicker">6 · The dashboard (demo mode)</div>
+  <h2>Workflow 5: a per-streamer live page, and the phone layout</h2>
+  <div style="display:grid;grid-template-columns:1fr 62mm;gap:8mm;align-items:start">
+    <div>
+      <div class="fig" style="--w:1440;--h:900"><img src="assets/06-live.png" alt="Cinema live page">
+        <i class="pin" style="--x:330;--y:85">1</i><i class="pin" style="--x:420;--y:162">2</i><i class="pin" style="--x:687;--y:415">3</i><i class="pin" style="--x:1266;--y:215">4</i><i class="pin" style="--x:1232;--y:377">5</i><i class="pin" style="--x:687;--y:775">6</i><i class="pin" style="--x:1372;--y:690">7</i></div>
+      <div class="cap"><b>Figure 7 · Cinema page for xQc</b> (<code>/live/xqc</code>).</div>
+      <ol class="leg" style="margin-top:2mm;columns:2;column-gap:6mm">
+        <li><b>Header.</b> Platform, live time, viewers, game.</li>
+        <li><b>Stream / Latest clip.</b> Muted official player, or the newest clip.</li>
+        <li><b>Blank panel:</b> the Twitch embed cannot load in this offline sandbox; on a real PC it is the live player (not verified here).</li>
+        <li><b>Tiles.</b> Viewers, clips today, approved, month spend.</li>
+        <li><b>In review.</b> This streamer's queued clips.</li>
+        <li><b>Chat heat.</b> Line = chat rate; bars = scored moments; orange = kept as clips.</li>
+        <li><b>Submit window.</b> The 30-min countdown for this streamer.</li>
+      </ol>
+    </div>
+    <div>
+      <div class="fig" style="--w:780;--h:1688;width:62mm"><img src="assets/07-phone.png" alt="Phone layout">
+        <i class="pin" style="--x:355;--y:262">8</i><i class="pin" style="--x:607;--y:60">9</i><i class="pin" style="--x:716;--y:60">10</i><i class="pin" style="--x:730;--y:520">11</i></div>
+      <div class="cap"><b>Figure 8 · Phone (390 px wide).</b> 8 avatar strip replaces the rail · 9 queue count · 10 wake switch · 11 same review card, stacked. Approve / Deny / Revise pin to the bottom (per README).</div>
+    </div>
+  </div>
+  <div class="run">Clipp project overview</div><div class="pn">11</div>
+</section>
+
+<!-- 12 DATA MODEL -->
+<section class="page">
+  <div class="kicker">7 · Data and security</div>
+  <h2>The Supabase data model and how access is locked down</h2>
+  <p><span class="badge b-ok">Verified in code</span> <span class="sub">5 migrations in <code>supabase/migrations/</code>. <span class="badge b-unv">Unverified</span> I could not inspect the live project; docs say all were applied by hand (D059).</span></p>
+  <div class="cols c3" style="margin-top:2mm">
+    <div class="card"><h3>Who and what is watched</h3>
+      <table><tr><td>owners</td><td>Who may log in and see data</td></tr><tr><td>streamers</td><td>Roster, crop layouts, GTA 6 flags</td></tr><tr><td>campaign_posts</td><td>Raw Discord posts</td></tr><tr><td>campaigns</td><td>Parsed briefs, rules, verdict (draft/active)</td></tr><tr><td>destinations</td><td>Accounts to post to</td></tr></table></div>
+    <div class="card"><h3>Clips and decisions</h3>
+      <table><tr><td>clips</td><td>The clip, its state, score, files</td></tr><tr><td>clip_events</td><td>Audit log, written by trigger only</td></tr><tr><td>revisions</td><td>Zo's change notes</td></tr><tr><td>edit_rules</td><td>Standing style rules (D078)</td></tr><tr><td>publications</td><td>Clip × destination = idempotency key</td></tr><tr><td>submissions</td><td>30-min Content Rewards windows</td></tr></table></div>
+    <div class="card"><h3>Operations</h3>
+      <table><tr><td>control</td><td>Wake Up switch (single row)</td></tr><tr><td>worker_heartbeat</td><td>PC status every 15 s</td></tr><tr><td>spend</td><td>Cost meter vs budget</td></tr><tr><td>candidate_log</td><td>Detector/judge outcomes for tuning</td></tr></table></div>
+  </div>
+  <div class="cols c2" style="margin-top:4mm">
+    <div class="card soft"><h3>Access rules</h3>
+      <ul>
+        <li>Sign-in by email link or 6-digit code; <code>shouldCreateUser: false</code>; sign-ups off in Supabase.</li>
+        <li>Row-level security: only users in <code>owners</code> can read any table.</li>
+        <li>Dashboard writes only through <code>review_clip</code>, <code>mark_submitted</code>, <code>set_awake</code>, <code>set_rule_active</code>; each re-checks <code>is_owner()</code>.</li>
+        <li>Clips sit in a private bucket; the dashboard asks for a 1-hour signed link per play or download.</li>
+        <li>The service-role key exists only in the worker's <code>.env</code> (I did not open any .env; I read <code>.env.example</code> names only).</li>
+      </ul></div>
+    <div class="card soft"><h3>Database-enforced guarantees</h3>
+      <ul>
+        <li><code>clips_guard</code>: only listed state moves per actor; the worker cannot approve.</li>
+        <li><code>clips_audit</code>: every state change writes an audit row automatically.</li>
+        <li><code>publications_guard</code>: a post row is refused unless a human approved the clip.</li>
+        <li><code>publications_open_submission</code>: posting opens the 30-minute countdown.</li>
+        <li><code>claim_owner</code> on <code>auth.users</code> (kept out of the repo so no email is committed).</li>
+      </ul></div>
+  </div>
+  <p class="sub" style="margin-top:2mm"><span class="badge b-ran">Ran here</span> The worker suite includes an SQL migration test (<code>test_sql.py</code>) passed (not skipped) against a local Postgres in this environment: the migrations apply and the guard behaves as described.</p>
+  <div class="run">Clipp project overview</div><div class="pn">12</div>
+</section>
+
+<!-- 13 INTEGRATIONS -->
+<section class="page">
+  <div class="kicker">8 · Integrations</div>
+  <h2>What talks to what, and how far each link is proven</h2>
+  <table>
+    <tr><th style="width:34mm">Integration</th><th>Used for</th><th style="width:44mm">Access / key (names only)</th><th style="width:42mm">Status</th></tr>
+    <tr><td>Twitch IRC + Helix</td><td>Live chat (anonymous), live/category status every 60 s (D040)</td><td><code>TWITCH_CLIENT_ID/SECRET</code> (status only)</td><td><span class="badge b-ok">Coded</span> <span class="badge b-unv">no live call here</span></td></tr>
+    <tr><td>Kick</td><td>Chat via public socket (D041), status via app</td><td><code>KICK_CLIENT_ID/SECRET</code>, <code>KICK_PUSHER_KEY</code></td><td><span class="badge b-ok">Coded</span> <span class="badge b-unv">payload shape unverified</span></td></tr>
+    <tr><td>streamlink + ffmpeg</td><td>Video buffer, render, loudness</td><td>local binaries (<code>FFMPEG_BIN</code>)</td><td><span class="badge b-ran">ffmpeg used by tests</span></td></tr>
+    <tr><td>whisperX</td><td>Word timestamps for captions</td><td>local GPU, CUDA 12.8 torch</td><td><span class="badge b-ok">Coded</span> checked on PC per D066 (notes)</td></tr>
+    <tr><td>xAI Grok</td><td>Judge shortlist; helps read revision notes</td><td><code>XAI_API_KEY</code>, <code>GROK_MODEL</code>, price fields</td><td><span class="badge b-warn">Key empty per notes</span> stand-in judge used</td></tr>
+    <tr><td>Supabase</td><td>DB, Storage, Auth, Realtime</td><td>service-role (worker), anon (dashboard)</td><td><span class="badge b-ok">Schema coded</span> <span class="badge b-unv">live project unverified</span></td></tr>
+    <tr><td>Vercel</td><td>Hosts the dashboard for phone access</td><td>project Root Dir <code>dashboard</code></td><td><span class="badge b-unv">Deploy not verified</span></td></tr>
+    <tr><td>YouTube Data API</td><td>Shorts upload (resumable)</td><td>OAuth refresh token in worker env</td><td><span class="badge b-ok">Coded</span> <span class="badge b-unv">quota/endpoints to re-check</span></td></tr>
+    <tr><td>X API</td><td>Chunked media upload + post</td><td><code>X_MAIN_CLIENT_ID/SECRET/REFRESH_TOKEN</code></td><td><span class="badge b-ok">Coded</span> <span class="badge b-unv">shapes/prices to re-check</span></td></tr>
+    <tr><td>Discord (campaign watcher)</td><td>Reads Reach announcements Followed into Zo's own server (D024)</td><td><code>DISCORD_BOT_TOKEN</code>, channel id</td><td><span class="badge b-ok">Coded</span> <span class="badge b-unv">Reach channel type unverified</span></td></tr>
+    <tr><td>Discord (ops bot)</td><td>Read-only status over DM (Claude Code channel plugin)</td><td>Supabase MCP connector; Discord plugin token (outside repo)</td><td><span class="badge b-ok">Config in repo</span> <span class="badge b-unv">not run here</span></td></tr>
+    <tr><td>Content Rewards</td><td>Where campaign clips are submitted</td><td>none (manual, D025)</td><td><span class="badge b-ok">By design manual</span></td></tr>
+    <tr><td>GitHub Actions</td><td>Tests/build on PR and push to main</td><td>none</td><td><span class="badge b-ok">2 workflows</span> <span class="badge b-unv">run history not checked</span></td></tr>
+  </table>
+  <p class="sub" style="margin-top:2mm">No secret values were read or are shown here. Key names come from <code>worker/.env.example</code> and <code>dashboard/.env.example</code> only.</p>
+  <div class="run">Clipp project overview</div><div class="pn">13</div>
+</section>
+
+<!-- 14 SKILLS -->
+<section class="page">
+  <div class="kicker">9 · Skills (.claude/skills)</div>
+  <h2>14 skills: instructions Claude Code loads on demand</h2>
+  <p class="sub">Skills are Markdown playbooks, not running programs. Claude Code loads one when its one-line description matches the task (token policy: bodies ≤ 60 lines). <span class="badge b-ok">Verified in code</span> (read each <code>SKILL.md</code>).</p>
+  <table>
+    <tr><th style="width:36mm">Skill</th><th style="width:60mm">Role · trigger</th><th>What it tells Claude to do · related code</th></tr>
+    <tr><td>stream-ingest</td><td>Capture chat, video buffer, VOD chat on one clock. When building/debugging capture.</td><td>streamlink → 10 s segments, ebur128, one monotonic clock, gap rows, sleep block only while monitoring, max 3 channels. Code: <code>ingest/</code>, <code>capture/</code>.</td></tr>
+    <tr><td>clip-detector-tuning</td><td>Tune thresholds per channel. When detections are too many/few/poor.</td><td>Stats not transcripts; one threshold at a time; replay on stored chat; model only ranks top-N. Code: <code>detector/replay.py</code>, <code>clipworker replay</code>.</td></tr>
+    <tr><td>clip-render</td><td>Detected window → 9:16 captioned clip. When changing the render step.</td><td>ffmpeg only; layouts, ASS captions from whisperX, loudnorm, manifest; re-render only changed step. Code: <code>render/</code>.</td></tr>
+    <tr><td>clip-qa</td><td>Automated checks before review. After any render.</td><td>ffprobe/ffmpeg only, report failures only; pass → <code>pending_review</code>. Code: <code>qa.py</code>.</td></tr>
+    <tr><td>publish-approval-gate</td><td>Human approval, audit, limits. When touching publish/review.</td><td>State list, audit row per move, typed revise notes, idempotent publisher, re-check platform limits. Code: <code>states.py</code>, <code>publish/</code>, SQL triggers.</td></tr>
+    <tr><td>campaign-scout</td><td>Score a pasted campaign brief. When a brief or Discord/X post is given.</td><td>Extract fields + every rule verbatim, apply D072 floor (&gt; $1 per 1K views, roster only), rank pursue/ask/avoid. Code: <code>campaigns/scout.py</code>.</td></tr>
+    <tr><td>learn</td><td>Record a proven lesson. After rejections or repeated corrections.</td><td>Log in <code>Learning and Memory.md</code>; promote only with 2+ cases; smallest edit. (Different from the runtime <code>edit_rules</code>.)</td></tr>
+    <tr><td>repo-audit</td><td>Vet third-party code. Before running any cloned tool.</td><td>Quarantine, read install paths, grep for risky patterns, sandbox first run, verdict + SHA in <code>Tools and Repos.md</code>.</td></tr>
+    <tr><td>investigate-first</td><td>Diagnose before editing. For unclear failures.</td><td>Evidence-ranked hypotheses; no edits until a cause is named.</td></tr>
+    <tr><td>video-breakdown</td><td>Study a video or run. Only when asked.</td><td>Facts from stored data only; stageshow scenes; saves to <code>breakdowns/</code> (folder does not exist yet).</td></tr>
+    <tr><td>caveman</td><td>Terse reply style. "be brief", /caveman.</td><td>Answer first, drop filler, keep technical facts. Plain prose for security and anything written to files.</td></tr>
+  </table>
+  <div class="run">Clipp project overview</div><div class="pn">14</div>
+</section>
+
+<!-- 15 SKILLS 2 -->
+<section class="page">
+  <div class="kicker">9 · Skills (continued)</div>
+  <h2>Design skills, and where skills have drifted from the code</h2>
+  <table>
+    <tr><th style="width:36mm">Skill</th><th style="width:60mm">Role · trigger</th><th>Notes</th></tr>
+    <tr><td>impeccable</td><td>Design/critique/polish any frontend. When asked to design, redesign, audit or polish UI.</td><td>v4.9.1; large: 40+ reference files, helper scripts, 4 sub-agent definitions (<code>agents/*.toml</code>). Visual values must still come from <code>references/</code>.</td></tr>
+    <tr><td>apple-design</td><td>Fluid, physical motion and Apple-style foundations. For gesture/spring/material UI.</td><td>Dashboard UI reference (CLAUDE.md lists it for the dashboard).</td></tr>
+    <tr><td>stageshow</td><td>Faux product UI and animated cursor demos. When a mocked UI or product demo is wanted.</td><td>React + CSS kit with ~70 examples; used by <code>video-breakdown</code>. Not used by the runtime.</td></tr>
+  </table>
+  <h3 style="margin-top:4mm">Drift found between skills, notes and code</h3>
+  <div class="cols c2">
+    <div>
+      <div class="note bad"><b>stream-ingest</b> says Twitch status uses EventSub and Kick uses the official webhook; code and D040/D041 use Helix polling and the public Kick socket.</div>
+      <div class="note bad"><b>stream-ingest</b> and <b>clip-qa</b> say capture needs an active campaign (D016); D070 changed this: roster streamers are always captured.</div>
+      <div class="note bad"><b>clip-detector-tuning</b> says transcribe with faster-whisper; code uses whisperX.</div>
+    </div>
+    <div>
+      <div class="note bad"><b>clip-render</b> says "face tracking deferred"; the code now has a gliding face-tracked IRL crop (D077, optional <code>reframe</code> extra).</div>
+      <div class="note"><b>worker/README.md</b> diagram still labels the gate "active campaign only, D016".</div>
+      <div class="note"><b>Root README.md</b> says no code exists. Also, <code>CLAUDE.md</code> mentions "Atlas" for design values; I found no Atlas tool or file in the repo (only the phrase). <span class="badge b-unv">Unverified</span></div>
+    </div>
+  </div>
+  <p class="sub">These are documentation mismatches, found by reading. None changes application behaviour. Because skills steer future Claude Code sessions, stale text here can cause wrong edits. A weekly skill review is already in CLAUDE.md; this list is a ready starting point.</p>
+  <div class="run">Clipp project overview</div><div class="pn">15</div>
+</section>
+
+<!-- 16 AUTOMATIONS -->
+<section class="page">
+  <div class="kicker">10 · Automations and agents that exist today</div>
+  <h2>What runs by itself, what triggers it, how they connect</h2>
+  <svg viewBox="0 0 1000 300">
+    <g class="t2">
+      <rect class="nb human" x="10" y="12" width="150" height="46"/><text class="t1" x="20" y="32">Zo flips Wake Up</text><text x="20" y="47" class="sm">dashboard switch</text>
+      <rect class="nb ok okb" x="210" y="12" width="170" height="46"/><text class="t1" x="220" y="32">control.awake</text><text x="220" y="47" class="sm">Supabase row</text>
+      <rect class="nb code" x="430" y="12" width="280" height="46"/><text class="t1" x="440" y="32">clipworker live: 7 loops</text><text x="440" y="47" class="sm">starts/stops capture; heartbeat back to dashboard</text>
+      <rect class="nb human" x="10" y="78" width="150" height="46"/><text class="t1" x="20" y="98">Reach post appears</text><text x="20" y="113" class="sm">Discord, Followed channel</text>
+      <rect class="nb code" x="210" y="78" width="170" height="46"/><text class="t1" x="220" y="98">clipworker discord</text><text x="220" y="113" class="sm">discord.py watcher</text>
+      <rect class="nb code" x="430" y="78" width="280" height="46"/><text class="t1" x="440" y="98">scout: parse + score + rank</text><text x="440" y="113" class="sm">saves DRAFT or avoid; Zo activates (D046)</text>
+      <rect class="nb human" x="10" y="144" width="150" height="46"/><text class="t1" x="20" y="164">PC login</text><text x="20" y="179" class="sm">Windows</text>
+      <rect class="nb code" x="210" y="144" width="170" height="46"/><text class="t1" x="220" y="164">Scheduled task</text><text x="220" y="179" class="sm">ClipDiscordBot, run-bot.ps1</text>
+      <rect class="nb model" x="430" y="144" width="130" height="46"/><text class="t1" x="440" y="164">Claude Code</text><text x="440" y="179" class="sm">--channels discord</text>
+      <rect class="nb code" x="580" y="144" width="130" height="46"/><text class="t1" x="590" y="164">guard-sql hook</text><text x="590" y="179" class="sm">SELECT-only gate</text>
+      <rect class="nb human" x="10" y="210" width="150" height="46"/><text class="t1" x="20" y="230">Zo DMs the bot</text><text x="20" y="245" class="sm">live · worker · dash · queue</text>
+      <rect class="nb ext" x="210" y="210" width="170" height="46"/><text class="t1" x="220" y="230">git push / PR</text><text x="220" y="245" class="sm">touching dashboard/ worker/ supabase/</text>
+      <rect class="nb code" x="430" y="210" width="280" height="46"/><text class="t1" x="440" y="230">GitHub Actions</text><text x="440" y="245" class="sm">dashboard: lint+test+build · worker-tests: pytest</text>
+    </g>
+    <path class="arr" d="M160 35H210"/><path class="arr" d="M380 35H430"/>
+    <path class="arr" d="M160 101H210"/><path class="arr" d="M380 101H430"/>
+    <path class="arr" d="M160 167H210"/><path class="arr" d="M380 167H430"/><path class="arr" d="M560 167H580"/>
+        <path class="arr" d="M380 233H430"/>
+    <rect class="nb okb" x="760" y="60" width="230" height="110"/><text class="t1" x="772" y="82">Supabase</text><text x="772" y="100" class="sm">worker: read/write with service key</text><text x="772" y="114" class="sm">ops bot: SELECT through MCP</text><text x="772" y="128" class="sm">dashboard: RLS + 4 functions</text><text x="772" y="150" class="sm">shared state = how they coordinate</text>
+    <path class="arr" d="M710 35C740 35 740 80 760 85"/><path class="arr" d="M710 101H760"/><path class="arr" d="M710 167C740 167 740 140 760 140"/>
+  </svg>
+  <div class="cols c3">
+    <div class="card"><h3>clipworker (worker)</h3><p class="sub" style="margin:0">Started by hand: <code>clipworker live</code> (no autostart script in the repo). Reads the Wake switch, heartbeats every 15 s, moves clips only through allowed state changes. Tools: ffmpeg, streamlink, whisperX, Grok, YouTube, X.</p></div>
+    <div class="card"><h3>Discord ops bot (<code>ops/discord-bot</code>)</h3><p class="sub" style="margin:0">A Claude Code session kept alive by <code>run-bot.ps1</code> (single instance, backoff restart, log file). Allowed tools: Read/Grep/Glob, Discord reply/react/edit/fetch, Supabase <code>execute_sql</code>/<code>list_tables</code>, one localhost GET. <code>.env</code> reads are denied. Zo DMs one word: <b>live, worker, dash, queue, help</b>.</p></div>
+    <div class="card"><h3>GitHub workflows</h3><p class="sub" style="margin:0"><code>dashboard.yml</code> (Node 22: <code>npm ci</code>, tsc lint, tests, demo-mode build) and <code>worker-tests.yml</code> (Python 3.11 + ffmpeg + Postgres, <code>pytest -q</code>). Path-filtered, on PR and push to main. No deploy or release job.</p></div>
+  </div>
+  <p class="sub" style="margin-top:2mm"><span class="badge b-ran">Ran here</span> <code>guard-sql.mjs</code> allowed <code>select count(*) from clips</code> and a <code>with … select</code>; denied a stacked <code>drop table</code>, an <code>update</code>, and, as a false positive, <code>select 'reset' as x</code> (any denylisted word, even inside a string). Safe, but over-strict. <span class="badge b-unv">Unverified</span> The bot itself needs Windows, the Discord plugin and tokens; <code>settings.json</code> hard-codes a Windows path to the hook.</p>
+  <div class="run">Clipp project overview</div><div class="pn">16</div>
+</section>
+
+<!-- 17 PROPOSED SKILLS -->
+<section class="page">
+  <div class="kicker">11 · Proposals (not built)</div>
+  <h2>Recommended new skills <span class="badge b-prop">Proposal</span></h2>
+  <p class="sub">Each closes a gap I found in the repo or notes. Keep every skill ≤ 60 lines; heavy detail goes to reference files (CLAUDE.md).</p>
+  <table>
+    <tr><th style="width:34mm">Proposed skill</th><th>Responsibility</th><th style="width:50mm">Access it needs</th><th style="width:48mm">Fits with</th></tr>
+    <tr><td>go-live-preflight</td><td>Ordered checklist before the first live run: <code>clipworker check</code>, replay eval (recall ≥ 80%, ≤ 10 candidates/h), keys present (names only), crop boxes approved, re-check YouTube/X docs.</td><td>Read repo, run <code>clipworker</code> CLI on the PC. No secret values.</td><td>clip-detector-tuning, publish-approval-gate step 5</td></tr>
+    <tr><td>grok-eval</td><td>Build a labeled eval set from approved/rejected clips and pick the cheapest <code>GROK_MODEL</code> that passes (open item in <code>worker/README.md</code>).</td><td><code>XAI_API_KEY</code> via request-credential flow; read <code>clips</code>/<code>candidate_log</code>; writes only results to the vault.</td><td>learn, <code>judge/grok.py</code></td></tr>
+    <tr><td>crop-box-calibrator</td><td>Grab a frame per streamer, propose a facecam/gameplay crop, show it on the frame for Zo's approval (3 boxes still pending).</td><td>ffmpeg frame grab on the PC; edit <code>channels.toml</code> only after approval.</td><td>clip-render, Streamer Roster note</td></tr>
+    <tr><td>outcome-ingest</td><td>Pull post performance (views, retention where available) into the DB so <code>learn</code> has evidence. Notes say none is ingested today.</td><td>YouTube Analytics / X read scopes (new OAuth scopes: <span class="badge b-unv">unverified availability</span>).</td><td>learn, campaign-scout, video-breakdown</td></tr>
+    <tr><td>skill-hygiene (weekly)</td><td>Run the CLAUDE.md weekly pass: reconcile skills with decisions (see drift list), prune unused skills, check <code>/context</code> size.</td><td>Read <code>.claude/skills</code>, <code>Decision Log.md</code>; edit skills via small diffs.</td><td>learn, repo-audit</td></tr>
+    <tr><td>worker-runbook</td><td>Start/stop/diagnose the PC worker, read logs, interpret the heartbeat. Includes a worker autostart task like the bot's.</td><td>PC shell; read-only Supabase.</td><td>investigate-first, ops bot</td></tr>
+    <tr><td>kick-verify</td><td>Capture a real Kick chat payload, confirm event names and reconnect behaviour, update the parser and tests.</td><td>Public Kick chat, read-only.</td><td>stream-ingest</td></tr>
+    <tr><td>secrets-guard</td><td>Before each commit: scan for tokens/keys, confirm <code>.env*</code> stay ignored, flag key names in logs.</td><td>Read repo; GitHub secret scanning.</td><td>repo-audit, publish gate</td></tr>
+  </table>
+  <div class="run">Clipp project overview</div><div class="pn">17</div>
+</section>
+
+<!-- 18 PROPOSED GROK AGENTS -->
+<section class="page">
+  <div class="kicker">11 · Proposals (not built)</div>
+  <h2>Recommended Grok bot agents <span class="badge b-prop">Proposal</span></h2>
+  <p>The original vision (notes: <code>Vision and Requirements.md</code>) was one "Grok bot" that watches, clips and edits. The code instead uses Grok in one narrow role. I recommend growing it as <b>small single-purpose agents</b>, each text-in / JSON-out, with no power to approve or post.</p>
+  <table>
+    <tr><th style="width:36mm">Agent</th><th>Responsibility</th><th style="width:56mm">Required access</th><th style="width:36mm">Status</th></tr>
+    <tr><td>Clip Judge</td><td>Keep/drop, trim, hook, title, score on the shortlist.</td><td>xAI key; text window + chat sample.</td><td><span class="badge b-ok">Exists</span> key empty</td></tr>
+    <tr><td>Revision Interpreter</td><td>Turn Zo's note into structured edit asks and standing rules.</td><td>xAI key; the note text.</td><td><span class="badge b-ok">Exists (partial)</span></td></tr>
+    <tr><td>Brief Analyst</td><td>Read ambiguous campaign rule lines, flag risks, suggest pursue/ask/avoid with reasons. Code keeps the numeric floor.</td><td>xAI key; read <code>campaign_posts</code>; write drafts only (never activate).</td><td><span class="badge b-prop">Proposal</span></td></tr>
+    <tr><td>Title &amp; Caption Writer</td><td>3 title/post-caption options per approved-score clip; respect campaign tags; Zo picks.</td><td>xAI key; transcript + judgment JSON.</td><td><span class="badge b-prop">Proposal</span></td></tr>
+    <tr><td>Content-Risk Screener</td><td>Advisory flag for platform-policy risk (slurs, doxxing, minors, copyrighted audio) from the transcript, shown next to QA. Code QA stays the hard gate.</td><td>xAI key; transcript only.</td><td><span class="badge b-prop">Proposal</span></td></tr>
+    <tr><td>Performance Analyst (weekly)</td><td>Summarise approvals, rejections and outcomes; propose <code>learn</code> entries and detector tweaks as drafts.</td><td>xAI key; read-only DB views; needs outcome-ingest first.</td><td><span class="badge b-prop">Proposal</span></td></tr>
+    <tr><td>Trend Spotter</td><td>Check what is spiking on X for roster streamers to bias which channels to prioritise.</td><td>xAI key plus X search access. <span class="badge b-unv">Whether the API exposes live X search on Zo's plan is unverified.</span></td><td><span class="badge b-prop">Proposal</span></td></tr>
+  </table>
+  <div class="cols c2" style="margin-top:3mm">
+    <div class="card soft"><h3>Guardrails for every Grok agent</h3>
+      <ul style="margin:0"><li>Text windows and summaries only; never a full VOD or raw logs.</li><li>Strict JSON schema, validated in code before use; cache by content hash.</li><li>Cheapest model that passes a labeled eval; spend logged in <code>spend</code>.</li><li>No approve, publish, delete or env access. Output is a suggestion row.</li></ul></div>
+    <div class="note prop"><b>Not recommended:</b> a Grok agent that clips autonomously or posts. It would bypass the approval gate that D003/D042 make central, and it duplicates what ffmpeg and the detector already do deterministically.</div>
+  </div>
+  <div class="run">Clipp project overview</div><div class="pn">18</div>
+</section>
+
+<!-- 19 PROPOSED FIT -->
+<section class="page">
+  <div class="kicker">11 · Proposals (not built)</div>
+  <h2>How the proposed agents would plug into today's flow <span class="badge b-prop">Proposal</span></h2>
+  <div class="grow">
+  <svg viewBox="0 0 1000 360">
+    <g class="t2">
+      <rect class="nb ext" x="10" y="150" width="130" height="60"/><text class="t1" x="20" y="172">Discord post</text><text x="20" y="188" class="sm">Reach campaign</text>
+      <rect class="nb code" x="170" y="150" width="130" height="60"/><text class="t1" x="180" y="172">Scout (code)</text><text x="180" y="188" class="sm">fields + floor + rank</text>
+      <rect class="nb code" x="330" y="150" width="130" height="60"/><text class="t1" x="340" y="172">Detector + gate</text><text x="340" y="188" class="sm">candidates</text>
+      <rect class="nb model" x="490" y="150" width="120" height="60"/><text class="t1" x="500" y="172">Clip Judge</text><text x="500" y="188" class="sm">exists</text>
+      <rect class="nb code" x="640" y="150" width="110" height="60"/><text class="t1" x="650" y="172">Render + QA</text><text x="650" y="188" class="sm">code</text>
+      <rect class="nb human" x="780" y="150" width="100" height="60"/><text class="t1" x="790" y="172">Zo review</text><text x="790" y="188" class="sm">dashboard</text>
+      <rect class="nb ext" x="905" y="150" width="85" height="60"/><text class="t1" x="913" y="172">Post</text><text x="913" y="188" class="sm">X · Shorts</text>
+    </g>
+    <path class="arr" d="M140 180H170"/><path class="arr" d="M460 180H490"/><path class="arr" d="M610 180H640"/><path class="arr" d="M750 180H780"/><path class="arr" d="M880 180H905"/><path class="arr" d="M300 180H330"/>
+    <g class="t2">
+      <rect class="nb prop" x="150" y="20" width="170" height="60"/><text class="t1" x="160" y="42">Brief Analyst</text><text x="160" y="58" class="sm">ambiguous rule lines</text><text x="160" y="71" class="sm">writes draft only</text>
+      <rect class="nb prop" x="490" y="20" width="170" height="60"/><text class="t1" x="500" y="42">Title &amp; Caption Writer</text><text x="500" y="58" class="sm">3 options per clip</text><text x="500" y="71" class="sm">Zo picks</text>
+      <rect class="nb prop" x="560" y="270" width="190" height="60"/><text class="t1" x="570" y="292">Content-Risk Screener</text><text x="570" y="308" class="sm">advisory flag by QA</text>
+      <rect class="nb prop" x="330" y="270" width="150" height="60"/><text class="t1" x="340" y="292">Trend Spotter</text><text x="340" y="308" class="sm">X signals → boost</text>
+      <rect class="nb prop" x="800" y="20" width="190" height="60"/><text class="t1" x="810" y="42">Performance Analyst</text><text x="810" y="58" class="sm">outcomes → learn drafts</text><text x="810" y="71" class="sm">needs outcome-ingest</text>
+      <rect class="nb prop" x="780" y="270" width="210" height="60"/><text class="t1" x="790" y="292">Revision Interpreter+</text><text x="790" y="308" class="sm">extend existing parser</text>
+    </g>
+    <path class="arr p" d="M235 80V150"/><path class="arr p" d="M575 80V150"/><path class="arr p" d="M655 270V210"/><path class="arr p" d="M405 270V210"/><path class="arr p" d="M895 210V80" /><path class="arr p" d="M830 270V210"/>
+  </svg>
+  <div class="legend"><span><i style="background:var(--prop-bg);border-color:var(--prop);border-style:dashed"></i>Proposed agent</span><span>Solid boxes already exist. Dashed arrows are suggestions Zo can accept or ignore; none can change state.</span></div>
+  </div>
+  <div class="cols c2" style="margin-top:2mm">
+    <div class="card"><h3>Suggested build order</h3><ol style="margin:0;padding-left:4.5mm"><li>Set the Grok key and run <b>grok-eval</b>; this unlocks the Clip Judge for real.</li><li><b>Title &amp; Caption Writer</b> (cheap, easy to verify by eye).</li><li><b>Brief Analyst</b> once real campaign briefs exist (D019).</li><li><b>outcome-ingest</b> then <b>Performance Analyst</b>.</li><li>Content-Risk Screener and Trend Spotter last.</li></ol></div>
+    <div class="card"><h3>Cost check</h3><p class="sub" style="margin:0">Planning budget is $100-$250/month total (D012). Every agent above is text-only on short windows, so cost scales with clips reviewed, not hours streamed. Real per-call prices are <span class="badge b-unv">unverified</span>: the price fields in the worker <code>.env</code> are blank.</p></div>
+  </div>
+  <div class="run">Clipp project overview</div><div class="pn">19</div>
+</section>
+
+<!-- 20 LIMITS -->
+<section class="page">
+  <div class="kicker">12 · Limits</div>
+  <h2>Current limitations</h2>
+  <div class="cols c2">
+    <div>
+      <h3>Not working yet or not proven</h3>
+      <ul>
+        <li><b>Never run end-to-end live.</b> No record in the repo of a full stream → posted clip. <span class="badge b-unv">Unverified</span></li>
+        <li><b>Worker was not running</b> at the last handoff (2026-11-21) and has no autostart.</li>
+        <li><b>Grok key empty</b>: the stand-in judge keeps everything and titles it "UNJUDGED"; ranking quality is unknown.</li>
+        <li><b>Kick chat</b> uses an unofficial socket; payload names unverified.</li>
+        <li><b>YouTube / X</b> endpoints, quotas and prices must be re-checked before the first live post.</li>
+        <li><b>Crop boxes</b> for new roster members await approval; renders fall back to a tracked full-frame crop.</li>
+        <li><b>Vercel and CI results</b> were not checked from here.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>By design (V1 scope)</h3>
+      <ul>
+        <li><b>PC-only.</b> Monitoring happens only while Zo's PC is on (D013). No 24/7 coverage.</li>
+        <li><b>3 captures at once</b> until CPU/GPU load is measured. English captions only.</li>
+        <li><b>X + YouTube Shorts only.</b> TikTok/Instagram not automated (D017).</li>
+        <li><b>Manual Content Rewards submission</b> (D025); no Whop API.</li>
+        <li><b>One owner.</b> No team or roles.</li>
+        <li><b>No performance analytics</b> flow back yet, so learning is from review notes only.</li>
+        <li><b>Ops bot is read-only</b>; cannot start the worker or approve.</li>
+      </ul>
+    </div>
+  </div>
+  <h3 style="margin-top:2mm">Documentation and consistency issues I found</h3>
+  <ul>
+    <li>Root <code>README.md</code> claims no code exists; the planning notes and <code>worker/README.md</code> lag some decisions (D070 vs "active campaign only").</li>
+    <li>Several skills disagree with the code (page 15). Dashboard <code>BUDGET = 100</code> vs D012's $250 ceiling.</li>
+    <li>The <code>.claude/settings</code> of the ops bot hard-codes a Windows user path; it will not run elsewhere without edits.</li>
+    <li>Vault test count (92) is older than the current suite (120 passed here).</li>
+  </ul>
+  <div class="note"><b>What I could not verify in this environment:</b> any live Twitch/Kick/Grok/YouTube/X call, the real Supabase project and its data, the Vercel deployment, GitHub Actions run history, Windows-only scripts (<code>*.ps1</code>), the Discord ops bot, GPU transcription, and whether <code>CLAUDE.md</code>'s "Atlas" exists as a tool. Screenshots use the built-in sample data.</div>
+  <div class="run">Clipp project overview</div><div class="pn">20</div>
+</section>
+
+<!-- 21 NEXT STEPS -->
+<section class="page">
+  <div class="kicker">13 · Next steps</div>
+  <h2>Practical order of work</h2>
+  <div class="cols c2">
+    <div>
+      <table>
+        <tr><th style="width:8mm">#</th><th>Step</th><th style="width:22mm">Owner</th></tr>
+        <tr><td>1</td><td>Fill <code>XAI_API_KEY</code> + <code>GROK_MODEL</code> in the PC <code>.env</code>; run a small labeled eval to pick the cheapest passing model.</td><td>Zo + Claude</td></tr>
+        <tr><td>2</td><td>Approve (or fix) the pending crop boxes, especially Jynxzi.</td><td>Zo</td></tr>
+        <tr><td>3</td><td><code>clipworker check</code>, then <code>replay</code> on a stored Twitch chat file until recall ≥ 80% and ≤ 10 candidates/h.</td><td>Claude</td></tr>
+        <tr><td>4</td><td>First supervised live run: Wake Up, one channel, review the clips, approve none; watch heartbeat and spend.</td><td>Zo</td></tr>
+        <tr><td>5</td><td>Re-read YouTube and X docs; one test post to a private/test destination before real use.</td><td>Claude</td></tr>
+        <tr><td>6</td><td>Confirm Vercel deploy and phone login (code sign-in); add a worker autostart task like the bot's.</td><td>Zo + Claude</td></tr>
+        <tr><td>7</td><td>Reconcile stale skills/notes (page 15 list); align the budget constant with D012.</td><td>Claude</td></tr>
+        <tr><td>8</td><td>Add outcome ingestion, then the proposed Grok agents in the order on page 19.</td><td>Claude</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>How to rebuild this document</h3>
+      <ul>
+        <li>Source: <code>docs/index.html</code>, <code>docs/style.css</code>, screenshots in <code>docs/assets/</code>.</li>
+        <li>Build: <code>node docs/build.js</code> (uses preinstalled Playwright/Chromium; writes <code>docs/Clipp-Project-Overview.pdf</code> and checks no page overflows).</li>
+        <li>Screenshots: start <code>cd dashboard &amp;&amp; npm run demo</code>, open <code>localhost:3000</code>; capture at 1440×900 (phone 390×844 @2x). Annotation pins are CSS (<code>--x/--y</code> in source pixels), so they can be moved without editing images.</li>
+      </ul>
+      <h3 style="margin-top:3mm">What I ran to write this</h3>
+      <ul>
+        <li><code>npm ci</code>, dashboard demo (<code>next dev</code> with demo env), Playwright screenshots.</li>
+        <li><code>npm test</code> in dashboard: 11/11 pass. <code>pytest</code> in worker: 120 passed.</li>
+        <li><code>guard-sql.mjs</code> with five sample queries.</li>
+        <li>No <code>.env</code> file was opened; no application code was changed.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="run">Clipp project overview</div><div class="pn">21</div>
+</section>
+</body>
+</html>

@@ -18,3 +18,4 @@ worker/config/channels.toml
 
 # discord ops bot log
 ops/discord-bot/bot.log
+docs/build-png/
