@@ -4,6 +4,22 @@ The private review dashboard for Clipp: review queue sorted by score, 9:16 clip 
 
 It works on a computer and a phone. On a phone the streamer rail becomes an avatar strip at the top and the Deny / Revise / Approve buttons stay pinned to the bottom.
 
+## Daily launch on Zo's PC
+
+Use the maintained checkout at `C:\clip-work\Clipping`, on `main`. Double-click
+`Start Dashboard.cmd` in that checkout, then open http://localhost:3000 after
+the terminal says Ready. Keep the terminal open while using the dashboard.
+If the dashboard is already running, use the existing server instead of
+starting another one on a different port.
+
+The November 22 dashboard update includes before/after review, weekly stats,
+revision memory, and the updated Wake Up control. The `v1` label is the app's
+release label, not an indication that the old dashboard is running.
+
+Do not launch a copied `dashboard-active` folder. Update `main` in the maintained
+checkout before starting it. The Desktop path includes `HOME!`; Webpack rejects
+the exclamation mark, so the running app must stay under `C:\clip-work`.
+
 ## See it on your PC in 2 minutes (demo mode, Windows 11)
 
 Demo mode uses sample clips that ship with the app. It needs no Supabase, no keys and no worker, and nothing you click is saved or posted.
@@ -11,7 +27,7 @@ Demo mode uses sample clips that ship with the app. It needs no Supabase, no key
 1. Install **Node.js 22 LTS** from https://nodejs.org (the Windows Installer, default options).
 2. Open **PowerShell** and go to the dashboard folder of the repo, for example:
    ```powershell
-   cd C:\Users\<you>\Desktop\clipping\dashboard
+   cd C:\clip-work\Clipping\dashboard
    ```
 3. Install and start:
    ```powershell
