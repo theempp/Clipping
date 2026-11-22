@@ -13,6 +13,7 @@ import uuid
 from dataclasses import asdict, replace
 from pathlib import Path
 
+from . import rules
 from .capture.buffer import extract_window
 from .config import Channel, Crop, Layout, Settings, ass_colour
 from .detector.dedupe import detection_key, same_moment
@@ -156,7 +157,8 @@ class Pipeline:
 
     def _render_step(self, job: Job, overrides: dict | None = None) -> bool:
         ch = self.channels[job.channel]
-        j = {**job.data["judgment"], **(overrides or {})}
+        # standing rules learned from Zo's notes (D078) sit under this clip's own overrides
+        j = {**job.data["judgment"], **self.rule_settings(), **(overrides or {})}
         words = [Word(**w) for w in job.data["words"]]
         layout, track = ch.layout, ch.layout is None
         if overrides and overrides.get("layout"):
@@ -176,7 +178,12 @@ class Pipeline:
         if j.get("zoom") is False:
             zoom = None
         elif j.get("zoom") is True and not zoom.on:
-            zoom = replace(zoom, scale=1.3)  # D051 strength when switched on per clip
+            zoom = replace(zoom, scale=1.12)  # D077: gentle when switched on per clip
+        if zoom is not None and j.get("zoom_style") == "smooth":  # D077 smooth camera, enforced
+            zoom = replace(zoom, ease="smooth", moments="peak" if zoom.moments == "peak" else "emphasis",
+                           scale=min(zoom.scale, 1.15) if zoom.on else zoom.scale,
+                           ramp_s=max(zoom.ramp_s, 0.6), hold_s=max(zoom.hold_s, 1.6),
+                           min_gap_s=max(zoom.min_gap_s, 8.0), max_zooms=min(zoom.max_zooms, 2))
         sfx_on = j["sfx"] if isinstance(j.get("sfx"), bool) else self.s.sfx.enabled
         sfx = replace(self.s.sfx, enabled=sfx_on and job.data["rules"].get("allow_sfx", True))
         peak_rel = job.data["peak_ts"] - job.data["capture"]["start_ts"] - j["trim_in"]
@@ -214,6 +221,7 @@ class Pipeline:
         base = f"{ch.streamer}/{job.id}"
         self.sb.upload(f"{base}/clip.mp4", Path(m["video"]), "video/mp4")
         self.sb.upload(f"{base}/thumb.jpg", Path(m["thumbnail"]), "image/jpeg")
+        source_path = self._upload_source(base, m)
         j = job.data["judgment"]
         self.sb.insert("clips", {
             "job_id": job.id, "streamer_id": self._streamer_id(ch.streamer),
@@ -223,17 +231,137 @@ class Pipeline:
             "confidence": j["confidence"], "detector_score": job.score,
             "score_10": j.get("score_10") or None, "hook_type": j.get("hook_type"),
             "moment_at": iso(job.trigger_ts), "duration_s": m["duration"],
-            "storage_path": f"{base}/clip.mp4", "thumb_path": f"{base}/thumb.jpg",
+            "storage_path": f"{base}/clip.mp4", "thumb_path": f"{base}/thumb.jpg", "source_path": source_path,
             "qa": job.data["qa"], "judge": j, "manifest": m}, on_conflict="job_id",
             ignore_duplicates=True)
         self.store.advance(job.id, "uploaded")
         self._log(job, "kept", j.get("reason", ""))
         return True
 
+    # --- revision memory (D078) ---------------------------------------------------------
+    def rule_settings(self) -> dict:
+        """Active standing rules as settings, newest per key. {} without Supabase."""
+        if self.sb is None:
+            return {}
+        now = self.clock()
+        if getattr(self, "_rules_at", 0) > now - 20:
+            return self._rules
+        try:
+            rows = self.sb.select("edit_rules", active="eq.true", order="created_at.desc", select="*")
+        except Exception as e:  # noqa: BLE001 - table missing or offline: render without rules
+            log.warning("could not load edit rules: %s", e)
+            rows = []
+        self._rules, self._rules_at, self._rule_rows = rules.merge(rows), now, rows
+        return self._rules
+
+    def _note_edit(self, note: str, clip_id: str | None = None) -> dict:
+        """Plain-English note -> settings: keyword reader, then Grok on top when a key is set.
+        Cached by note text, so learning a rule and fixing the clip cost one parse."""
+        cache = self.__dict__.setdefault("_note_cache", {})
+        if note in cache:
+            return dict(cache[note])
+        edit = rules.parse_note(note)
+        if self.judge is not None:
+            try:
+                g, usage = self.judge.parse_edit(note)
+                if usage:
+                    self.sb.log_spend("grok", self.judge.cost_usd(usage), usage.get("total_tokens"),
+                                      {"clip_id": clip_id, "revision_note": True})
+                edit.update(g)
+            except Exception as e:  # noqa: BLE001 - a bad note must not block other revisions
+                log.warning("could not parse revision note %r: %s", note[:80], e)
+        cache[note] = dict(edit)
+        return edit
+
+    def learn_rules(self) -> int:
+        """Read every new revision note; style asks become standing rules (D078)."""
+        if self.sb is None:
+            return 0
+        n = 0
+        for r in self.sb.select("revisions", learned_at="is.null", kind="eq.other",
+                                order="created_at.asc", limit="50", select="*"):
+            p = r.get("payload") or {}
+            std = rules.standing(self._note_edit(r["note"], r["clip_id"])) if p.get("apply_all", True) else {}
+            for k, v in std.items():
+                self.sb.insert("edit_rules", {"key": k, "value": v, "label": rules.label(k, v),
+                                              "note": r["note"][:500], "revision_id": r["id"],
+                                              "clip_id": r["clip_id"], "active": True, "fixed_count": 0})
+                n += 1
+            self.sb.update("revisions", {"id": r["id"]}, {"learned_at": iso(self.clock())})
+        if n:
+            self._rules_at = 0  # reload now
+            log.info("learned %d standing edit rule(s) from revision notes", n)
+        return n
+
+    def _upload_source(self, base: str, m: dict) -> str | None:
+        """Before/after: the untouched 16:9 window. None when the render made none."""
+        src = m.get("source_preview")
+        if not src or not Path(src).exists():
+            return None
+        self.sb.upload(f"{base}/source.mp4", Path(src), "video/mp4")
+        return f"{base}/source.mp4"
+
+    def _rerender(self, clip: dict, job: Job, overrides: dict, title: str | None, rev: int) -> Job | None:
+        """Reset the local job, render -> QA, upload over the same storage paths. None if QA failed."""
+        update = {"revision": rev, **({"title_override": title} if title else {})}
+        job = self.store.reset_for_revision(job.id, update)
+        self._render_step(job, overrides)
+        self._qa_step(self.store.job(job.id))
+        job = self.store.job(job.id)
+        if job.stage != "qa_passed":
+            log.warning("revision %s of %s failed QA: %s", rev, clip["id"], job.data["qa"])
+            return None
+        m = job.data["manifest"]
+        self.sb.upload(clip["storage_path"], Path(m["video"]), "video/mp4")
+        self.sb.upload(clip["thumb_path"], Path(m["thumbnail"]), "image/jpeg")
+        base = clip["storage_path"].rsplit("/", 1)[0]
+        self.sb.update("clips", {"id": clip["id"]},
+                       {"title": job.data["title"], "duration_s": m["duration"], "qa": job.data["qa"],
+                        "judge": job.data["judgment"], "manifest": m, "revision": rev,
+                        "source_path": self._upload_source(base, m) or clip.get("source_path")})
+        self.store.advance(job.id, "uploaded")
+        return job
+
+    def recheck_queue(self, max_fix: int = 2) -> int:
+        """Clips already waiting for review that break a standing rule are hidden and re-edited,
+        so Zo never reviews the same defect twice (D078). Re-renders `max_fix` per call."""
+        if self.sb is None:
+            return 0
+        settings = self.rule_settings()
+        if not settings:
+            return 0
+        from .render.ffmpeg import MOTION_VERSION
+        todo = []
+        for clip in self.sb.clips_in("pending_review", limit=50):
+            bad = rules.breaks(clip, settings, MOTION_VERSION)
+            if not bad:
+                continue
+            try:
+                job = self.store.job(clip["job_id"])
+            except KeyError:
+                continue  # footage gone: leave it for Zo
+            if not clip.get("fixing"):
+                self.sb.update("clips", {"id": clip["id"]}, {"fixing": {"rules": bad, "since": iso(self.clock())}})
+            todo.append((clip, job, bad))
+        n = 0
+        for clip, job, bad in todo[:max_fix]:
+            rev = int(clip.get("revision", 0)) + 1
+            done = self._rerender(clip, job, {}, None, rev)
+            self.sb.update("clips", {"id": clip["id"]}, {"fixing": None})
+            if done is None:
+                continue
+            for row in getattr(self, "_rule_rows", []):
+                if row["key"] in bad:
+                    self.sb.update("edit_rules", {"id": row["id"]}, {"fixed_count": int(row.get("fixed_count", 0)) + 1})
+            log.info("re-edited %s in review to meet rules %s", clip["id"], bad)
+            n += 1
+        return n
+
     # revise loop (publish-approval-gate step 3): re-run only what changed
     def process_revisions(self) -> int:
         if self.sb is None:
             return 0
+        self.learn_rules()
         n = 0
         for clip in self.sb.clips_in("revise"):
             revs = self.sb.select("revisions", clip_id=f"eq.{clip['id']}", resolved_at="is.null",
@@ -258,39 +386,19 @@ class Pipeline:
                     overrides["emphasis_words"] = list(p["emphasis_words"])
                 elif r["kind"] == "title" and "title" in p:
                     title = str(p["title"])[:100]
-                elif not p and r.get("note") and self.judge is not None:
-                    # revision box: plain English -> settings (one small cached Grok call)
-                    try:
-                        edit, usage = self.judge.parse_edit(r["note"])
-                    except Exception as e:  # noqa: BLE001 - a bad note must not block other revisions
-                        log.warning("could not parse revision note %r: %s", r["note"][:80], e)
-                        continue
-                    if usage:
-                        self.sb.log_spend("grok", self.judge.cost_usd(usage), usage.get("total_tokens"),
-                                          {"clip_id": clip["id"], "revision_note": True})
+                elif r["kind"] == "other" and r.get("note"):
+                    # revision box: plain English -> settings (keywords, plus Grok when set)
+                    edit = self._note_edit(r["note"], clip["id"])
                     title = edit.pop("title", None) or title
                     edit.pop("best_part_only", None)
                     overrides.update(edit)
             rev = int(clip.get("revision", 0)) + 1
-            # reset job to judged, then re-render -> QA -> upload with the same storage path
-            update = {"revision": rev, **({"title_override": title} if title else {})}
-            job = self.store.reset_for_revision(job.id, update)
-            self._render_step(job, overrides)
-            self._qa_step(self.store.job(job.id))
-            job = self.store.job(job.id)
-            if job.stage != "qa_passed":
-                log.warning("revision %s of %s failed QA: %s", rev, clip["id"], job.data["qa"])
+            if self._rerender(clip, job, overrides, title, rev) is None:
                 continue
-            m = job.data["manifest"]
-            self.sb.upload(clip["storage_path"], Path(m["video"]), "video/mp4")
-            self.sb.upload(clip["thumb_path"], Path(m["thumbnail"]), "image/jpeg")
-            self.sb.update("clips", {"id": clip["id"]},
-                           {"title": job.data["title"], "duration_s": m["duration"], "qa": job.data["qa"],
-                            "judge": job.data["judgment"], "manifest": m, "revision": rev})
             self.sb.transition(clip, "pending_review", f"revision {rev}",
                                {"revisions": [r["id"] for r in revs]})
             for r in revs:
                 self.sb.update("revisions", {"id": r["id"]}, {"resolved_at": iso(self.clock())})
-            self.store.advance(job.id, "uploaded")
             n += 1
+        n += self.recheck_queue()
         return n

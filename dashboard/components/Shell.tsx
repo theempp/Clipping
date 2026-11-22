@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { PC_NAME } from "@/lib/env";
 import { ago, pcState, rankQueue } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
@@ -9,7 +9,7 @@ import { fmtViewers, monthSpend, rosterSections, streamerViews, type StreamerVie
 import { Avatar } from "./Avatar";
 import { Icon } from "./Icon";
 import { UndoToast } from "./UndoToast";
-import { WakeToggle } from "./WakeToggle";
+import { SleepBanner, WakeToggle } from "./WakeToggle";
 
 export function Shell({ children }: { children: ReactNode }) {
   const { snap, demo, error, ready, signOut } = useStore();
@@ -24,6 +24,19 @@ export function Shell({ children }: { children: ReactNode }) {
   const st = pcState(snap.heartbeat, awake, now);
   const gpu = snap.heartbeat?.status.gpu;
   const spend = monthSpend(snap);
+
+  // Power-on / power-off sweep: only when the switch changes after load, never on first paint.
+  const [fx, setFx] = useState<"" | "fx-on" | "fx-off">("");
+  const lastAwake = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!ready) return;
+    const was = lastAwake.current;
+    lastAwake.current = awake;
+    if (was === null || was === awake) return;
+    setFx(awake ? "fx-on" : "fx-off");
+    const t = setTimeout(() => setFx(""), awake ? 2200 : 900);
+    return () => clearTimeout(t);
+  }, [awake, ready]);
 
   const row = (v: StreamerView) => {
     const on = path === `/live/${v.s.slug}`;
@@ -61,7 +74,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const liveGta = sections.gta6.filter((v) => v.live).length;
 
   return (
-    <div className={`app ${awake ? "awake" : "asleep"}`}>
+    <div className={`app ${!ready ? "booting" : awake ? "awake" : "asleep"}${fx ? ` ${fx}` : ""}`}>
+      <div className="aurora" aria-hidden="true"><i /><i /><i /></div>
+      {fx === "fx-on" && <div className="ignite" aria-hidden="true"><i /></div>}
       <nav className="rail" aria-label="Main">
         <div className="brand">
           <span className="mk"><Icon name="bolt" size={18} /></span>
@@ -130,7 +145,8 @@ export function Shell({ children }: { children: ReactNode }) {
       <main className="main">
         {demo && <div className="demo-tag">Demo data. Nothing here is saved or posted.</div>}
         {error && error !== "not-owner" && <div className="err" role="alert">{error}</div>}
-        {!ready ? <div className="loading">Loading…</div> : children}
+        {ready && !awake && <SleepBanner />}
+        {!ready ? <div className="loading"><i />Loading…</div> : <div className="page">{children}</div>}
       </main>
       <UndoToast />
     </div>

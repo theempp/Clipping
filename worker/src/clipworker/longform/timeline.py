@@ -41,7 +41,7 @@ class Timeline:
 
     @property
     def max_silent_run(self) -> float:
-        """Longest stretch with no narration (the 'largely repurposed' risk, plan D076)."""
+        """Longest stretch with no narration (the 'largely repurposed' risk, plan D080)."""
         edges = sorted((s, e) for _, s, e in self.voice)
         t, worst = 0.0, 0.0
         for s, e in edges:

@@ -25,7 +25,12 @@ const P: Record<string, string> = {
   clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2",
   play: "M7 4.5v15l12-7.5z",
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
-  moon: "M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z",
+  spark: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z",
+  power:"M12 3v8M6.6 6.6a8 8 0 1 0 10.8 0",
+  flame: "M12 22c4 0 7-2.7 7-6.8 0-3.4-2.3-5.6-3.6-7.2-.4 1.8-1.4 3-2.6 3.6.4-3.4-1.2-6.6-4.3-8.6.3 3-1.2 5.2-2.8 7.1C4.6 11.4 5 13 5 15.2 5 19.3 8 22 12 22z",
+  trophy: "M8 4h8v5a4 4 0 0 1-8 0zM8 6H4v1a4 4 0 0 0 4 4M16 6h4v1a4 4 0 0 1-4 4M12 13v4M8 21h8M9 17h6v4H9z",
+  target: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01",
+  moon:"M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z",
 };
 
 export function Icon({ name, size = "1em" }: { name: keyof typeof P | string; size?: string | number }) {

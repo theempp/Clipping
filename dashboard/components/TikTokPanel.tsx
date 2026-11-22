@@ -9,7 +9,7 @@ export const FORMAT: Record<LongformVideo["format"], string> = {
   recap: "Story recap", topn: "Top N", explainer: "Explainer", extended: "Extended moment",
 };
 
-/** Test tags for a long video (D078): what this post is testing. */
+/** Test tags for a long video (D082): what this post is testing. */
 export function tagLine(v: LongformVideo): string[] {
   return [
     FORMAT[v.format], v.pacing === "short" ? "Short-style" : "Long-style",
@@ -109,7 +109,7 @@ function Row({ v }: { v: LongformVideo }) {
   );
 }
 
-/** Zwoclipp long videos: post by hand, then log the numbers so the test cells can be ranked (D078). */
+/** Zwoclipp long videos: post by hand, then log the numbers so the test cells can be ranked (D082). */
 export function TikTokPanel() {
   const { snap } = useStore();
   const list = snap.longform.filter((v) => {

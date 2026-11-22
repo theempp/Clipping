@@ -1,15 +1,17 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ApprovedList } from "@/components/ApprovedList";
 import { Avatar } from "@/components/Avatar";
-import { ClipPlayer } from "@/components/ClipPlayer";
+import { BeforeAfter } from "@/components/BeforeAfter";
+import { LearnedRules } from "@/components/LearnedRules";
 import { Countdown } from "@/components/Countdown";
 import { Icon } from "@/components/Icon";
 import { PipelineTiles } from "@/components/Pipeline";
 import { ReviewDock } from "@/components/ReviewDock";
 import { TikTokPanel, tagLine } from "@/components/TikTokPanel";
 import { WakeToggle } from "@/components/WakeToggle";
+import { WeekPulse } from "@/components/WeekPulse";
 import { mmss, rankQueue } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
 import type { Clip } from "@/lib/types";
@@ -30,7 +32,7 @@ export default function ReviewPage() {
   );
   const [selId, setSelId] = useState<string | null>(null);
   const clip: Clip | null = queue.find((c) => c.id === selId) ?? queue[0] ?? null;
-  useEffect(() => { if (selId && !queue.some((c) => c.id === selId)) setSelId(null); }, [queue, selId]);
+  // A picked clip that leaves the queue (approve/deny) falls back to the top one; Undo brings it back into view.
 
   const byId = new Map(snap.streamers.map((s) => [s.id, s]));
   const streamer = clip?.streamer_id ? byId.get(clip.streamer_id) : undefined;
@@ -70,7 +72,7 @@ export default function ReviewPage() {
               </Link>
             )}
           </div>
-          <h2 className="hero-t">{clip ? clip.title ?? clip.job_id : "Nothing waiting for review."}</h2>
+          <h2 key={clip?.id ?? "none"} className="hero-t">{clip ? clip.title ?? clip.job_id : "Nothing waiting for review."}</h2>
           <p className="why">{clip ? why ?? "No judge note for this clip." : "New clips show up here the moment the PC finishes rendering and QA."}</p>
           {clip && (
             <div className="chips">
@@ -82,27 +84,35 @@ export default function ReviewPage() {
             </div>
           )}
 
-          <div className="scorebox">
-            <div className="big" aria-label={`Clip score ${score ?? "none"} out of 10`}>
-              <svg viewBox="0 0 64 64" aria-hidden="true">
-                <circle cx="32" cy="32" r="28" className="trk" />
-                <circle cx="32" cy="32" r="28" className="val" strokeDasharray={`${((score ?? 0) / 10) * 175.9} 175.9`} />
-              </svg>
-              <b>{score ?? "—"}</b>
-              <span>out of 10</span>
-            </div>
-            <dl className="metrics">
-              <div><dt>Hook</dt><dd>{hookWin}</dd></div>
-              <div><dt>Confidence</dt><dd>{clip?.confidence != null ? `${Math.round(clip.confidence * 100)}%` : "—"}</dd></div>
-              <div><dt>Captions</dt><dd>{typeof clip?.qa?.captions === "string" ? clip.qa.captions : clip ? "whisperX" : "—"}</dd></div>
-              <div><dt>QA</dt><dd className={clip?.qa?.passed === false ? "bad" : clip ? "ok" : ""}>{clip ? (clip.qa?.passed === false ? "failed" : "passed") : "—"}</dd></div>
-            </dl>
-          </div>
-
-          <ReviewDock clip={clip} />
         </div>
         <div className="hero-media">
-          <ClipPlayer clip={clip} />
+          <BeforeAfter clip={clip}>
+              <div className="scorebox">
+                <div className="big" aria-label={`Clip score ${score ?? "none"} out of 10`}>
+                  <svg viewBox="0 0 64 64" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="g-score" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stopColor="var(--lime)" /><stop offset=".5" stopColor="var(--mint)" /><stop offset="1" stopColor="var(--cyan)" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="32" cy="32" r="28" className="trk" />
+                    <circle key={clip?.id ?? "none"} cx="32" cy="32" r="28" className="val" stroke="url(#g-score)"
+                      strokeDasharray={`${((score ?? 0) / 10) * 175.9} 175.9`} />
+                  </svg>
+                  <b>{score ?? "—"}</b>
+                  <span>out of 10</span>
+                </div>
+                <dl className="metrics">
+                  <div><dt>Hook</dt><dd>{hookWin}</dd></div>
+                  <div><dt>Confidence</dt><dd>{clip?.confidence != null ? `${Math.round(clip.confidence * 100)}%` : "—"}</dd>
+                    <span className="prob" aria-hidden="true"><i key={clip?.id ?? "none"} style={{ width: `${Math.round((clip?.confidence ?? 0) * 100)}%` }} /></span></div>
+                  <div><dt>Captions</dt><dd>{typeof clip?.qa?.captions === "string" ? clip.qa.captions : clip ? "whisperX" : "—"}</dd></div>
+                  <div><dt>QA</dt><dd className={clip?.qa?.passed === false ? "bad" : clip ? "ok" : ""}>{clip ? (clip.qa?.passed === false ? "failed" : "passed") : "—"}</dd></div>
+                </dl>
+              </div>
+
+              <ReviewDock clip={clip} />
+          </BeforeAfter>
         </div>
       </section>
 
@@ -124,7 +134,10 @@ export default function ReviewPage() {
           })}
         </ul>
         {queue.length <= 1 && <p className="quiet">Nothing behind this one.</p>}
+        <LearnedRules />
       </section>
+
+      <WeekPulse />
 
       <div className="strip3">
         <PipelineTiles />

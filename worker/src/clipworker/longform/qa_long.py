@@ -1,4 +1,4 @@
-"""clip-qa for long videos: the short-clip checks plus the Creator Rewards rules (D075-D076)."""
+"""clip-qa for long videos: the short-clip checks plus the Creator Rewards rules (D079-D080)."""
 from __future__ import annotations
 
 import subprocess

@@ -1,4 +1,4 @@
-"""Long-form planner (D075-D078): group judged moments into one 60 s+ narrated video.
+"""Long-form planner (D079-D082): group judged moments into one 60 s+ narrated video.
 
 Code only, no model. Input = local worker jobs that passed judging and rendered as short clips.
 A plan is a list of beats (one clip each) plus the test tags the video carries.
@@ -97,7 +97,7 @@ def beat_from_job(job: Job, streamer: str, lead_in_max: float = LEAD_IN_MAX_S) -
     cap = d.get("capture") or {}
     if not j or not cap.get("video") or not j.get("keep", True):
         return None
-    if d.get("campaign_id"):     # D077: campaign/sponsored moments never go on CRP channels
+    if d.get("campaign_id"):     # D081: campaign/sponsored moments never go on CRP channels
         return None
     if int(j.get("score_10") or 0) < MIN_SCORE:
         return None
@@ -171,7 +171,7 @@ def assemble(candidates: list[Beat], tags: Tags, used: set[str], now: float,
                 created_at=datetime.now(timezone.utc).isoformat())
 
 
-# ---- D078 test schedule -------------------------------------------------------------
+# ---- D082 test schedule -------------------------------------------------------------
 
 @dataclass(frozen=True)
 class Schedule:
@@ -208,5 +208,5 @@ def load_schedule(path: Path) -> Schedule:
 
 
 def kill_check(notices: dict[str, int], limit: int = 2) -> list[str]:
-    """D078: a format with `limit` or more ineligible/unoriginal notices is disabled."""
+    """D082: a format with `limit` or more ineligible/unoriginal notices is disabled."""
     return sorted(f for f, n in notices.items() if n >= limit)

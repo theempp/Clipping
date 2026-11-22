@@ -1,6 +1,6 @@
 # TikTok Monetization Plan
 
-Written 2026-11-22 for zo's ask: two TikTok channels, 1 minute plus only, built to get paid by the Creator Rewards Program (CRP). Status: decided by zo 2026-11-22 (D075 to D078). Links: [[Decision Log]], [[Reference Clip Style]], [[Channel Strategy]], [[Streamer Roster]].
+Written 2026-11-22 for zo's ask: two TikTok channels, 1 minute plus only, built to get paid by the Creator Rewards Program (CRP). Status: decided by zo 2026-11-22 (D079 to D082). Links: [[Decision Log]], [[Reference Clip Style]], [[Channel Strategy]], [[Streamer Roster]].
 
 ## The hard truth first
 
@@ -35,7 +35,7 @@ Two real risks to our current style:
 
 ## The two channels (ranked)
 
-Update 2026-11-22 (D079): Zwoclipp only for now. Channel two waits until zo brings the second account.
+Update 2026-11-22 (D083): Zwoclipp only for now. Channel two waits until zo brings the second account.
 
 1. **Zwoclipp: streamer story recaps (core 5).** "What happened on Jynxzi's stream" style. 65 to 100 s. Narrated hook, setup, the moment, the fallout. Jynxzi, xQc, Adin Ross, Lacy, Stable Ronaldo. GTA 6 moments get the 1.25x priority but the channel is about the people.
 2. **Channel two: GTA 6 streamer channel (all 7).** Kai Cenat and IShowSpeed join here. GTA 6 launch search demand is the edge (search views pay at 30 s+). Formats: ranked "Top 5 GTA 6 streamer moments today" and storyline recaps. Name for zo to pick.
@@ -108,9 +108,9 @@ Decision rules:
 
 ## Decisions (logged 2026-11-22)
 
-- D075: Zwoclipp = narrated story recaps for the core 5; channel two = GTA 6 streamer channel for all 7.
-- D076: No bare stream clips on CRP channels; every video carries our narration and structure.
-- D077: Campaign or sponsored clips never post on CRP channels.
-- D078: 4-week test matrix as above, 2 posts a day per channel.
+- D079: Zwoclipp = narrated story recaps for the core 5; channel two = GTA 6 streamer channel for all 7.
+- D080: No bare stream clips on CRP channels; every video carries our narration and structure.
+- D081: Campaign or sponsored clips never post on CRP channels.
+- D082: 4-week test matrix as above, 2 posts a day per channel.
 
 Sources: TikTok Creator Academy, "Understanding TikTok's Originality Policy" and "Creator Rewards Program" (read in the browser 2026-11-22); RPM ranges from ttcalculator.net and influencermarketinghub.com (third party).

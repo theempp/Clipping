@@ -1,6 +1,6 @@
 # TikTok Long-Form Build Spec
 
-Written 2026-11-22. Implements D075 to D078 from [[TikTok Monetization Plan]]. Built 2026-11-22 for Zwoclipp only (D079); see the PR on branch claude/project-thread-pyo8qb. Run: `clipworker longform-once` on the PC. Build in Claude Code on `C:\clip-work\Clipping` (main), with tests, same approval gate as every platform.
+Written 2026-11-22. Implements D079 to D082 from [[TikTok Monetization Plan]]. Built 2026-11-22 for Zwoclipp only (D083); see the PR on branch claude/project-thread-pyo8qb. Run: `clipworker longform-once` on the PC. Build in Claude Code on `C:\clip-work\Clipping` (main), with tests, same approval gate as every platform.
 
 ## Goal
 
@@ -21,7 +21,7 @@ Short clips keep flowing to YouTube Shorts and X unchanged. Long videos reuse th
 
 Code only, no model.
 - Input: judged clips from the last 24 to 72 h with `score_10 >= 6`.
-- Grouping per channel (D075):
+- Grouping per channel (D079):
   - `zwoclipp` (recap): one streamer, one stream or storyline, 2 to 5 clips, ordered by time.
   - `gta6` (top-N or storyline): game tag GTA 6, any of the 7 streamers, 3 to 5 clips ranked by `score_10`.
 - Picks format and pacing from the test schedule (section 7), not at random.
@@ -66,9 +66,9 @@ Blocks the queue on any fail:
 
 - `longform_plans`: id, channel (`zwoclipp`/`gta6`), format (`recap`/`topn`/`explainer`/`extended`), pacing (`short`/`long`), caption_style (`A`/`B`), voice (`ai`/`zo`), layout (`stacked`/`switch`), clip_ids[], script jsonb, runtime_s, state.
 - `tiktok_stats`: plan_id, posted_at, url, views, for_you_views, avg_watch_s, watched_full_pct, hold_5s_pct, follows, search_views_pct, qualified_views, rewards_usd, notice (`none`/`ineligible`/`unoriginal`), entered_at.
-- Campaign clips get `sponsored = true` and the publisher refuses them for both TikTok channels (D077).
+- Campaign clips get `sponsored = true` and the publisher refuses them for both TikTok channels (D081).
 
-## 7. Test schedule (D078)
+## 7. Test schedule (D082)
 
 Code reads a schedule file, not the model.
 - Weeks 1 to 2: each channel alternates formats x pacing, 2 posts a day. 6 posts per cell before judging.

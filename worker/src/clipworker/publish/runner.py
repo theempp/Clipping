@@ -67,7 +67,7 @@ class PublishRunner:
         done, now = [], self.clock()
         for clip in self.sb.clips_in("approved"):
             if clip.get("category") == "longform":
-                continue   # TikTok long videos stay approved; zo uploads them by hand (D074, D075)
+                continue   # TikTok long videos stay approved; zo uploads them by hand (D074, D079)
             clip = self.sb.transition(clip, "scheduled", "publisher picked up")
             self._last_try[clip["id"]] = now
             done.append(self.publish_clip(clip))

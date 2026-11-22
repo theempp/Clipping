@@ -1,4 +1,4 @@
-"""Narration script: the one model step of a long video (D076: our words carry every video).
+"""Narration script: the one model step of a long video (D080: our words carry every video).
 
 The model sees text only: transcript windows, judge fields, a few chat lines. Code checks the
 reply (word budgets, no copied transcript, no invented numbers) before anything is voiced.
@@ -20,7 +20,7 @@ from .plan import INTRO_S, OUTRO_S, Plan
 WPS = 2.5                 # 150 words a minute
 PEAK_GUARD_S = 0.4        # narration ends this long before a beat's peak (the reaction plays clean)
 COPY_NGRAM = 6            # a 6-word run shared with the transcript = copied, not ours
-MIN_COVERAGE = 0.40       # narration share of runtime (originality floor, plan D076)
+MIN_COVERAGE = 0.40       # narration share of runtime (originality floor, plan D080)
 
 SYSTEM = (
     "You write voiceover for a TikTok channel that retells livestream moments. Your narration is "

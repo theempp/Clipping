@@ -5,13 +5,14 @@ import { useStore } from "@/lib/store";
 import type { Clip } from "@/lib/types";
 import { Icon } from "./Icon";
 
-const EXAMPLES = ["cut the first 2 seconds", "zoom on his face at 0:12", "end right after the kill", "add the whoosh"];
+const EXAMPLES = ["smoother zooms, only on big moments", "no zooms", "under 30 seconds", "no sound effects", "blue captions"];
 
 /** Deny / Revise / Approve, keys D / R / A. Revise opens the plain-English box in the flow, under the buttons. */
 export function ReviewDock({ clip }: { clip: Clip | null }) {
   const { act } = useStore();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const [all, setAll] = useState(true);  // D078: the fix also applies to every upcoming clip
   const area = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { setOpen(false); setText(""); }, [clip?.id]);
@@ -33,7 +34,7 @@ export function ReviewDock({ clip }: { clip: Clip | null }) {
   const note = cleanNote(text);
   const send = () => {
     if (!clip || !note) return;
-    act(clip, "revise", note);
+    act(clip, "revise", note, all);
     setOpen(false); setText("");
   };
 
@@ -43,7 +44,7 @@ export function ReviewDock({ clip }: { clip: Clip | null }) {
         <button type="button" disabled={!clip} className="deny" onClick={() => clip && act(clip, "reject")}>
           <Icon name="x" /> Deny <kbd>D</kbd>
         </button>
-        <button type="button" disabled={!clip} className={open ? "sel" : ""} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <button type="button" disabled={!clip} className={`rev${open ? " sel" : ""}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
           <Icon name="pen" /> Revise <kbd>R</kbd>
         </button>
         <button type="button" disabled={!clip} className="approve" onClick={() => clip && act(clip, "approve")}>
@@ -68,6 +69,12 @@ export function ReviewDock({ clip }: { clip: Clip | null }) {
               <button type="button" key={x} onClick={() => setText((t) => (t ? `${t.replace(/[.\s]+$/, "")}, ${x}` : x))}>{x}</button>
             ))}
           </div>
+          <label className={`allfix${all ? " on" : ""}`}>
+            <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
+            <span className="sw" aria-hidden="true"><i /></span>
+            <span><b>Fix this on every clip</b> · style fixes (zooms, camera, sound, captions, length) carry over,
+              and clips already waiting get re-edited before you see them</span>
+          </label>
           <div className="revise-f">
             <span>{text.length}/500 · Ctrl+Enter sends</span>
             <button type="button" className="btn light sm" disabled={!note} onClick={send}>Send revision</button>

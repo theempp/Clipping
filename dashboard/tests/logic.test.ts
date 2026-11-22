@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cleanNote, downloadName, mmss, openSubmissions, pcState, rankQueue, secondsLeft } from "../lib/logic.ts";
+import { cleanNote, downloadName, mmss, openSubmissions, pcState, rankQueue, secondsLeft, weekStats } from "../lib/logic.ts";
 import { demoSnapshot } from "../lib/demo.ts";
 import { heatStrip } from "../lib/view.ts";
 import type { Clip, Heartbeat, Submission } from "../lib/types.ts";
@@ -25,6 +25,24 @@ test("queue: only pending_review, score desc, then confidence, then oldest", () 
   assert.deepEqual(q.map((c) => c.id), ["b", "c", "f", "a", "d"]);
 });
 
+test("week stats: 7 days, approve streak, approval rate, average score", () => {
+  const at = (daysAgo: number) => new Date(NOW - daysAgo * 86400_000).toISOString();
+  const w = weekStats([
+    clip({ id: "1", state: "approved", reviewed_at: at(0), created_at: at(0), score_10: 8 }),
+    clip({ id: "2", state: "published", reviewed_at: at(1), created_at: at(1), score_10: 6 }),
+    clip({ id: "3", state: "rejected", created_at: at(1), score_10: 4 }),
+    clip({ id: "4", state: "approved", reviewed_at: at(3), created_at: at(3) }),
+    clip({ id: "5", state: "pending_review", created_at: at(0) }),
+  ], NOW);
+  assert.equal(w.days.length, 7);
+  assert.equal(w.days[6].today, true);
+  assert.equal(w.days[6].made, 2);
+  assert.equal(w.streak, 2);
+  assert.equal(w.approved7, 3);
+  assert.equal(w.approvalRate, 0.75);
+  assert.equal(w.avgScore, 6);
+});
+
 const hb = (secAgo: number, status: Heartbeat["status"]): Heartbeat =>
   ({ worker_id: "pc", seen_at: new Date(NOW - secAgo * 1000).toISOString(), status });
 
@@ -35,6 +53,7 @@ test("pc state comes from the heartbeat, never from the switch alone", () => {
   assert.equal(pcState(hb(5, { awake: true, live: [] }), false, NOW), "sleeping");
   assert.equal(pcState(hb(5, { awake: true, live: ["twitch:lacy"] }), true, NOW), "watching");
   assert.equal(pcState(hb(5, { awake: true, live: [] }), true, NOW), "idle");
+  assert.equal(pcState(hb(5, { awake: false }), false, NOW), "asleep");
 });
 
 test("30-minute countdown runs from the deadline and closes at zero", () => {

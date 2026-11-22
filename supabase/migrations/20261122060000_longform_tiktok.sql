@@ -1,4 +1,4 @@
--- Long-form TikTok videos for Zwoclipp (D075-D078). Videos enter the normal review queue as
+-- Long-form TikTok videos for Zwoclipp (D079-D082). Videos enter the normal review queue as
 -- clips (category 'longform'); this table carries their test tags, the manual TikTok post,
 -- and the stats zo enters from TikTok Studio so the test cells can be ranked.
 
@@ -63,7 +63,7 @@ begin
   return r;
 end $$;
 
--- D078 kill rule input: zo records a TikTok eligibility notice on a video.
+-- D082 kill rule input: zo records a TikTok eligibility notice on a video.
 create or replace function public.set_tiktok_notice(p_video text, p_notice text)
 returns public.longform_videos language plpgsql security definer set search_path = public as $$
 declare r public.longform_videos;

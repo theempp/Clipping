@@ -1,6 +1,6 @@
 """Drive long videos for Zwoclipp: plan -> script -> voice -> render -> QA -> review queue.
 
-Two plans a day (D078). Nothing posts: TikTok upload is manual after zo approves (D074).
+Two plans a day (D082). Nothing posts: TikTok upload is manual after zo approves (D074).
 """
 from __future__ import annotations
 

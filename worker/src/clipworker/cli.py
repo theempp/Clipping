@@ -6,7 +6,7 @@
   clipworker live                   run everything (PC on = monitoring on)
   clipworker publish-once           one publisher pass (approved clips only)
   clipworker discord                campaign watcher bot
-  clipworker longform-once          plan/script/voice/render/QA today's Zwoclipp long videos (D075-D078)
+  clipworker longform-once          plan/script/voice/render/QA today's Zwoclipp long videos (D079-D082)
 """
 from __future__ import annotations
 

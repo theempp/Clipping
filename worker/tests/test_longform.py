@@ -1,4 +1,4 @@
-"""Long-form TikTok pipeline (D075-D078): planner, schedule, script checks, timeline, render, QA, runner."""
+"""Long-form TikTok pipeline (D079-D082): planner, schedule, script checks, timeline, render, QA, runner."""
 import json
 import subprocess
 from datetime import date
@@ -51,7 +51,7 @@ def _script_raw(plan, extra_words=0):
 # ---- planner -------------------------------------------------------------------------
 
 def test_beat_skips_sponsored_weak_and_unjudged():
-    assert beat_from_job(_job(1, campaign="camp1"), "lacy") is None          # D077
+    assert beat_from_job(_job(1, campaign="camp1"), "lacy") is None          # D081
     assert beat_from_job(_job(1, score=5), "lacy") is None
     j = _job(1)
     j.data["judgment"] = {}
