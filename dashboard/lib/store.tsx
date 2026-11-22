@@ -8,7 +8,7 @@ import type { Clip, ReviewAction, Snapshot } from "./types";
 
 export const UNDO_MS = 4000;
 
-type Pending = { clip: Clip; action: ReviewAction; note?: string; until: number };
+type Pending = { clip: Clip; action: ReviewAction; note?: string; applyAll?: boolean; until: number };
 
 type Store = {
   demo: boolean;
@@ -17,8 +17,10 @@ type Store = {
   snap: Snapshot;
   pending: Pending | null;
   /** Approve / deny wait UNDO_MS before they reach the database, so a stray key press can be undone. */
-  act: (clip: Clip, action: ReviewAction, note?: string) => void;
+  /** applyAll (revise only): the note's style asks also become standing rules for every clip (D078). */
+  act: (clip: Clip, action: ReviewAction, note?: string, applyAll?: boolean) => void;
   undo: () => void;
+  setRuleActive: (id: string, on: boolean) => Promise<void>;
   setAwake: (on: boolean) => Promise<void>;
   markSubmitted: (id: string) => Promise<void>;
   mediaUrl: (path: string | null, download?: string) => Promise<string | null>;
@@ -27,10 +29,28 @@ type Store = {
 
 const EMPTY: Snapshot = {
   streamers: [], clips: [], submissions: [], heartbeat: null,
-  control: { awake: false, updated_at: new Date(0).toISOString() }, candidates: [], spend: [], revisions: [],
+  control: { awake: false, updated_at: new Date(0).toISOString() }, candidates: [], spend: [], revisions: [], rules: [],
 };
 
 const Ctx = createContext<Store | null>(null);
+
+const DEMO_KEY = "clipp.demo.awake";
+function readDemoAwake(): boolean {
+  try { return localStorage.getItem(DEMO_KEY) === "1"; } catch { return false; }
+}
+function writeDemoAwake(on: boolean) {
+  try { localStorage.setItem(DEMO_KEY, on ? "1" : "0"); } catch { /* storage blocked: state lasts this visit only */ }
+}
+/** Demo snapshot with the PC told to sleep: switch off, heartbeat reports asleep, nobody watched. */
+function demoSleep(s: Snapshot): Snapshot {
+  const at = new Date().toISOString();
+  return {
+    ...s,
+    control: { awake: false, updated_at: at },
+    heartbeat: s.heartbeat && { ...s.heartbeat, seen_at: at,
+      status: { ...s.heartbeat.status, awake: false, live: [], gpu: { ...s.heartbeat.status.gpu, util: 4 } } },
+  };
+}
 
 export function useStore(): Store {
   const s = useContext(Ctx);
@@ -53,7 +73,7 @@ async function loadLive(): Promise<Snapshot> {
   const since6h = new Date(Date.now() - 6 * 3600_000).toISOString();
   const since24h = new Date(Date.now() - 24 * 3600_000).toISOString();
   const month = new Date(); month.setUTCDate(1); month.setUTCHours(0, 0, 0, 0);
-  const [st, cl, su, hb, co, ca, sp, rv] = await Promise.all([
+  const [st, cl, su, hb, co, ca, sp, rv, ru] = await Promise.all([
     sb.from("streamers").select("id,slug,display_name,twitch_login,kick_slug,avatar_url").order("display_name"),
     sb.from("clips").select("*").order("created_at", { ascending: false }).limit(300),
     sb.from("submissions_live").select("*").gte("created_at", since24h).order("deadline_at"),
@@ -64,8 +84,10 @@ async function loadLive(): Promise<Snapshot> {
     sb.from("spend_month").select("kind,usd").gte("month", month.toISOString()),
     sb.from("revisions").select("id,clip_id,kind,note,created_at,resolved_at")
       .order("created_at", { ascending: false }).limit(200),
+    sb.from("edit_rules").select("id,key,value,label,note,clip_id,active,fixed_count,created_at")
+      .order("created_at", { ascending: false }).limit(50),
   ]);
-  const err = [st, cl, su, hb, co, ca, sp, rv].find((r) => r.error)?.error;
+  const err = [st, cl, su, hb, co, ca, sp, rv, ru].find((r) => r.error)?.error;
   if (err) throw new Error(err.message);
   return {
     streamers: st.data ?? [],
@@ -76,6 +98,7 @@ async function loadLive(): Promise<Snapshot> {
     candidates: ca.data ?? [],
     spend: (sp.data ?? []).map((r) => ({ kind: r.kind, usd: Number(r.usd) })),
     revisions: rv.data ?? [],
+    rules: ru.data ?? [],
   };
 }
 
@@ -88,6 +111,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const pendingRef = useRef<Pending | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const urls = useRef(new Map<string, { url: string; exp: number }>());
+  // While a Wake Up write is in flight, a refresh that started earlier must not flip the switch back.
+  const awakeWant = useRef<boolean | null>(null);
+  const snapRef = useRef(snap);
+  snapRef.current = snap;
 
   const refresh = useCallback(async () => {
     if (IS_DEMO) return;
@@ -96,7 +123,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const { data: owner, error: e } = await sb.rpc("is_owner");
       if (e) throw new Error(e.message);
       if (!owner) { setError("not-owner"); setReady(true); return; }
-      setSnap(await loadLive());
+      const next = await loadLive();
+      const want = awakeWant.current;
+      setSnap(want == null ? next : { ...next, control: { ...next.control, awake: want } });
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -107,13 +136,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Initial load, realtime refresh (debounced), and a 30 s safety poll.
   useEffect(() => {
-    if (IS_DEMO) { setSnap(demoSnapshot()); setReady(true); return; }
+    if (IS_DEMO) {
+      // Demo keeps the switch across reloads; it starts asleep until Zo wakes it.
+      const on = readDemoAwake();
+      const d = demoSnapshot();
+      setSnap(on ? d : demoSleep(d));
+      setReady(true);
+      // The fake PC keeps reporting in, so demo never drifts to "offline".
+      const beat = setInterval(() => setSnap((s) => (s.heartbeat
+        ? { ...s, heartbeat: { ...s.heartbeat, seen_at: new Date().toISOString() } } : s)), 15_000);
+      return () => clearInterval(beat);
+    }
     void refresh();
     const sb = browserClient();
     let t: ReturnType<typeof setTimeout> | null = null;
     const bump = () => { if (t) clearTimeout(t); t = setTimeout(() => void refresh(), 400); };
     const ch = sb.channel("clipp-dashboard");
-    for (const table of ["clips", "worker_heartbeat", "submissions", "control"]) {
+    for (const table of ["clips", "worker_heartbeat", "submissions", "control", "edit_rules"]) {
       ch.on("postgres_changes", { event: "*", schema: "public", table }, bump);
     }
     ch.subscribe();
@@ -131,12 +170,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
           ? [{ id: `demo-rev-${Date.now()}`, clip_id: p.clip.id, kind: "other", note: p.note,
                created_at: new Date().toISOString(), resolved_at: null }, ...s.revisions]
           : s.revisions,
+        // demo stand-in for the PC's note reader: any note shared with all clips shows up as a rule
+        rules: p.action === "revise" && p.note && p.applyAll !== false
+          ? [{ id: `demo-rule-${Date.now()}`, key: "zoom_style", value: "smooth", label: `From your note: ${p.note}`,
+               note: p.note, clip_id: p.clip.id, active: true, fixed_count: 0, created_at: new Date().toISOString() },
+             ...s.rules]
+          : s.rules,
       }));
       return;
     }
-    // Revision box: kind 'other', the typed text as the note, empty payload (worker parses it, P4).
+    // Revision box: kind 'other', the typed text as the note. The PC reads it (P4) and, unless Zo
+    // turned it off, keeps its style asks as standing rules for every later clip (D078).
     const { error: e } = await browserClient().rpc("review_clip", {
-      p_clip: p.clip.id, p_action: p.action, p_note: p.note ?? null, p_kind: "other", p_payload: {},
+      p_clip: p.clip.id, p_action: p.action, p_note: p.note ?? null, p_kind: "other",
+      p_payload: p.action === "revise" ? { apply_all: p.applyAll !== false } : {},
     });
     if (e) setError(e.message);
     await refresh();
@@ -151,9 +198,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (p) void commit(p);
   }, [commit]);
 
-  const act = useCallback((clip: Clip, action: ReviewAction, note?: string) => {
+  const act = useCallback((clip: Clip, action: ReviewAction, note?: string, applyAll?: boolean) => {
     flush();
-    if (action === "revise") { void commit({ clip, action, note, until: Date.now() }); return; }
+    if (action === "revise") { void commit({ clip, action, note, applyAll, until: Date.now() }); return; }
     const p = { clip, action, note, until: Date.now() + UNDO_MS };
     pendingRef.current = p;
     setPending(p);
@@ -176,17 +223,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const setAwake = useCallback(async (on: boolean) => {
     if (IS_DEMO) {
-      setSnap((s) => ({
-        ...s,
-        control: { awake: on, updated_at: new Date().toISOString() },
-        heartbeat: s.heartbeat && { ...s.heartbeat, seen_at: new Date().toISOString(),
-          status: { ...s.heartbeat.status, awake: on, live: on ? ["twitch:xqc", "twitch:stableronaldo", "twitch:kaicenat"] : [],
-            gpu: { ...s.heartbeat.status.gpu, util: on ? 62 : 4 } } },
-      }));
+      writeDemoAwake(on);
+      setSnap((s) => (on ? { ...demoSnapshot(), clips: s.clips, submissions: s.submissions, revisions: s.revisions } : demoSleep(s)));
       return;
     }
+    const prev = snapRef.current.control.awake;
     setSnap((s) => ({ ...s, control: { awake: on, updated_at: new Date().toISOString() } }));
+    awakeWant.current = on;
     const { error: e } = await browserClient().rpc("set_awake", { p_on: on });
+    awakeWant.current = null;
+    if (e) {
+      setError(`Wake Up did not save: ${e.message}`);
+      setSnap((s) => ({ ...s, control: { ...s.control, awake: prev } }));
+      return;
+    }
+    await refresh();
+  }, [refresh]);
+
+  const setRuleActive = useCallback(async (id: string, on: boolean) => {
+    setSnap((s) => ({ ...s, rules: s.rules.map((r) => (r.id === id ? { ...r, active: on } : r)) }));
+    if (IS_DEMO) return;
+    const { error: e } = await browserClient().rpc("set_rule_active", { p_rule: id, p_on: on });
     if (e) setError(e.message);
     await refresh();
   }, [refresh]);
@@ -221,8 +278,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Store>(() => ({
-    demo: IS_DEMO, ready, error, snap, pending, act, undo, setAwake, markSubmitted, mediaUrl, signOut,
-  }), [ready, error, snap, pending, act, undo, setAwake, markSubmitted, mediaUrl, signOut]);
+    demo: IS_DEMO, ready, error, snap, pending, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl, signOut,
+  }), [ready, error, snap, pending, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl, signOut]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

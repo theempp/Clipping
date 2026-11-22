@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { mmss, openSubmissions, secondsLeft } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
 import { Icon } from "./Icon";
@@ -32,7 +32,8 @@ export function Countdown({ variant = "card" }: { variant?: "card" | "dial" }) {
           const a = (i / 60) * Math.PI * 2 - Math.PI / 2;
           const r1 = i % 5 === 0 ? 68 : 73;
           return <line key={i} x1={88 + Math.cos(a) * r1} y1={88 + Math.sin(a) * r1}
-            x2={88 + Math.cos(a) * 80} y2={88 + Math.sin(a) * 80} className={i / 60 < frac ? "on" : ""} />;
+            x2={88 + Math.cos(a) * 80} y2={88 + Math.sin(a) * 80} className={i / 60 < frac ? "on" : ""}
+            style={{ "--t": (i / 60).toFixed(3) } as CSSProperties} />;
         })}
         <text x="88" y="92" textAnchor="middle" className="dt">{s ? mmss(left) : "--:--"}</text>
         <text x="88" y="114" textAnchor="middle" className="ds">{s ? "to submit" : "nothing open"}</text>

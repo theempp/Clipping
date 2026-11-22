@@ -156,15 +156,23 @@ export default function LivePage() {
         </div>
         {last.length > 1 ? (
           <svg viewBox="0 0 300 84" preserveAspectRatio="none" className="spark" role="img" aria-label="Detector score over time">
-            <polyline points={`0,84 ${line} 300,84`} className="fill" />
-            <polyline points={line} className="ln" vectorEffect="non-scaling-stroke" />
+            <defs>
+              <linearGradient id="g-heat-ln" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0" stopColor="var(--cyan)" /><stop offset=".55" stopColor="var(--lime)" /><stop offset="1" stopColor="var(--orange)" />
+              </linearGradient>
+              <linearGradient id="g-heat-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="var(--lime)" stopOpacity=".32" /><stop offset="1" stopColor="var(--cyan)" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <polyline points={`0,84 ${line} 300,84`} className="fill" fill="url(#g-heat-fill)" />
+            <polyline points={line} className="ln" stroke="url(#g-heat-ln)" vectorEffect="non-scaling-stroke" />
           </svg>
         ) : <p className="quiet">No detector data yet for this stream.</p>}
         {bars.length > 0 && <>
           <div className="bars" role="img" aria-label="Detector score per moment">
             {bars.map((c, i) => (
               <i key={i} title={`${c.score.toFixed(1)}× · ${c.outcome}`} className={c.outcome === "kept" ? "kept" : ""}
-                style={{ height: `${Math.max(8, (c.score / maxScore) * 100)}%` }} />
+                style={{ height: `${Math.max(8, (c.score / maxScore) * 100)}%`, animationDelay: `${i * 12}ms` }} />
             ))}
           </div>
           <div className="legend"><span><i className="k-kept" />kept as clip</span><span><i className="k-mom" />scored moment</span>

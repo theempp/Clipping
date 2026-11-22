@@ -83,7 +83,8 @@ def test_moment_to_pending_review(tmp_path, source_video):
     clip = sb.t["clips"][0]
     assert clip["state"] == "pending_review" and clip["campaign_id"] == "camp1"
     assert clip["streamer_id"] == "s-lacy" and "#lacy" in clip["description"]
-    assert set(sb.uploads) == {f"lacy/{job}/clip.mp4", f"lacy/{job}/thumb.jpg"}
+    assert set(sb.uploads) == {f"lacy/{job}/clip.mp4", f"lacy/{job}/thumb.jpg", f"lacy/{job}/source.mp4"}
+    assert clip["source_path"] == f"lacy/{job}/source.mp4"   # before/after on the dashboard
     assert sb.t["spend"][0]["kind"] == "grok"
     assert sb.t["candidate_log"][0]["outcome"] == "kept"
 
@@ -177,3 +178,28 @@ def test_revision_box_plain_english(tmp_path, source_video):
     assert abs(clip["duration_s"] - 10.0) < 0.01 and clip["manifest"]["sfx"] is False
     ass = (Path(clip["manifest"]["video"]).parent / "captions.ass").read_text(encoding="utf-8")
     assert "&H00FF802F" in ass                       # #2F80FF as ASS BGR highlight
+    # the note's style asks became standing rules (D078); the title-free note gives three
+    assert {r["key"] for r in sb.t["edit_rules"]} == {"max_len_s", "sfx", "caption_colour"}
+    assert sb.t["revisions"][0]["learned_at"]
+
+
+def test_revision_note_fixes_clips_already_waiting(tmp_path, source_video):
+    """Zo's zoom note on clip A re-edits clip B, already in review with the old zooms (D078)."""
+    pipe, sb, store = _env(tmp_path, source_video)
+    pipe.on_moment(_moment())
+    pipe.on_moment(_moment(t=1060.0))
+    for _ in range(16):
+        pipe.run_once()
+    a, b = sb.t["clips"][:2]
+    for c in (a, b):  # rendered before D077: zooms present, old motion
+        sb.update("clips", {"id": c["id"]}, {"manifest": {**c["manifest"], "zooms": [2.0], "motion": {}}})
+    sb.human(a["id"], "revise")
+    sb.insert("revisions", {"clip_id": a["id"], "kind": "other", "resolved_at": None, "payload": {},
+                            "note": "the zoom in and out is way too sharp, make it smoother"})
+    pipe.process_revisions()
+    rule = sb.t["edit_rules"][0]
+    assert rule["key"] == "zoom_style" and rule["value"] == "smooth"
+    b = next(c for c in sb.t["clips"] if c["id"] == b["id"])
+    assert b["state"] == "pending_review" and b["revision"] == 1 and not b.get("fixing")
+    assert b["manifest"]["motion"]["motion_version"] == 2
+    assert sb.t["edit_rules"][0]["fixed_count"] == 1

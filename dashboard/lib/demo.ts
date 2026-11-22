@@ -25,7 +25,7 @@ export function demoSnapshot(now = Date.now()): Snapshot {
       state: "pending_review", hook: null, description: null, category: "gaming",
       confidence: 0.8, detector_score: 3.1, score_10: 7, hook_type: "reaction_peak",
       moment_at: iso(40 * min), duration_s: 34, storage_path: `/demo/clip${media}.mp4`,
-      thumb_path: `/demo/thumb${media}.jpg`, qa: { passed: true, captions: "whisperX", size_mb: 21.4 },
+      thumb_path: `/demo/thumb${media}.jpg`, source_path: `/demo/source${media}.mp4`, fixing: null, qa: { passed: true, captions: "whisperX", size_mb: 21.4 },
       judge: {}, revision: 0, reviewed_at: null, created_at: iso(30 * min), ...p,
     };
   };
@@ -87,6 +87,9 @@ export function demoSnapshot(now = Date.now()): Snapshot {
     spend: [{ kind: "grok", usd: 31.2 }, { kind: "x_post", usd: 38.0 }, { kind: "storage", usd: 4.8 }],
     revisions: [{ id: "demo-rev-1", clip_id: "demo-4", kind: "other", note: "cut the first two seconds",
       created_at: iso(48 * min), resolved_at: iso(43 * min) }],
+    rules: [{ id: "demo-rule-1", key: "zoom_style", value: "smooth", label: "Smooth camera: eased zooms only on big moments",
+      note: "the zoom in and out is way too sharp, make it smoother", clip_id: "demo-4", active: true,
+      fixed_count: 2, created_at: iso(47 * min) }],
   };
 }
 

@@ -1,4 +1,6 @@
+import math
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -12,7 +14,9 @@ from clipworker.transcribe import Word
 
 from conftest import TEST_LAYOUT, TEST_STYLE, needs_ffmpeg
 
-Z = ZoomParams(scale=1.2)
+# the pre-D077 behaviour, kept selectable: linear ramps at every sentence end
+Z = ZoomParams(scale=1.2, ramp_s=0.2, hold_s=1.2, min_gap_s=4.0, max_zooms=8, moments="sentences", ease="linear")
+ZS = ZoomParams(scale=1.12)  # D077 defaults: eased, peak + shouted lines, max 2
 WORDS = [Word(0.5, 0.9, "no"), Word(0.9, 1.4, "way."), Word(1.6, 2.0, "he"), Word(2.0, 2.5, "did"),
          Word(2.5, 3.0, "it!"), Word(5.0, 5.5, "chat"), Word(5.5, 6.0, "look"), Word(7.0, 7.5, "again."),
          Word(12.0, 12.5, "last."), Word(14.6, 14.9, "end")]
@@ -36,6 +40,30 @@ def test_zoom_expr_is_trapezoid():
     assert e.startswith("1+0.2000*(clip((it-2.000)/0.200,0,1)*clip((3.600-it)/0.200,0,1))")
     assert f(1.0) == 1 and f(2.5) == pytest.approx(1.2) and f(3.7) == 1
     assert zoom_expr([], Z) == "1"
+
+
+def test_smooth_zooms_only_on_big_moments():
+    assert zoom_times(WORDS, 15, ZS) == [2.2]            # "it!" is the only shouted line
+    assert zoom_times(WORDS, 15, ZS, peak=11.0) == [2.2, 11.0]
+    assert zoom_times(WORDS, 15, ZS, peak=9.0) == [9.0]    # shout 6.8 s from the peak: too close
+    assert zoom_times(WORDS, 15, replace(ZS, moments="peak"), peak=9.0) == [9.0]
+    assert len(zoom_times(WORDS * 3, 40, ZS, peak=1.0)) <= 2
+
+
+def test_smooth_zoom_is_eased_with_no_hard_stop():
+    e = zoom_expr([2.0], ZS)
+    assert "cos(PI*clip((it-2.000)/0.600,0,1))" in e and "clip((5.000-it)/0.600,0,1)" in e
+    ease = lambda x: (1 - math.cos(math.pi * min(max(x, 0), 1))) / 2
+    f = lambda it: 1 + 0.12 * ease((it - 2.0) / 0.6) * ease((5.0 - it) / 0.6)
+    # velocity is ~0 where the push starts and lands: no snap
+    assert f(2.01) - f(2.0) < 1e-3 and f(2.6) == pytest.approx(1.12) and f(5.0) == 1
+    assert "clip(it/10.000,0,1)" in zoom_expr([], replace(ZS, drift=0.04), 10.0)
+
+
+def test_reframe_glides_small_moves_and_cuts_big_ones():
+    f = track_crop_filter([(0, 4, 0.45), (4, 8, 0.55), (8, 12, 0.95)])
+    assert "if(lt(t,4.600)" in f and "cos(PI*clip((t-4.000)/0.600,0,1))" in f   # 0.45 -> 0.55 glides
+    assert "(t-8.000)" not in f                                                    # 0.55 -> 0.95 cuts
 
 
 def test_settings_zoom_validation(tmp_path):

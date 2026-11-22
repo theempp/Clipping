@@ -22,9 +22,19 @@ _SENT_END = (".", "!", "?")
 SENTENCE_PAUSE_S = 0.5
 
 
+def _emphatic(text: str) -> bool:
+    """A shouted line: ends in '!' or is a real word in capitals (WHAT, NO)."""
+    t = text.strip().strip("\"'")
+    core = re.sub(r"[^A-Za-z]", "", t)
+    return t.endswith("!") or (len(core) >= 3 and core.isupper())
+
+
 def zoom_times(words: list[Word], duration: float, p: ZoomParams,
                peak: float | None = None) -> list[float]:
-    """Start times (clip seconds) for zoom pulses. Pure function."""
+    """Start times (clip seconds) for zoom pulses. Pure function.
+
+    moments: "peak" = detector peak only; "emphasis" = peak, then shouted lines;
+    "sentences" = peak, then every sentence end or pause (the old D051 behaviour)."""
     if not p.on:
         return []
     span = 2 * p.ramp_s + p.hold_s
@@ -32,6 +42,12 @@ def zoom_times(words: list[Word], duration: float, p: ZoomParams,
     if peak is not None and 0 <= peak < duration:
         cands.append(peak)
     for i, w in enumerate(words):
+        if p.moments == "peak":
+            break
+        if p.moments == "emphasis":
+            if _emphatic(w.text):  # land the push on the shout itself
+                cands.append(max(0.0, w.start - p.ramp_s * 0.5) + p.lead_s)
+            continue
         nxt = words[i + 1].start if i + 1 < len(words) else None
         ends = w.text.rstrip().endswith(_SENT_END)
         pause = nxt is not None and nxt - w.end >= SENTENCE_PAUSE_S
@@ -48,21 +64,33 @@ def zoom_times(words: list[Word], duration: float, p: ZoomParams,
     return sorted(round(t, 3) for t in out)
 
 
-def zoom_expr(times: list[float], p: ZoomParams) -> str:
-    """zoompan `z` expression: 1 + (scale-1) * sum of trapezoid pulses over input time."""
+def _ramp(x: str, ease: str) -> str:
+    """0 -> 1 ramp over x in [0, 1]. smooth = cosine ease-in-out: no hard start or stop."""
+    c = f"clip({x},0,1)"
+    return c if ease == "linear" else f"(1-cos(PI*{c}))/2"
+
+
+def zoom_expr(times: list[float], p: ZoomParams, duration: float | None = None) -> str:
+    """zoompan `z` expression: 1 + slow drift + (scale-1) * sum of eased pulses over input time."""
+    drift = f"+{p.drift:.4f}*clip(it/{duration:.3f},0,1)" if p.drift > 0 and duration else ""
     if not times:
-        return "1"
+        return f"1{drift}" if drift else "1"
     a = p.scale - 1
     pulses = []
     for t in times:
-        up, down = t + p.ramp_s, t + p.ramp_s + p.hold_s
-        pulses.append(f"clip((it-{t:.3f})/{p.ramp_s:.3f},0,1)*clip(({down + p.ramp_s:.3f}-it)/{p.ramp_s:.3f},0,1)")
-    return f"1+{a:.4f}*({'+'.join(pulses)})"
+        end = t + 2 * p.ramp_s + p.hold_s
+        pulses.append(f"{_ramp(f'(it-{t:.3f})/{p.ramp_s:.3f}', p.ease)}"
+                      f"*{_ramp(f'({end:.3f}-it)/{p.ramp_s:.3f}', p.ease)}")
+    return f"1{drift}+{a:.4f}*({'+'.join(pulses)})"
 
 
-def zoompan_filter(times: list[float], p: ZoomParams, w: int, h: int, fps: int) -> str:
-    z = zoom_expr(times, p)
-    return (f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+def zoompan_filter(times: list[float], p: ZoomParams, w: int, h: int, fps: int,
+                   duration: float | None = None) -> str:
+    """Zoom on a 2x upscaled panel: zoompan snaps its window to whole pixels, which at 1x
+    shows as a stepped, shaky push. At 2x the steps are half a pixel and read as smooth."""
+    z = zoom_expr(times, p, duration)
+    return (f"scale=iw*2:ih*2:flags=bicubic,"
+            f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
             f":d=1:s={w}x{h}:fps={fps}")
 
 
@@ -125,13 +153,26 @@ def shot_centres(src: Path, t_in: float, t_out: float, work: Path, ffmpeg: str =
     return out
 
 
+GLIDE_S = 0.6          # camera glide time between nearby framings
+GLIDE_MAX_SHIFT = 0.2  # bigger moves than this (fraction of width) stay hard cuts
+
+
 def track_crop_filter(centres: list[tuple[float, float, float]]) -> str:
-    """9:16 full-height crop whose x jumps to each shot's face (only at cuts)."""
-    def x_of(c: float) -> str:
-        return f"max(0,min(iw-ow,{c:.4f}*iw-ow/2))"
+    """9:16 full-height crop that follows each shot's face.
+
+    A big move (a real cut to a different framing) jumps inside the cut. A small move
+    (same scene, the face drifted, or a false cut) glides there with an eased pan instead
+    of snapping (D077: no robotic camera)."""
+    def x_of(c: str) -> str:
+        return f"max(0,min(iw-ow,{c}*iw-ow/2))"
     if not centres:
         return "crop=ih*9/16:ih"
-    expr = x_of(centres[-1][2])
-    for a, b, c in reversed(centres[:-1]):
-        expr = f"if(lt(t,{b:.3f}),{x_of(c)},{expr})"
+    # Built from the last shot backwards: `expr` is always the x for t >= the current shot's start.
+    expr = x_of(f"{centres[-1][2]:.4f}")
+    for i in range(len(centres) - 1, 0, -1):
+        a, c, prev = centres[i][0], centres[i][2], centres[i - 1][2]
+        if abs(c - prev) <= GLIDE_MAX_SHIFT and c != prev:
+            pos = f"({prev:.4f}+({c - prev:.4f})*{_ramp(f'(t-{a:.3f})/{GLIDE_S:.3f}', 'smooth')})"
+            expr = f"if(lt(t,{a + GLIDE_S:.3f}),{x_of(pos)},{expr})"
+        expr = f"if(lt(t,{a:.3f}),{x_of(f'{prev:.4f}')},{expr})"
     return f"crop=ih*9/16:ih:x='{expr}':y=0"
