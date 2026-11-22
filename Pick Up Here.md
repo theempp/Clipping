@@ -16,5 +16,6 @@
 - `.env` at `C:\clip-work\Clipping\worker\.env` has Supabase, Twitch, Kick, YouTube, X, Discord and ffmpeg/streamlink paths set. Only the Grok fields are empty.
 
 ## Running the dashboard on the PC
-- PowerShell: `cd C:\clip-work\Clipping\dashboard`, `npm run dev`, then open http://localhost:3000. Closing that window stops it.
+- Use `main` in `C:\clip-work\Clipping`. Double-click `Start Dashboard.cmd`, then open http://localhost:3000 after Ready. Closing that window stops it. If it is already running, use that server.
+- This is the updated dashboard with before/after review, weekly stats, revision memory, and the new Wake Up control. Do not start a copied `dashboard-active` folder or the Desktop checkout (its `HOME!` path breaks Webpack).
 - Log in from the same Chrome on the PC (magic link links fail on the phone, since localhost is the phone there).
