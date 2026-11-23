@@ -516,3 +516,14 @@ revoke execute on function public.is_pod_owner(uuid), public.my_ledger_pod_ids()
   public.ledger_reverse(uuid, text), public.pod_campaign_set(uuid, uuid, text) from public, anon;
 grant execute on function public.is_pod_owner(uuid), public.my_ledger_pod_ids(),
   public.ledger_reverse(uuid, text), public.pod_campaign_set(uuid, uuid, text) to authenticated;
+
+-- Owners added later also become Pod 1 owners (D102: Zo approves Pod 1 as its owner).
+create or replace function public.owner_to_pod1() returns trigger
+language plpgsql security definer set search_path = public as $f$
+begin
+  insert into public.pod_members(pod_id, user_id, role)
+  values (public.default_pod_id(), new.user_id, 'owner') on conflict do nothing;
+  return new;
+end $f$;
+drop trigger if exists owner_to_pod1 on public.owners;
+create trigger owner_to_pod1 after insert on public.owners for each row execute function public.owner_to_pod1();
