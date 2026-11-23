@@ -14,3 +14,4 @@ psql -c "create database clipp_test"
 psql -d clipp_test -f "$here/supabase_stub.sql"
 for f in "$here"/../migrations/*.sql; do psql -d clipp_test -f "$f"; done
 psql -d clipp_test -At -f "$here/core_test.sql"
+psql -d clipp_test -At -f "$here/pods_test.sql"
