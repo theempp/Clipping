@@ -289,3 +289,39 @@ def test_render_report_lists_gated():
                         "candidates": 2, "judged": 0, "jobs": [],
                         "gated": [{"start": 65, "reason": "dead air: before show_start"}]})
     assert "0:01:05 | gated" in md and "dead_air_gate" in md
+
+
+def test_rejudge_updates_metadata_never_state(tmp_path):
+    from clipworker.judge.grok import Judgment
+    from clipworker.rejudge import rejudge_queue
+    from clipworker.store import Store
+    s = _settings(tmp_path, score_100=False)
+    live = tmp_path / "live.sqlite3"
+    st = Store(live)
+    jid = "j1"
+    st.create_job(jid, "twitch:lacy", 10.0, 50.0, 30.0, 5.0, {
+        "capture": {"start_ts": 10.0, "end_ts": 50.0}, "rules": {"min_s": 10, "max_s": 60},
+        "words": [], "features": {"z_chat": 2.0}, "chat_sample": [], "rules_summary": "", "peak_ts": 30.0}, None)
+    st.db.commit()
+
+    class SB:
+        updates = []
+
+        def select(self, table, **k):
+            return [{"id": "c1", "job_id": jid, "channel_key": "twitch:lacy", "title": "UNJUDGED: x", "judge": {}}]
+
+        def update(self, table, match, values):
+            self.updates.append((table, match, values))
+
+        def log_spend(self, *a, **k):
+            pass
+
+    class J:
+        def judge(self, *a, **k):
+            return Judgment(False, "funny", 1, 20, "h", "Boring bit", [], 0.4, "meh", score_10=3)
+
+    sb = SB()
+    rows = rejudge_queue(s, live, tmp_path / "rj", sb, J())
+    assert rows[0]["keep"] is False
+    (_, match, vals), = sb.updates
+    assert match == {"id": "c1"} and "state" not in vals and vals["title"] == "WEAK: Boring bit"
