@@ -130,6 +130,8 @@ export function editNote(p: EditPlan, base: EditPlan): string {
   if ("cuts" in e) parts.push(droppedCuts(p).length ? `drop ${droppedCuts(p).map(([a, b]) => `${d(a)}-${d(b)}`).join(", ")}` : "keep every piece");
   if ("crop_x" in e) parts.push(`crop centre ${Math.round(p.crop_x * 100)}%`);
   if ("zoom" in e) parts.push(`zoom ${Math.round(p.zoom * 100)}%`);
+  if ("remove_tools" in e) parts.push(`remove ${p.remove_tools!.join(", ")}`);
+  if ("flashback" in e) parts.push(p.flashback === "approve" ? "flashback approved" : "flashback dropped");
   if ("headline" in e) parts.push(`headline "${p.headline.trim().slice(0, 80)}"`);
   if ("caption_style" in e) parts.push(p.caption_style === "words" ? "captions 2-3 words" : "captions full line");
   if ("emphasis_words" in e) parts.push(p.emphasis_words.length ? `emphasis ${p.emphasis_words.join(" ")}` : "no emphasis");
@@ -155,7 +157,35 @@ export function editPayload(p: EditPlan, base: EditPlan): Record<string, unknown
   if (p.headline.trim() && p.headline.trim() !== base.headline.trim()) out.headline = p.headline.trim();
   const cuts = droppedCuts(p);
   if (cuts.length || droppedCuts(base).length) out.cuts = cuts;
+  if ((p.remove_tools ?? []).length) out.remove_tools = p.remove_tools;
+  if (p.flashback) out.flashback = p.flashback;
   return out;
+}
+
+/** Tools every clip has (hard cut, headline box); they are not offered as toggles. */
+export const DEFAULT_TOOLS = ["hard_cut", "headline_box"];
+export const TOOL_LABEL: Record<string, string> = {
+  black_spacer: "Black spacer", slowmo_vignette: "Slow-mo + vignette", music_cue: "Music cue",
+  sfx_whoosh: "Whoosh", sfx_hit: "Hit", sfx_glitch: "Glitch",
+  swap_full_face: "Full-face swap", swap_full_game: "Full-game swap",
+};
+export type FlashbackProposal = { reason: string; source_moment: string };
+export type ClipRecipe = {
+  tools: string[]; captionStyle: string | null; flashbackOn: boolean; proposal: FlashbackProposal | null;
+};
+
+/** The edit recipe the PC stored in the render manifest (D114), or null for clips rendered before it. */
+export function clipRecipe(c: Clip): ClipRecipe | null {
+  const m = c.manifest as Record<string, unknown> | undefined;
+  const r = m?.recipe as { tools?: unknown; caption_style?: unknown; flashback?: { approved?: boolean } | null } | undefined;
+  if (!r || !Array.isArray(r.tools)) return null;
+  const pr = m?.flashback_proposal as Partial<FlashbackProposal> | null | undefined;
+  return {
+    tools: r.tools.filter((t): t is string => typeof t === "string" && !DEFAULT_TOOLS.includes(t)),
+    captionStyle: typeof r.caption_style === "string" ? r.caption_style : null,
+    flashbackOn: !!r.flashback?.approved,
+    proposal: pr && typeof pr.reason === "string" ? { reason: pr.reason, source_moment: String(pr.source_moment ?? "") } : null,
+  };
 }
 
 /** Pieces of the trimmed clip between splits: [start, end] in clip seconds. */

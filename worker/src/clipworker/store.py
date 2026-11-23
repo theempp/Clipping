@@ -156,6 +156,12 @@ class Store:
                                  (stage,)).fetchall():
             yield self._row(r)
 
+    def recent_jobs(self, channel: str, before_ts: float, limit: int = 60) -> list[Job]:
+        """This channel's earlier candidates (newest first), for flashback matching."""
+        return [self._row(r) for r in self.db.execute(
+            f"SELECT {self._COLS} FROM jobs WHERE channel=? AND trigger_ts<? ORDER BY trigger_ts DESC LIMIT ?",
+            (channel, before_ts, limit)).fetchall()]
+
     def triggers_between(self, channel: str, lo: float, hi: float) -> dict[str, float]:
         """{job_id: trigger_ts} for this channel's candidates in [lo, hi]."""
         rows = self.db.execute("SELECT id, trigger_ts FROM jobs WHERE channel=? AND trigger_ts BETWEEN ? AND ?",

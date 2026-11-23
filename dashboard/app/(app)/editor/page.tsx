@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ClipVideo } from "@/components/ClipCard";
 import { Icon } from "@/components/Icon";
-import { clampTrim, droppedCuts, editNote, emphasisWords, mmss, pieces, rankQueue } from "@/lib/logic";
+import { TOOL_LABEL, clampTrim, clipRecipe, droppedCuts, editNote, emphasisWords, mmss, pieces, rankQueue } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 import type { Clip, EditPlan } from "@/lib/types";
 
@@ -28,11 +28,13 @@ function Editor() {
   const bin = queue.filter((c) => who === "all" || c.streamer_id === who);
   const clip: Clip | null = snap.clips.find((c) => c.id === params.get("clip")) ?? queue[0] ?? null;
   const mine = !clip || canReview(clip);
+  const recipe = clip ? clipRecipe(clip) : null;
   const editable = clip?.state === "pending_review" && mine;
 
   const total = Math.max(1, clip?.duration_s ?? 30);
   const fresh = useCallback((): EditPlan => ({
-    trim_in: 0, trim_out: total, crop_x: 0.5, zoom: 1.12,
+    trim_in: 0, trim_out: total, crop_x: 0.5, zoom: 1, // D112: no zooms, so no zoom control
+    remove_tools: [],
     headline: clip?.title ?? "", caption_style: "words", splits: [], drop: [],
     emphasis_words: emphasisWords((clip?.hook ?? clip?.title ?? "").split(/\s+/).slice(0, 3).join(" ")),
   }), [clip?.id, clip?.title, clip?.hook, total]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -252,9 +254,33 @@ function Editor() {
               <option value="words">2-3 words · emphasis</option>
               <option value="line">Full line</option>
             </select></label>
-          <label className="field">Zoom <b>{Math.round(plan.zoom * 100)}%</b>
-            <input type="range" min={100} max={130} value={Math.round(plan.zoom * 100)}
-              onChange={(e) => setPlan((p) => ({ ...p, zoom: Number(e.target.value) / 100 }))} /></label>
+          {recipe && recipe.tools.length > 0 && (
+            <div className="field">Edit tools
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                {recipe.tools.map((t) => {
+                  const off = (plan.remove_tools ?? []).includes(t);
+                  return (
+                    <button key={t} type="button" className={off ? "" : "on"} aria-pressed={!off} disabled={!editable}
+                      title={off ? "Will be taken off this clip" : "On this clip. Click to take it off"}
+                      onClick={() => change({ remove_tools: off ? (plan.remove_tools ?? []).filter((x) => x !== t) : [...(plan.remove_tools ?? []), t] })}>
+                      {off ? "Off" : "On"} · {TOOL_LABEL[t] ?? t}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {recipe?.proposal && (
+            <div className="field">Flashback {recipe.flashbackOn && plan.flashback !== "drop" ? "(on)" : "proposal"}
+              <p className="quiet" style={{ fontSize: 12, margin: "4px 0" }}>{recipe.proposal.reason}<br />{recipe.proposal.source_moment}</p>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button type="button" disabled={!editable} className={plan.flashback === "approve" || (recipe.flashbackOn && !plan.flashback) ? "on" : ""}
+                  onClick={() => change({ flashback: "approve" })}>Approve flashback</button>
+                <button type="button" disabled={!editable} className={plan.flashback === "drop" ? "on" : ""}
+                  onClick={() => change({ flashback: "drop" })}>Drop it</button>
+              </div>
+            </div>
+          )}
           <button type="button" className="b ok wide lg" disabled={!editable || sent === "sending" || sent === "sent"} onClick={() => void send()}>
             {sent === "sending" ? "Sending…" : sent === "sent" ? "Sent to the PC" : "Send to review"}
           </button>

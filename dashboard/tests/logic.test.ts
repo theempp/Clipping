@@ -105,3 +105,19 @@ test("editor note lists only what changed (untouched zoom and headline are left 
   assert.equal(editNote({ ...base, trim_in: 2 }, base), "Editor: trim 2.0s-30.0s");
   assert.equal(editNote({ ...base, zoom: 1.3, headline: "New one" }, base), 'Editor: zoom 130% · headline "New one"');
 });
+
+test("editor sends toolbox removals and the flashback decision (D113, D114)", async () => {
+  const { editPayload, clipRecipe } = await import("../lib/logic.ts");
+  const base: EditPlan = { trim_in: 0, trim_out: 30, crop_x: 0.5, zoom: 1, headline: "H", caption_style: "words", splits: [], emphasis_words: [] };
+  assert.deepEqual(editPayload(base, base), {});
+  const p = editPayload({ ...base, remove_tools: ["sfx_hit"], flashback: "approve" }, base);
+  assert.deepEqual(p, { remove_tools: ["sfx_hit"], flashback: "approve" });
+  assert.equal(editNote({ ...base, remove_tools: ["sfx_hit"], flashback: "drop" }, base), "Editor: remove sfx_hit · flashback dropped");
+  const c = clip({ manifest: { recipe: { tools: ["hard_cut", "headline_box", "slowmo_vignette"], caption_style: "headline", flashback: null },
+    flashback_proposal: { reason: "Same topic", source_moment: "job 1" } } });
+  const r = clipRecipe(c)!;
+  assert.deepEqual(r.tools, ["slowmo_vignette"]);
+  assert.equal(r.flashbackOn, false);
+  assert.equal(r.proposal?.reason, "Same topic");
+  assert.equal(clipRecipe(clip({})), null);
+});

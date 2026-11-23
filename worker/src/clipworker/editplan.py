@@ -8,6 +8,8 @@ a new list of cuts replaces the old one.
 """
 from __future__ import annotations
 
+from .render.recipe import TOOLBOX
+
 LINE_WORDS = 7  # "full line" caption mode: words per caption line
 
 
@@ -76,6 +78,11 @@ def edit_overrides(plan: dict, base_in: float, base_out: float,
     if isinstance(emph, list):
         words = [str(w).strip().strip(".,!?\"'").lower() for w in emph]
         o["emphasis_words"] = [w for w in words if w][:12]
+    rt = plan.get("remove_tools")  # D114 toolbox: tools Zo took off this clip
+    if isinstance(rt, list):
+        o["remove_tools"] = [str(t) for t in rt if str(t) in TOOLBOX][:6]
+    if plan.get("flashback") in ("approve", "drop"):  # D113: only Zo approves a flashback
+        o["flashback_decision"] = plan["flashback"]
     head = plan.get("headline")
     title = str(head).strip()[:100] if isinstance(head, str) and head.strip() else None
     return o, title

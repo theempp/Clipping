@@ -222,3 +222,126 @@ def test_revision_note_fixes_clips_already_waiting(tmp_path, source_video):
     assert b["state"] == "pending_review" and b["revision"] == 1 and not b.get("fixing")
     assert b["manifest"]["motion"]["motion_version"] == 2
     assert sb.t["edit_rules"][0]["fixed_count"] == 1
+
+
+@needs_ffmpeg
+def test_recipe_is_chosen_once_recorded_and_never_zooms(tmp_path, source_video):
+    import dataclasses
+    import json as _json
+    pipe, sb, store = _env(tmp_path, source_video)
+    wpath = tmp_path / "weights.json"
+    pipe.s = dataclasses.replace(pipe.s, extra={"recipe_weights": str(wpath)})
+    job = pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    j = store.job(job)
+    assert j.stage == "uploaded", (j.stage, j.last_error)
+    m = j.data["manifest"]
+    rec = m["recipe"]
+    assert rec["streamer"] == "twitch:lacy" and m["zooms"] == [] and "zoom" not in rec["tools"]
+    assert rec["tools"][:2] == ["hard_cut", "headline_box"] and rec["caption_style"] in ("headline", "headline+words")
+    assert j.data["judgment"]["recipe"] == rec
+    saved = _json.loads(wpath.read_text())["twitch:lacy"]
+    assert saved["clips_made"] == 1 and saved["last_combo"] == rec["tools"]
+    # a revision re-renders with the SAME recipe and does not count as a new clip
+    clip = sb.t["clips"][0]
+    sb.human(clip["id"], "revise")
+    sb.insert("revisions", {"clip_id": clip["id"], "kind": "title", "note": "t",
+                            "payload": {"title": "New title"}, "resolved_at": None})
+    assert pipe.process_revisions() == 1
+    assert store.job(job).data["manifest"]["recipe"] == rec
+    assert _json.loads(wpath.read_text())["twitch:lacy"]["clips_made"] == 1
+
+
+@needs_ffmpeg
+def test_recipe_off_by_default(tmp_path, source_video):
+    pipe, sb, store = _env(tmp_path, source_video)
+    job = pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    assert "recipe" not in store.job(job).data["manifest"]
+
+
+@needs_ffmpeg
+def test_learning_loop_moves_weights_once_per_clip(tmp_path, source_video):
+    import dataclasses
+    import json as _json
+    pipe, sb, store = _env(tmp_path, source_video)
+    wpath = tmp_path / "weights.json"
+    pipe.s = dataclasses.replace(pipe.s, extra={"recipe_weights": str(wpath)})
+    job = pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    clip = sb.t["clips"][0]
+    tools = clip["manifest"]["recipe"]["tools"]
+    assert pipe.learn_recipes() == 0                       # still pending review: nothing learned
+    sb.human(clip["id"], "approved")
+    assert pipe.learn_recipes() == 1 and pipe.learn_recipes() == 0   # once only
+    sw = _json.loads(wpath.read_text())["twitch:lacy"]
+    extras = [t for t in tools if t not in ("hard_cut", "headline_box")]
+    assert all(sw["weights"][t] > 1.0 for t in extras)
+    assert sb.t["clips"][0]["recipe_learned_at"]
+
+
+def _words(text, t0=5.0):
+    return [Word(t0 + i * 0.5, t0 + i * 0.5 + 0.4, w) for i, w in enumerate(text.split())]
+
+
+@needs_ffmpeg
+def test_flashback_is_proposed_then_rendered_only_after_zo_approves(tmp_path, source_video):
+    import dataclasses
+    pipe, sb, store = _env(tmp_path, source_video)
+    pipe.s = dataclasses.replace(pipe.s, extra={"recipe_weights": str(tmp_path / "w.json")})
+    topic = "rocket league championship overtime goal again"
+    vid = tmp_path / "old.mp4"
+    shutil.copy(source_video, vid)
+    store.create_job("old1", "twitch:lacy", 100, 130, 110, 3.0,
+                     {"words": [w.__dict__ for w in _words(topic)], "capture": {"video": str(vid)},
+                      "judgment": {"title": "Earlier overtime goal"}}, "k-old")
+    store.db.execute("UPDATE jobs SET stage='uploaded' WHERE id='old1'")   # an earlier, finished job
+    pipe.transcriber = FakeTr(words=_words(topic))
+    job = pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    m = store.job(job).data["manifest"]
+    prop = m["flashback_proposal"]
+    assert prop and prop["source_job"] == "old1" and "overtime" in prop["reason"]
+    assert not m.get("flashback_rendered") and m["recipe"]["flashback"] is None   # proposal only
+    base_dur = m["duration"]
+    clip = sb.t["clips"][0]
+    sb.human(clip["id"], "revise")
+    sb.insert("revisions", {"clip_id": clip["id"], "kind": "trim", "note": "ok flashback",
+                            "payload": {"edit": {"flashback": "approve"}}, "resolved_at": None})
+    assert pipe.process_revisions() == 1
+    m2 = store.job(job).data["manifest"]
+    assert m2["flashback_rendered"] is True and m2["recipe"]["flashback"]["approved"] is True
+    assert m2["duration"] > base_dur + 1.0
+    # Zo drops it again: proposal cleared, clip back to the normal length
+    sb.human(sb.t["clips"][0]["id"], "revise")
+    sb.insert("revisions", {"clip_id": clip["id"], "kind": "trim", "note": "drop flashback",
+                            "payload": {"edit": {"flashback": "drop"}}, "resolved_at": None})
+    assert pipe.process_revisions() == 1
+    m3 = store.job(job).data["manifest"]
+    assert m3["flashback_proposal"] is None and not m3.get("flashback_rendered")
+
+
+@needs_ffmpeg
+def test_editor_removes_a_tool_and_sfx_render(tmp_path, source_video):
+    import dataclasses
+    pipe, sb, store = _env(tmp_path, source_video)
+    pipe.s = dataclasses.replace(pipe.s, extra={"recipe_weights": str(tmp_path / "w.json")})
+    job = pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    j = store.job(job)
+    # give the stored recipe SFX tools, as if the picker had chosen them
+    rec = j.data["judgment"]["recipe"]
+    rec["tools"] = ["hard_cut", "headline_box", "sfx_hit", "sfx_glitch"]
+    store.patch_data(job, {"judgment": {**j.data["judgment"], "recipe": rec}})
+    clip = sb.t["clips"][0]
+    sb.human(clip["id"], "revise")
+    sb.insert("revisions", {"clip_id": clip["id"], "kind": "trim", "note": "x",
+                            "payload": {"edit": {"remove_tools": ["sfx_glitch"]}}, "resolved_at": None})
+    assert pipe.process_revisions() == 1
+    m = store.job(job).data["manifest"]
+    assert m["recipe"]["tools"] == ["hard_cut", "headline_box", "sfx_hit"] and m["recipe_problems"] == []

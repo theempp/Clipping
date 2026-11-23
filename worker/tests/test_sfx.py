@@ -41,3 +41,33 @@ def test_render_with_sfx_passes_loudness_qa(source_video, tmp_path):
     res = check_clip(tmp_path / "r" / "clip.mp4", tmp_path / "r" / "captions.ass",
                      CampaignRules(min_s=10, max_s=60, permitted=True), title="t")
     assert res.passed, res.failures
+
+
+def test_swap_filter_crops_to_cover_and_never_zooms():
+    from clipworker.render.ffmpeg import video_filter
+    g = video_filter(TEST_LAYOUT, None, swap=("face", 4.0, 1.5))
+    assert "split=3" in g and "overlay=0:0:enable='between(t,4.000,5.500)'" in g
+    assert "zoompan" not in g and g.endswith("[v]")
+    g2 = video_filter(TEST_LAYOUT, "c.ass", swap=("game", 1.0, 1.0))
+    assert g2.count("ass=") == 1 and g2.endswith("[v]")
+
+
+@needs_ffmpeg
+def test_layout_swap_changes_only_the_swap_window(source_video, tmp_path):
+    import subprocess
+
+    def frame(video, t):
+        return subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-ss", str(t), "-i", str(video),
+                               "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+                              check=True, capture_output=True).stdout
+
+    base = render_clip("a", source_video, tmp_path / "a", 3.0, 13.0, [], TEST_LAYOUT, TEST_STYLE)
+    sw = render_clip("b", source_video, tmp_path / "b", 3.0, 13.0, [], TEST_LAYOUT, TEST_STYLE,
+                     swap=("face", 4.0, 2.0))
+    assert sw["swap"] == ["face", 4.0, 2.0] and base["swap"] is None
+    a, b = tmp_path / "a" / "clip.mp4", tmp_path / "b" / "clip.mp4"
+    inside_a, inside_b = frame(a, 5.0), frame(b, 5.0)
+    diff_in = sum(abs(x - y) for x, y in zip(inside_a, inside_b)) / len(inside_a)
+    out_a, out_b = frame(a, 8.0), frame(b, 8.0)
+    diff_out = sum(abs(x - y) for x, y in zip(out_a, out_b)) / len(out_a)
+    assert diff_in > 5 and diff_out < 3, (diff_in, diff_out)
