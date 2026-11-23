@@ -133,7 +133,7 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
     if drop:  # editor splits (D091): Zo dropped segments; cut both copies so before/after stays in step
         for f in (out, source_prev):
             tmp = f.with_name(f.stem + ".cut.mp4")
-            run(cut_command(f.resolve(), tmp.resolve(), drop, ffmpeg), check=True, cwd=str(out_dir))
+            run(cut_command(f.resolve(), tmp.resolve(), drop, dur, ffmpeg), check=True, cwd=str(out_dir))
             tmp.replace(f)
         dur -= sum(b - a for a, b in drop)
     thumb_t = min(max(0.0, hook_offset if hook_offset is not None else dur * 0.3), max(0.0, dur - 0.1))
@@ -178,12 +178,25 @@ def output_cuts(cuts: list | None, t_in: float, t_out: float) -> list[tuple[floa
     return [(round(a, 3), round(b, 3)) for a, b in merged]
 
 
-def cut_command(src: Path, out: Path, drop: list[tuple[float, float]], ffmpeg: str = "ffmpeg") -> list[str]:
-    """Re-encode `src` without the `drop` ranges (frame-accurate select/aselect)."""
-    keep = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in drop)
+def cut_command(src: Path, out: Path, drop: list[tuple[float, float]], dur: float,
+                ffmpeg: str = "ffmpeg") -> list[str]:
+    """Re-encode `src` keeping everything except the `drop` ranges: trim each kept piece, then concat.
+    (trim/concat behaves the same on every ffmpeg build; select/aselect did not.)"""
+    keep, t = [], 0.0
+    for a, b in drop:
+        if a > t:
+            keep.append((t, a))
+        t = max(t, b)
+    if dur > t:
+        keep.append((t, dur))
+    parts, labels = [], ""
+    for i, (a, b) in enumerate(keep):
+        parts.append(f"[0:v]trim={a:.3f}:{b:.3f},setpts=PTS-STARTPTS[v{i}]")
+        parts.append(f"[0:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS[a{i}]")
+        labels += f"[v{i}][a{i}]"
+    graph = ";".join(parts) + f";{labels}concat=n={len(keep)}:v=1:a=1[v][a]"
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
-            "-vf", f"select='not({keep})',setpts=N/FRAME_RATE/TB",
-            "-af", f"aselect='not({keep})',asetpts=N/SR/TB",
+            "-filter_complex", graph, "-map", "[v]", "-map", "[a]",
             "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "20",
             "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", str(out)]
 
