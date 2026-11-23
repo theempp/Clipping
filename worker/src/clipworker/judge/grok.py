@@ -16,6 +16,7 @@ import httpx
 
 from ..detector.dedupe import content_hash
 from ..transcribe import Word
+from .score import judged as judged_parts
 
 XAI_URL = "https://api.x.ai/v1/chat/completions"
 CATEGORIES = ["funny", "clutch", "rage", "wholesome", "fail", "reaction", "drama", "other"]
@@ -69,6 +70,33 @@ SCHEMA = {
 }
 
 
+# 0-100 score (features.score_100, D089): extra judged parts. Off = SYSTEM/SCHEMA unchanged,
+# so cached judgments stay valid; on = a separate cache key (prompt differs).
+SYSTEM_100 = SYSTEM + (
+    "\n7. parts: rate 0-10 each, strictly (9-10 = best of this streamer's month): hook (stops the "
+    "scroll in 1 s), payoff (clear climax or punchline), standalone (a stranger gets it cold), "
+    "emotion (shock, laugh, rage, hype), share (would a viewer send it on).\n"
+    "8. send_test: one line naming who a viewer sends this to and what they type with it; "
+    "empty string if nobody would.\n"
+    "9. why: one line on the score. proof_frame_ts: seconds from window start of one frame that "
+    "shows the moment (game-only cue or the reaction)."
+)
+_PART = {"type": "integer"}
+SCHEMA_100 = {
+    **SCHEMA,
+    "required": SCHEMA["required"] + ["parts", "send_test", "why", "proof_frame_ts"],
+    "properties": {
+        **SCHEMA["properties"],
+        "parts": {"type": "object", "additionalProperties": False,
+                  "required": ["hook", "payoff", "standalone", "emotion", "share"],
+                  "properties": {k: _PART for k in ("hook", "payoff", "standalone", "emotion", "share")}},
+        "send_test": {"type": "string"},
+        "why": {"type": "string"},
+        "proof_frame_ts": {"type": "number"},
+    },
+}
+
+
 class JudgeError(RuntimeError):
     pass
 
@@ -89,6 +117,13 @@ class Judgment:
     score_10: int = 0
     post_caption: str = ""
     hashtags: list[str] = field(default_factory=list)
+    # 0-100 score (features.score_100); None = not scored
+    score: int | None = None
+    parts: dict = field(default_factory=dict)      # {"measured": {...}, "judged": {...}|None, "bonus": {...}}
+    why: str = ""
+    send_test: str = ""
+    badges: list[str] = field(default_factory=list)
+    proof_frame_ts: float | None = None
     cached: bool = False
     usage: dict = field(default_factory=dict)
 
@@ -177,20 +212,32 @@ def validate(raw: dict, duration: float, min_len: float, max_len: float,
             f"score {score}/10 below {MIN_SCORE}" if 0 < score < MIN_SCORE else "")
     if keep and rubric and rule:
         keep, reason = False, f"rule: {rule}; {reason}"[:500]
-    return Judgment(keep, cat, round(t_in, 2), round(t_out, 2),
-                    str(raw["hook"])[:200], str(raw["title"])[:100],
-                    [str(w) for w in raw["emphasis_words"]][:12], conf, reason,
-                    hook_type=hook_type, standalone=standalone, score_10=score,
-                    post_caption=str(raw.get("post_caption", ""))[:300],
-                    hashtags=_tags(raw.get("hashtags")))
+    j = Judgment(keep, cat, round(t_in, 2), round(t_out, 2),
+                 str(raw["hook"])[:200], str(raw["title"])[:100],
+                 [str(w) for w in raw["emphasis_words"]][:12], conf, reason,
+                 hook_type=hook_type, standalone=standalone, score_10=score,
+                 post_caption=str(raw.get("post_caption", ""))[:300],
+                 hashtags=_tags(raw.get("hashtags")))
+    if isinstance(raw.get("parts"), dict):  # score_100 reply; the total is built in the pipeline
+        j.parts = {"judged": judged_parts(raw["parts"])}
+        j.send_test = str(raw.get("send_test", "")).strip()[:200]
+        j.why = str(raw.get("why", "")).strip()[:200]
+        try:
+            pf = float(raw.get("proof_frame_ts"))
+            j.proof_frame_ts = round(max(t_in, min(pf, t_out)), 2)
+        except (TypeError, ValueError):
+            j.proof_frame_ts = None
+    return j
 
 
 class GrokJudge:
     def __init__(self, api_key: str, model: str, cache_dir: Path, http: httpx.Client | None = None,
-                 price_in_per_mtok: float = 0.0, price_out_per_mtok: float = 0.0):
+                 price_in_per_mtok: float = 0.0, price_out_per_mtok: float = 0.0,
+                 score_100: bool = False):
         if not api_key or not model:
             raise JudgeError("XAI_API_KEY and GROK_MODEL must be set")
         self.api_key, self.model = api_key, model
+        self.system, self.schema = (SYSTEM_100, SCHEMA_100) if score_100 else (SYSTEM, SCHEMA)
         self.cache = Path(cache_dir) / "judge"
         self.cache.mkdir(parents=True, exist_ok=True)
         self.http = http or httpx.Client(timeout=60)
@@ -203,18 +250,18 @@ class GrokJudge:
     def judge(self, words: list[Word], chat_sample: list[str], scores: dict, rules_summary: str,
               duration: float, min_len: float = 10.0, max_len: float = 60.0) -> Judgment:
         prompt = build_user_prompt(words, chat_sample, scores, rules_summary, duration)
-        key = content_hash(self.model, SYSTEM, prompt)
+        key = content_hash(self.model, self.system, prompt)
         f = self.cache / f"{key}.json"
         if f.exists():
             j = validate(json.loads(f.read_text(encoding="utf-8")), duration, min_len, max_len, words)
             j.cached = True
             return j
         body = {"model": self.model, "temperature": 0,
-                "messages": [{"role": "system", "content": SYSTEM},
+                "messages": [{"role": "system", "content": self.system},
                              {"role": "user", "content": prompt}],
                 "response_format": {"type": "json_schema",
                                     "json_schema": {"name": "clip_judgment", "strict": True,
-                                                    "schema": SCHEMA}}}
+                                                    "schema": self.schema}}}
         r = self.http.post(XAI_URL, json=body, headers={"Authorization": f"Bearer {self.api_key}"})
         if r.status_code >= 400:
             raise JudgeError(f"xAI {r.status_code}: {r.text[:300]}")

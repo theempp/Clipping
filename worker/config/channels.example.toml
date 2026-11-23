@@ -54,6 +54,21 @@ drift = 0.03
 enabled = false
 volume_db = -18.0
 
+# Clipper wiring flags (D089, docs/clipper-review/wiring-plan.md). All off by default; flip one at a
+# time after its replay/dry-run check. Nothing here can publish: the review gate (D042) is unchanged.
+[features]
+score_100 = false      # 0-100 score = 50 measured + 50 judged; score_10 = round(score/10); drop < 60
+dead_air_gate = false  # show_start + quiet x0.3 in the detector; black/frozen frame rejects on the shortlist
+brain = false          # per-streamer weights from streamers/<slug>/brain.json
+viewer_clips = false   # Helix Get Clips poller: viewers_clipped badge + positive label
+clip_that = false      # CLIP THAT: last 40 s from the buffer as a labelled job
+dry_run = false        # pipeline stops before Supabase upload; report written to renders/<job>/
+
+# Dead-air gate numbers (replay-test before enabling; clip-detector-tuning owns changes).
+[dead_air]
+quiet_mult = 0.3
+show_start_active_s = 8
+
 # Roster (Zo, 2026-11-21, D069). Platforms checked 2026-11-21 against Twitch Helix
 # (users, channels, latest VODs) and kick.com channel pages.
 # group = "core"      every stream; GTA 6 boosted.      group = "gta6_only"  only while on GTA 6.
@@ -82,6 +97,7 @@ login = "lacy"
 streamer = "lacy"        # crop box approved earlier (measured 2026-11-18/19 GTA 6 VOD)
 name = "Lacy"
 group = "core"
+agent = "lacy-agent"     # D084 dedicated agent; state in streamers/lacy/ (brain.json etc.)
 [channels.layout]        # facecam top-left 494x278; chat top-right from x=1365
 facecam = { x = 0, y = 0, w = 494, h = 278 }
 gameplay = { x = 494, y = 0, w = 866, h = 1080 }

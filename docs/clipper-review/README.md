@@ -1,5 +1,5 @@
 # Clipper review pack (2026-11-22)
-Review-only. Nothing here is installed or wired into `.claude/`, `worker/`, `channels.toml` or Supabase.
+Review pack. Phase 0 and Phase 1 (Lacy) are now installed behind `[features]` flags, all off by default (see `.claude/skills/zo-clipper/`, `streamers/lacy/`, worker code); these files stay as the reference drafts.
 
 | File | What it is |
 |---|---|

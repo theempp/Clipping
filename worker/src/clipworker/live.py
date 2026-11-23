@@ -16,14 +16,16 @@ import time
 
 import httpx
 
-from . import __version__
+from . import __version__, brain
 from .capture.buffer import capture_commands, parse_ebur128_line, prune
 from .clock import Clock
 from .config import Settings, env
 from .detector.brain import apply_brain
+from .detector.deadair import DeadAirGate
 from .detector.spike import SpikeDetector
 from .gpu import snapshot as gpu_snapshot
 from .ingest import status as st
+from .ingest import viewer_clips
 from .ingest.kick_chat import run_kick_pusher
 from .ingest.twitch_irc import run_twitch_chat
 from .pipeline import Pipeline
@@ -101,7 +103,7 @@ class LiveRunner:
                  supabase=None):
         self.s, self.store, self.pipe, self.publisher, self.sb = settings, store, pipeline, publisher, supabase
         self.clock = Clock()
-        self.det = {c.key: SpikeDetector(c.key, c.detector, c.reaction_weights) for c in settings.channels}
+        self.det = {c.key: self._detector(c) for c in settings.channels}
         self.live: set[str] = set()
         # Wake Up (D055): with Supabase the dashboard switch decides; offline runs stay on.
         self.awake: bool = supabase is None
@@ -109,6 +111,20 @@ class LiveRunner:
         self._gap: dict[str, int] = {}
         self._pending: list[tuple] = []
         self._lock = threading.Lock()
+
+    def _detector(self, c) -> SpikeDetector:
+        """Fixed weights, or this streamer's own brain when features.brain is on (D089)."""
+        if not self.s.features.brain:
+            return SpikeDetector(c.key, c.detector, c.reaction_weights)
+        b = brain.load(self.s.state_dir(c), c.streamer)
+        return SpikeDetector(c.key, brain.apply(b, c.detector), c.reaction_weights,
+                             lift=b.chat_word_lift if not b.learning else None)
+
+    def _note_stream(self, c) -> None:
+        if self.s.features.brain:
+            d = self.s.state_dir(c)
+            if d.exists():  # no folder = streamer has no brain yet; never create one silently
+                brain.save(brain.note_stream(brain.load(d, c.streamer)), d)
 
     # signal sinks (chat callbacks run on the event loop; loudness on capture threads)
     def _on_chat(self, ts, msg):
@@ -131,6 +147,7 @@ class LiveRunner:
         kk = [c for c in self.s.channels if c.platform == "kick"]
         tw_tok = (st.AppToken(st.TWITCH_TOKEN_URL, env("TWITCH_CLIENT_ID", required=True),
                               env("TWITCH_CLIENT_SECRET", required=True), http) if tw else None)
+        self._tw = (http, tw_tok)  # shared with the viewer-clip poller
         kk_tok = (st.AppToken(st.KICK_TOKEN_URL, env("KICK_CLIENT_ID", required=True),
                               env("KICK_CLIENT_SECRET", required=True), http) if kk else None)
         while True:
@@ -165,6 +182,10 @@ class LiveRunner:
             if cap is None or not cap.alive():
                 c = chans[key]
                 det = self.det[key]
+                if cap is None:  # new stream
+                    self._note_stream(c)
+                    if self.s.features.dead_air_gate:  # show_start again
+                        det.gate = DeadAirGate(self.s.dead_air)
 
                 def on_loud(ts, v, key=key, det=det):
                     det.add_loudness(ts, v)
@@ -194,6 +215,47 @@ class LiveRunner:
                     job = self.pipe.on_moment(m)
                     log.info("moment %s score %.2f -> job %s", key, m.peak_score, job)
             await asyncio.sleep(max(0.0, 1.0 - (self.clock.now() - now)))
+
+    def poll_viewer_clips_once(self, now: float, fetch=None) -> int:
+        """Viewer clips in the last 15 min -> badge matching jobs + labels (features.viewer_clips)."""
+        http, tok = getattr(self, "_tw", (None, None))
+        if fetch is None and tok is None:
+            return 0
+        seen = self.__dict__.setdefault("_viewer_seen", set())
+        n = 0
+        for c in self.s.channels:
+            info = getattr(self, "stream_info", {}).get(c.key) or {}
+            if c.platform != "twitch" or c.key not in self.live or not info.get("user_id"):
+                continue
+            clips = (fetch or (lambda b, s, e: viewer_clips.fetch_clips(
+                http, tok.client_id, tok.get(), b, s, e)))(info["user_id"], now - 900, now)
+            clips = [x for x in clips if x.clip_id not in seen]
+            if not clips:
+                continue
+            seen.update(x.clip_id for x in clips)
+            trig = self.store.triggers_between(c.key, now - 900 - 60, now)
+            by_job, rows = viewer_clips.label_rows(clips, trig, c.streamer)
+            for jid, ids in by_job.items():
+                job = self.store.job(jid)
+                badges = sorted(set(job.data.get("badges", [])) | {"viewers_clipped"})
+                self.store.patch_data(jid, {"badges": badges,
+                                            "viewer_clip_ids": sorted(set(job.data.get("viewer_clip_ids", [])) | set(ids))})
+            if self.sb is not None and rows:
+                try:
+                    self.sb.insert("clip_labels", rows, on_conflict="streamer,job_id,signal",
+                                   ignore_duplicates=True)
+                except Exception as e:  # noqa: BLE001 - labels must never block capture
+                    log.warning("clip_labels write failed: %s", e)
+            n += len(clips)
+        return n
+
+    async def poll_viewer_clips(self):
+        while True:
+            try:
+                self.poll_viewer_clips_once(self.clock.now())
+            except Exception as e:  # noqa: BLE001
+                log.warning("viewer-clip poll failed: %s", e)
+            await asyncio.sleep(60)
 
     async def every(self, seconds: float, fn, name: str):
         loop = asyncio.get_running_loop()
@@ -264,10 +326,15 @@ class LiveRunner:
                  self.every(30, self.pipe.process_revisions, "revisions"),
                  self.every(15, self.heartbeat, "heartbeat"),
                  self.every(60, self.prune, "prune")]
-        if self.publisher is not None:
+        if self.publisher is not None and not self.s.features.dry_run:
             tasks.append(self.every(30, self.publisher.run_once, "publisher"))
         if self.sb is not None:
             tasks.append(self.every(60, self.sync_brain, "streamer brain"))
+        if self.s.features.viewer_clips:
+            tasks.append(self.poll_viewer_clips())
+        if self.s.features.clip_that and self.sb is not None:
+            tasks.append(self.every(5, lambda: self.pipe.take_clip_requests(self.clock.now(), self.live),
+                                    "clip_that"))
         tw = [c.login for c in self.s.channels if c.platform == "twitch"]
         if tw:
             tasks.append(run_twitch_chat(tw, self._on_chat, self.clock.now, self._on_gap))

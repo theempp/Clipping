@@ -43,7 +43,8 @@ def parse_twitch_streams(payload: dict) -> dict[str, dict]:
     for d in payload.get("data", []):
         if d.get("type") == "live" and d.get("user_login"):
             out[d["user_login"].lower()] = {"viewers": d.get("viewer_count"), "started_at": d.get("started_at"),
-                                            "game_id": d.get("game_id") or None, "game": d.get("game_name") or None}
+                                            "game_id": d.get("game_id") or None, "game": d.get("game_name") or None,
+                                            "user_id": d.get("user_id") or None}
     return out
 
 

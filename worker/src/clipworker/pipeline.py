@@ -7,6 +7,7 @@ Supabase candidate_log for clip-detector-tuning.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import logging
 import time
 import uuid
@@ -15,9 +16,11 @@ from pathlib import Path
 
 from . import rules
 from .capture.buffer import extract_window
-from .config import Channel, Crop, Layout, Settings, ass_colour
+from .config import Channel, Crop, Layout, Settings, ass_colour, env
+from .detector.deadair import dead_air_ratio, frame_reject, words_quiet
 from .detector.dedupe import detection_key, same_moment
 from .detector.spike import Moment
+from .judge import score as score100
 from .judge.grok import Judgment
 from .qa import CampaignRules, check_clip
 from .remote.rights import RightsGate
@@ -35,13 +38,27 @@ def iso(ts: float) -> str:
     return dt.datetime.fromtimestamp(ts, dt.timezone.utc).isoformat()
 
 
+def dry_run_row(job: Job) -> dict:
+    """What would have gone to the review queue (dry run; nothing uploaded)."""
+    j = job.data.get("judgment") or {}
+    m = job.data.get("manifest") or {}
+    return {"job_id": job.id, "channel": job.channel, "stage": job.stage, "trigger_ts": job.trigger_ts,
+            "detector_score": job.score, "title": job.data.get("title") or j.get("title"),
+            "score": j.get("score"), "score_10": j.get("score_10"), "parts": j.get("parts"),
+            "send_test": j.get("send_test"), "badges": j.get("badges") or job.data.get("badges"),
+            "trim": [j.get("trim_in"), j.get("trim_out")], "reason": j.get("reason"),
+            "video": m.get("video"), "qa": job.data.get("qa"), "dead_air": job.data.get("dead_air")}
+
+
 class Pipeline:
     def __init__(self, settings: Settings, store: Store, rights: RightsGate, transcriber=None,
                  judge=None, supabase=None, clock=time.time, extract=extract_window,
-                 render=render_clip, qa=check_clip):
+                 render=render_clip, qa=check_clip, frames=None):
         self.s, self.store, self.rights = settings, store, rights
         self.transcriber, self.judge, self.sb, self.clock = transcriber, judge, supabase, clock
         self._extract, self._render, self._qa = extract, render, qa
+        self._frames = frames or (lambda video, dur: frame_reject(
+            video, dur, settings.dead_air, env("FFMPEG_BIN", "ffmpeg")))
         self.channels = {c.key: c for c in settings.channels}
 
     # detection -> job
@@ -61,6 +78,43 @@ class Pipeline:
                                      m.peak_score, data, detection_key(ch.key, m.start_ts)):
             return None
         return job_id
+
+    def clip_that(self, channel_key: str, now: float, seconds: float = 40.0,
+                  source: str = "dashboard") -> str | None:
+        """CLIP THAT (D089): Zo's pick of the last `seconds` from the buffer. Same review gate;
+        the judge trims and titles it but never drops it. Labelled missed_moment (1.5)."""
+        ch = self.channels.get(channel_key)
+        if ch is None:
+            return None
+        m = Moment(channel_key, now - seconds / 2, now - seconds / 2, 0.0, now - seconds / 2,
+                   now - seconds, now, {"source": f"clip_that:{source}"})
+        job_id = self.on_moment(m)
+        if job_id:
+            self.store.patch_data(job_id, {"force_keep": True, "label": "missed_moment",
+                                           "badges": ["clip_that"]})
+            if self.sb is not None:
+                try:
+                    self.sb.insert("clip_labels", {"job_id": job_id, "streamer": ch.streamer,
+                                                   "signal": "missed_moment", "weight": 1.5,
+                                                   "moment_at": iso(now - seconds / 2)},
+                                   on_conflict="streamer,job_id,signal", ignore_duplicates=True)
+                except Exception:  # noqa: BLE001 - labels must never block a clip
+                    log.warning("clip_labels write failed for %s", job_id)
+        return job_id
+
+    def take_clip_requests(self, now: float, live: set[str]) -> int:
+        """Open CLIP THAT requests from Supabase -> jobs (features.clip_that). Live channels only."""
+        if self.sb is None:
+            return 0
+        n = 0
+        for r in self.sb.select("clip_requests", status="eq.open", order="requested_at.asc", limit="10"):
+            key = next((c.key for c in self.s.channels if c.streamer == r["streamer"] and c.key in live), None)
+            job = self.clip_that(key, now, float(r.get("seconds") or 40), r.get("source") or "dashboard") if key else None
+            self.sb.update("clip_requests", {"id": r["id"]},
+                           {"status": "done" if job else "failed", "job_id": job,
+                            "detail": None if job else "streamer not live, not permitted or duplicate"})
+            n += 1
+        return n
 
     # driver
     def run_once(self) -> int:
@@ -130,21 +184,65 @@ class Pipeline:
         cap = job.data["capture"]
         dur = cap["end_ts"] - cap["start_ts"]
         rules = job.data["rules"]
+        if self.s.features.dead_air_gate and not job.data.get("force_keep"):  # dead air costs no model call
+            why = self._dead_air(job, words, dur)
+            if why:
+                self.store.advance(job.id, "dropped", {"dead_air": why})
+                self._log(job, "dropped", why)
+                return True
+        # brain-only features stay out of the prompt while the brain is off (flags off = same prompt)
+        hide = set() if self.s.features.brain else {"z_mood", "z_lift", "dead_air_mult"}
         j: Judgment = self.judge.judge(words, job.data["chat_sample"], {"score": job.score,
                                        **{k: v for k, v in job.data["features"].items()
-                                          if isinstance(v, (int, float))}},
+                                          if isinstance(v, (int, float)) and k not in hide}},
                                        job.data["rules_summary"], dur, rules["min_s"], rules["max_s"],
                                        **({"peak_rel": job.data["peak_ts"] - cap["start_ts"]}
                                           if getattr(self.judge, "wants_peak", False) else {}))
         if j.usage and self.sb is not None:
             self.sb.log_spend("grok", self.judge.cost_usd(j.usage),
                               j.usage.get("total_tokens"), {"job_id": job.id})
+        if j.keep and self.s.features.score_100:
+            self._score(job, j, words, rules)
+        if not j.keep and job.data.get("force_keep"):  # CLIP THAT: Zo picked it; judge only trims
+            j.keep, j.reason = True, f"kept: CLIP THAT (judge said: {j.reason})"[:500]
         if not j.keep:
             self.store.advance(job.id, "dropped", {"judgment": asdict(j)})
             self._log(job, "dropped", j.reason)
             return True
         self.store.advance(job.id, "judged", {"judgment": asdict(j)})
         return True
+
+    def _dead_air(self, job: Job, words: list[Word], dur: float) -> str | None:
+        ch, p = self.channels[job.channel], self.s.dead_air
+        peak_rel = job.data["peak_ts"] - job.data["capture"]["start_ts"]
+        shout = float(job.data["features"].get("z_audio") or 0) >= 2.0
+        if not shout and words_quiet(words, peak_rel, p) and job.score * p.quiet_mult < ch.detector.threshold:
+            return "dead air: no speech or shout around the peak"
+        return self._frames(Path(job.data["capture"]["video"]), dur)
+
+    def _score(self, job: Job, j: Judgment, words: list[Word], rules: dict) -> None:
+        """0-100 score (D089): measured parts in code + the judge's parts. Edits `j` in place."""
+        ch = self.channels[job.channel]
+        peak_rel = job.data["peak_ts"] - job.data["capture"]["start_ts"]
+        meas = score100.measured(
+            detector_score=job.score, history=self.store.recent_scores(job.channel, job.trigger_ts),
+            threshold=ch.detector.threshold, trim_in=j.trim_in, trim_out=j.trim_out, words=words,
+            peak_rel=peak_rel, hype_tokens=set(ch.reaction_weights) | {w.upper() for w in j.emphasis_words},
+            min_s=rules.get("min_s", 0.0), max_s=rules.get("max_s", 1e9),
+            shout=float(job.data["features"].get("z_audio") or 0) >= 2.0)
+        judg = (j.parts or {}).get("judged")
+        badges = list(job.data.get("badges", []))
+        dar = dead_air_ratio(words, j.trim_in, j.trim_out)
+        total, bonus = score100.total(meas, judg, "viewers_clipped" in badges, dar)
+        j.score, j.badges = total, badges
+        j.parts = {"measured": meas, "judged": judg, "bonus": bonus, "dead_air_ratio": dar}
+        if judg is None:  # heuristic judge (D071): measured half only; never drops, keeps score_10 unset
+            return
+        j.score_10 = score100.score_10(total)
+        rule = (f"score {total}/100 below {score100.DROP_BELOW}" if total < score100.DROP_BELOW else
+                "no send test (nobody would share it)" if not j.send_test else "")
+        if rule:
+            j.keep, j.reason = False, f"rule: {rule}; {j.reason}"[:500]
 
     def _metadata(self, job: Job) -> tuple[str, str, list[str]]:
         j, rules = job.data["judgment"], job.data["rules"]
@@ -224,6 +322,12 @@ class Pipeline:
         return rows[0]["id"] if rows else None
 
     def _upload(self, job: Job) -> bool:
+        if self.s.features.dry_run:  # nothing leaves the PC; the job waits at qa_passed
+            f = self._job_dir(job) / "dryrun.json"
+            if not f.exists():
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text(json.dumps(dry_run_row(job), indent=1), encoding="utf-8")
+            return False
         if self.sb is None:
             return False
         ch = self.channels[job.channel]

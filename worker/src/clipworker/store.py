@@ -156,6 +156,18 @@ class Store:
                                  (stage,)).fetchall():
             yield self._row(r)
 
+    def triggers_between(self, channel: str, lo: float, hi: float) -> dict[str, float]:
+        """{job_id: trigger_ts} for this channel's candidates in [lo, hi]."""
+        rows = self.db.execute("SELECT id, trigger_ts FROM jobs WHERE channel=? AND trigger_ts BETWEEN ? AND ?",
+                               (channel, lo, hi)).fetchall()
+        return {r[0]: float(r[1]) for r in rows}
+
+    def recent_scores(self, channel: str, before_ts: float, limit: int = 200) -> list[float]:
+        """Detector scores of this channel's earlier candidates (stream baseline for the 0-100 score)."""
+        rows = self.db.execute("SELECT score FROM jobs WHERE channel=? AND trigger_ts<? "
+                               "ORDER BY trigger_ts DESC LIMIT ?", (channel, before_ts, limit)).fetchall()
+        return [float(r[0]) for r in rows]
+
     def advance(self, job_id: str, dst: str, data_update: dict | None = None,
                 error: str | None = None) -> Job:
         job = self.job(job_id)

@@ -58,6 +58,31 @@ def cmd_replay(a) -> int:
     return 0
 
 
+def cmd_dryrun(a) -> int:
+    """Offline: no Supabase, no publisher. Judge = Grok if a key is set (spend!), else heuristic."""
+    import httpx
+
+    from .dryrun import run_dry
+    from .judge.heuristic import HeuristicJudge
+    from .transcribe import CachedTranscriber, WhisperXTranscriber
+    s = load_settings(Path(a.config) if a.config else None)
+    if not any(c.key == a.channel for c in s.channels):
+        print(f"channel {a.channel} not in config", file=sys.stderr)
+        return 2
+    judge = HeuristicJudge()
+    if env("XAI_API_KEY") and not a.no_judge:
+        from .judge.grok import GrokJudge
+        judge = GrokJudge(env("XAI_API_KEY"), env("GROK_MODEL", required=True), s.cache_dir,
+                          httpx.Client(timeout=60), float(env("GROK_PRICE_IN_PER_MTOK", "0")),
+                          float(env("GROK_PRICE_OUT_PER_MTOK", "0")), score_100=s.features.score_100)
+    tr = CachedTranscriber(WhisperXTranscriber.auto(), s.cache_dir)
+    out = run_dry(s, a.channel, Path(a.video), Path(a.chat), s.work_dir / "dryrun", tr, judge,
+                  max_moments=a.max, ffmpeg=env("FFMPEG_BIN", "ffmpeg"))
+    print((out / "report.md").read_text(encoding="utf-8"))
+    print(f"report: {out / 'report.md'}")
+    return 0
+
+
 def _hms(t: float) -> str:
     t = max(0, int(t))
     return f"{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}"
@@ -81,7 +106,8 @@ def _build(a, need_judge=True):
         if env("XAI_API_KEY"):
             judge = GrokJudge(env("XAI_API_KEY"), env("GROK_MODEL", required=True), s.cache_dir,
                               httpx.Client(timeout=60), float(env("GROK_PRICE_IN_PER_MTOK", "0")),
-                              float(env("GROK_PRICE_OUT_PER_MTOK", "0")))
+                              float(env("GROK_PRICE_OUT_PER_MTOK", "0")),
+                              score_100=s.features.score_100)
         else:  # D071: no key -> keep every moment, cut around the peak, titles say UNJUDGED
             from .judge.heuristic import HeuristicJudge
             logging.warning("XAI_API_KEY not set: clips are NOT judged (heuristic cut, UNJUDGED titles)")
@@ -133,6 +159,14 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("publish-once")
     sub.add_parser("discord")
     sub.add_parser("longform-once")
+    d = sub.add_parser("dryrun-vod", help="full pipeline on a downloaded VOD; nothing posts")
+    d.add_argument("--channel", required=True)
+    d.add_argument("--video", required=True)
+    d.add_argument("--chat", required=True, help="TwitchDownloaderCLI chat JSON")
+    d.add_argument("--max", type=int, default=12, help="top N moments to cut")
+    d.add_argument("--no-judge", action="store_true", help="heuristic cut, no Grok spend")
+    bl = sub.add_parser("brain-learn", help="labels -> new brain version (features.brain)")
+    bl.add_argument("--channel", required=True)
     a = p.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -148,6 +182,8 @@ def main(argv: list[str] | None = None) -> int:
             if s.archived:
                 print("  archived: " + ", ".join(c.key for c in s.archived))
             print("caption style: " + ("set" if s.caption_style else "MISSING (needs references/, D022)"))
+            on = [k for k, v in vars(s.features).items() if v]
+            print("feature flags on: " + (", ".join(on) or "none"))
             for k in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "XAI_API_KEY", "GROK_MODEL",
                       "TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET"):
                 print(f"{k}: {'set' if env(k) else 'missing'}")
@@ -190,6 +226,22 @@ def main(argv: list[str] | None = None) -> int:
             for pl in r.plans():
                 print(f"{pl.id} {pl.tags.format}/{pl.tags.pacing}/{pl.tags.caption_style}/{pl.tags.voice}/"
                       f"{pl.tags.layout}: {pl.state}" + (f" ({pl.error})" if pl.error else ""))
+            return 0
+        if a.cmd == "dryrun-vod":
+            return cmd_dryrun(a)
+        if a.cmd == "brain-learn":
+            from . import brain
+            s, sb, store, _ = _build(a, need_judge=False)
+            if not s.features.brain:
+                print("features.brain is off: nothing learned", file=sys.stderr)
+                return 2
+            ch = next((c for c in s.channels if c.key == a.channel), None)
+            if ch is None or not s.state_dir(ch).exists():
+                print(f"{a.channel}: no channel or no streamers/<slug>/ folder", file=sys.stderr)
+                return 2
+            b = brain.learn(brain.load(s.state_dir(ch), ch.streamer), sb, store, ch.key, ch.detector,
+                            s.state_dir(ch))
+            print(brain.render_md(b))
             return 0
     except ConfigError as e:
         print(f"config error: {e}", file=sys.stderr)

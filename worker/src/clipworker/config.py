@@ -12,6 +12,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
+REPO_ROOT = Path(__file__).resolve().parents[3]   # worker/src/clipworker/config.py -> repo
+
+
 class ConfigError(RuntimeError):
     pass
 
@@ -110,6 +113,8 @@ class DetectorParams:
     w_unique: float = 0.20
     w_reaction: float = 0.15
     w_audio: float = 0.20
+    w_mood: float = 0.0       # chat mood share (laugh/hype/shock); 0 = off until a brain sets it
+    w_lift: float = 0.0       # learned chat-word lift; 0 = off until a brain sets it
     threshold: float = 2.5
     sustain_s: float = 2.0
     cooldown_s: float = 45.0
@@ -118,6 +123,32 @@ class DetectorParams:
     post_s: float = 15.0
     rate_floor: float = 0.5   # msgs/s floor so a quiet chat doesn't explode the ratio
     warmup_s: float = 60.0    # no triggers until this much baseline exists
+
+
+@dataclass(frozen=True)
+class DeadAirParams:
+    """Dead-air gate (D089, zo-clipper live-mode.md). Code only, no model."""
+    show_start_window_s: float = 30.0   # show starts at the first window this long ...
+    show_start_active_s: float = 8.0    # ... with at least this many seconds of voice activity
+    quiet_before_s: float = 20.0        # no activity within peak-20 s .. peak+5 s = quiet
+    quiet_after_s: float = 5.0
+    quiet_mult: float = 0.3             # quiet moment's score is multiplied by this
+    speech_range_lu: float = 6.0        # loudness proxy: momentary LUFS swing over 3 s that counts as voice
+    speech_floor_lufs: float = -45.0    # ... and the loudest sample must be above this
+    black_max: float = 0.5              # shortlist frame reject: share of the window that is black
+    frozen_max: float = 0.6             # ... or frozen (loading screen, menu, map, BRB card)
+
+
+@dataclass(frozen=True)
+class Features:
+    """Clipper wiring flags (docs/clipper-review/wiring-plan.md). All off by default;
+    each one is reversible by flipping it back."""
+    score_100: bool = False      # 0-100 score (50 measured + 50 judged); score_10 = round(score/10)
+    dead_air_gate: bool = False  # show_start + quiet multiplier in the detector, frame rejects on the shortlist
+    brain: bool = False          # per-streamer weights from streamers/<slug>/brain.json
+    viewer_clips: bool = False   # Helix Get Clips poller: badge + positive label
+    clip_that: bool = False      # CLIP THAT: last 40 s from the buffer as a labelled job
+    dry_run: bool = False        # pipeline stops before Supabase upload; report written locally
 
 
 @dataclass(frozen=True)
@@ -132,6 +163,8 @@ class Channel:
     group: str = "core"       # core: every stream, GTA 6 boosted | gta6_only: only while on GTA 6
     gta6_boost: float = 1.0   # detector score multiplier while the stream's game is GTA 6
     name: str = ""            # display name for the dashboard (streamers.display_name)
+    agent: str = ""           # dedicated agent, e.g. "lacy-agent" (D084); "" = none
+    state_dir: str = ""       # streamer state folder (brain.json etc.); "" = streamers/<streamer>
 
 
 GROUPS = ("core", "gta6_only")
@@ -160,6 +193,12 @@ class Settings:
     zoom: ZoomParams = field(default_factory=ZoomParams)
     sfx: SfxParams = field(default_factory=SfxParams)
     extra: dict = field(default_factory=dict)
+    features: Features = field(default_factory=Features)
+    dead_air: DeadAirParams = field(default_factory=DeadAirParams)
+    state_root: Path = REPO_ROOT / "streamers"   # where streamers/<slug>/ folders live
+
+    def state_dir(self, ch: "Channel") -> Path:
+        return Path(ch.state_dir) if ch.state_dir else self.state_root / ch.streamer
 
     @property
     def buffer_dir(self) -> Path: return self.work_dir / "buffer"
@@ -218,7 +257,8 @@ def parse_settings(data: dict, work_dir: Path) -> Settings:
             raise ConfigError(f"gta6_boost for {c['login']} must be >= 1.0")
         ch = Channel(f"{platform}:{c['login'].lower()}", platform,
                      c["login"].lower(), c.get("streamer", c["login"].lower()),
-                     layout, weights, det, group, boost, c.get("name") or c["login"])
+                     layout, weights, det, group, boost, c.get("name") or c["login"],
+                     c.get("agent", ""), c.get("state_dir", ""))
         (channels if c.get("active", True) else archived).append(ch)
     keys = [c.key for c in channels]
     if len(keys) != len(set(keys)):
@@ -237,9 +277,17 @@ def parse_settings(data: dict, work_dir: Path) -> Settings:
     zoom = ZoomParams(**data.get("zoom", {}))
     if zoom.on and zoom.min_gap_s < 2 * zoom.ramp_s + zoom.hold_s:
         raise ConfigError("zoom.min_gap_s must cover one full pulse (2*ramp_s + hold_s)")
+    feats = data.get("features", {})
+    unknown = set(feats) - set(Features.__dataclass_fields__)
+    if unknown:
+        raise ConfigError(f"unknown feature flag(s) {sorted(unknown)}")
+    if any(not isinstance(v, bool) for v in feats.values()):
+        raise ConfigError("feature flags must be true or false")
     return Settings(work_dir=work_dir, channels=channels, caption_style=style,
                     max_channels=max_channels, gta6=gta6, archived=archived,
-                    zoom=zoom, sfx=SfxParams(**data.get("sfx", {})), extra=data.get("extra", {}))
+                    zoom=zoom, sfx=SfxParams(**data.get("sfx", {})), extra=data.get("extra", {}),
+                    features=Features(**feats), dead_air=DeadAirParams(**data.get("dead_air", {})),
+                    state_root=Path(data.get("state_root") or env("CLIP_STATE_ROOT") or REPO_ROOT / "streamers"))
 
 
 def load_settings(config_path: Path | None = None) -> Settings:

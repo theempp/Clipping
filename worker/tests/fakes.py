@@ -25,7 +25,8 @@ class FakeSupabase:
     def __init__(self):
         self.t = {n: [] for n in ("clips", "publications", "destinations", "campaigns", "streamers",
                                   "revisions", "spend", "candidate_log", "worker_heartbeat",
-                                  "campaign_posts", "clip_events", "edit_rules")}
+                                  "campaign_posts", "clip_events", "edit_rules", "clip_labels",
+                                  "post_stats", "brain_versions", "clip_requests")}
         self.uploads = {}
         self._seq = itertools.count(1)
 
