@@ -97,3 +97,7 @@ Also seen, not ranked: iamajmeena/neonclipping (736 stars, created 2026-11-19, t
 - coleam00/skills `edit-video` at commit `8c30da9`, MIT. Verdict: **fail, reference only**. Not installed or run.
 - Blockers: optional torch 2.8.0 (GHSA-63cw-57p8-fm3p, fixed 2.10), `shell=True` string interpolation in render/finalize/export, unpinned `npx hyperframes` and GSAP from CDN without integrity.
 - Re-audit only after those are fixed upstream, in an isolated test. Clone deleted; re-clone at the pinned commit if needed.
+
+## 2026-11-22: TwitchDownloaderCLI audit (light mode)
+- lay295/TwitchDownloader CLI release `1.56.5` (published 2026-07-20), MIT, repo since 2019-08-26, 4.1k stars. Asset `TwitchDownloaderCLI-1.56.5-Windows-x64.zip` sha256 `8b1b0695f2b1b6bf0d2535fab4b84032951cded8cf4078dfdf4d58e391c813a0` matches GitHub's published digest.
+- Verdict: **pass-with-limits**. Allowed: `chatdownload` of public VOD chat only, no credentials passed. Kept in `C:\clip-work\quarantine\TwitchDownloaderCLI-1.56.5\`. Re-audit on any version bump.

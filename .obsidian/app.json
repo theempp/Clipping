@@ -1,4 +1,9 @@
 {
   "useMarkdownLinks": false,
-  "newLinkFormat": "shortest"
+  "newLinkFormat": "shortest",
+  "userIgnoreFilters": [
+    "node_modules/",
+    ".claude/",
+    "dashboard/node_modules/"
+  ]
 }
