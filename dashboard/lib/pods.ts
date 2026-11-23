@@ -17,6 +17,17 @@ export function hasAccess(a: Access | null): boolean {
   return !!a && (a.admin || a.pods.length > 0);
 }
 
+/** Wake Up controls are admin-only once pods are on (D108). Pods off = single-owner dashboard, always true. */
+export function isAdminView(podsOn: boolean, a: Access | null): boolean {
+  return !podsOn || a?.admin === true;
+}
+
+/** Member who is neither admin nor owner of any pod (D108): no brain tuning. False if pods off or no access. */
+export function isMemberOnly(podsOn: boolean, a: Access | null): boolean {
+  if (!podsOn || !hasAccess(a) || !a) return false;
+  return !a.admin && !a.pods.some((p) => p.role === "owner");
+}
+
 /** Owner of a live (not ended) pod: mirrors public.is_pod_owner(). */
 export function isPodOwner(podId: string | null | undefined, a: Access | null, pods: Pod[]): boolean {
   if (!podId || !a) return false;

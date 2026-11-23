@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { PC_NAME } from "@/lib/env";
 import { ago, pcState } from "@/lib/logic";
+import { isAdminView } from "@/lib/pods";
 import { useNow, useStore } from "@/lib/store";
 
 const LABEL = {
@@ -12,7 +13,7 @@ const LABEL = {
 /** Wake Up (D014/D055). The whole card is the switch; the small line is what the PC itself reports.
  *  Flipping it on lights the page up (Shell runs the sweep). */
 export function WakeToggle({ compact = false }: { compact?: boolean }) {
-  const { snap, setAwake } = useStore();
+  const { snap, setAwake, podsOn, access } = useStore();
   const now = useNow(1000);
   const [busy, setBusy] = useState(false);
   const want = snap.control.awake;
@@ -26,6 +27,7 @@ export function WakeToggle({ compact = false }: { compact?: boolean }) {
     setBusy(true);
     try { await setAwake(!want); } finally { setBusy(false); }
   };
+  if (!isAdminView(podsOn, access)) return null;
   return (
     <button type="button" role="switch" aria-checked={want} aria-busy={busy}
       aria-label={want ? `${PC_NAME} is awake. Put it to sleep` : `${PC_NAME} is asleep. Wake it up`}
@@ -39,9 +41,9 @@ export function WakeToggle({ compact = false }: { compact?: boolean }) {
   );
 }
 
-/** Shown on every page while the PC is told to sleep: one big, obvious way to wake it. */
+/** Shown on every page while the PC is told to sleep: one big, obvious way to wake it (admin only, D108; others see the notice). */
 export function SleepBanner() {
-  const { snap, setAwake } = useStore();
+  const { snap, setAwake, podsOn, access } = useStore();
   const now = useNow(5000);
   const [busy, setBusy] = useState(false);
   const st = pcState(snap.heartbeat, false, now);
@@ -52,10 +54,12 @@ export function SleepBanner() {
         <span>No streams are being watched or clipped. Review, the library and live numbers still work.
           {st === "offline" ? ` PC ${snap.heartbeat ? `last seen ${ago(snap.heartbeat.seen_at, now)}` : "has not reported yet"}.` : ""}</span>
       </div>
-      <button type="button" className="b acc lg" disabled={busy}
-        onClick={async () => { setBusy(true); try { await setAwake(true); } finally { setBusy(false); } }}>
-        {busy ? "Waking…" : "Wake up"}
-      </button>
+      {isAdminView(podsOn, access) && (
+        <button type="button" className="b acc lg" disabled={busy}
+          onClick={async () => { setBusy(true); try { await setAwake(true); } finally { setBusy(false); } }}>
+          {busy ? "Waking…" : "Wake up"}
+        </button>
+      )}
     </section>
   );
 }

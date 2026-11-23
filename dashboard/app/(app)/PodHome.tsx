@@ -7,6 +7,9 @@ import { compact, rankQueue, weekStats } from "@/lib/logic";
 import { cents, isPodOwner, monthOf, statementsFor, stuckPosts, total, usd } from "@/lib/pods";
 import { useNow, useStore } from "@/lib/store";
 
+/** Oldest waiting clip turns warn colour past this age. */
+const OLDEST_WARN_MS = 6 * 3_600_000;
+
 function age(iso: string, now: number): string {
   return mins((now - Date.parse(iso)) / 60000);
 }
@@ -80,7 +83,7 @@ export function PodHome({ podId }: { podId: string }) {
             })}
             {queue.length > 0 && (
               <ActionRow tone="run" title={<><span className="sc">{queue.length}</span> to approve</>}
-                detail={oldest ? `oldest ${age(oldest, now)}` : ""}>
+                detail={oldest ? <span className={now - Date.parse(oldest) > OLDEST_WARN_MS ? "st-revise" : undefined}>oldest {age(oldest, now)}</span> : ""}>
                 <Link className="b ok" href="/review">Review</Link>
               </ActionRow>
             )}

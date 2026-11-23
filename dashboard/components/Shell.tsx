@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PC_NAME } from "@/lib/env";
 import { openSubmissions, pcState, rankQueue } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
+import { isAdminView } from "@/lib/pods";
 import { BUDGET_USD, monthSpend, streamerViews } from "@/lib/view";
 import { Avatar } from "./Avatar";
 import { Ring } from "./Charts";
@@ -120,7 +121,9 @@ export function Shell({ children }: { children: ReactNode }) {
               <Icon name="film" /> Edit the top clip</button>
             <button role="menuitem" onClick={() => { setMenu(null); router.push("/review"); }}><Icon name="review" /> Open review queue</button>
             <button role="menuitem" onClick={() => { setMenu(null); void pollLive(true); }}><Icon name="refresh" /> Refresh live numbers</button>
-            <button role="menuitem" onClick={() => { setMenu(null); void setAwake(!awake); }}><Icon name="power" /> {awake ? `Put ${PC_NAME} to sleep` : `Wake ${PC_NAME} up`}</button>
+            {isAdminView(podsOn, access) && (
+              <button role="menuitem" onClick={() => { setMenu(null); void setAwake(!awake); }}><Icon name="power" /> {awake ? `Put ${PC_NAME} to sleep` : `Wake ${PC_NAME} up`}</button>
+            )}
           </div>
         )}
         {menu === "more" && (
@@ -174,7 +177,7 @@ function PodSwitcher() {
   const { access, pod, setPod, snap, ready } = useStore();
   if (!access?.admin || snap.pods.length < 2) return null;
   return (
-    <div className="seg" role="tablist" aria-label="Pod">
+    <div className="seg pods" role="tablist" aria-label="Pod">
       <button type="button" role="tab" aria-selected={pod === null} className={pod === null ? "on" : ""} disabled={!ready}
         onClick={() => setPod(null)}>All</button>
       {snap.pods.map((p) => (

@@ -30,7 +30,7 @@ export function StatusWord({ status }: { status: LedgerEntry["status"] }) {
 
 /** Money tile number; negative totals show the minus and the --bad colour. */
 export function Money({ n, sm }: { n: number; sm?: boolean }) {
-  return <div className={`num${sm ? " sm" : ""} tnum`} style={n < 0 ? { color: "var(--bad)" } : undefined}>{cents(n)}<small>$</small></div>;
+  return <div className={`num${sm ? " sm" : ""} tnum`} style={n < 0 ? { color: "var(--bad)" } : undefined}>{n < 0 ? "-" : ""}<small className="pre">$</small>{cents(Math.abs(n))}</div>;
 }
 
 const refText = (e: LedgerEntry) => (e.reverses_id ? `reverses #${e.reverses_id.slice(0, 8)}` : e.source_ref);

@@ -1,9 +1,11 @@
 "use client";
+import { isMemberOnly } from "@/lib/pods";
 import { useStore } from "@/lib/store";
 
 /** Standing fixes learned from Zo's revision notes (D078), and what the PC is re-editing for them. */
 export function LearnedRules() {
-  const { snap, setRuleActive } = useStore();
+  const { snap, setRuleActive, podsOn, access } = useStore();
+  const canTune = !isMemberOnly(podsOn, access);
   const fixing = snap.clips.filter((c) => c.state === "pending_review" && c.fixing).length;
   const pendingNotes = snap.revisions.filter((r) => !r.resolved_at).length;
   if (!snap.rules.length && !fixing) return null;
@@ -15,10 +17,12 @@ export function LearnedRules() {
         {snap.rules.slice(0, 5).map((r) => (
           <li key={r.id} className={r.active ? "" : "off"}>
             <span className="rt2"><b>{r.label}</b><span title={r.note}>“{r.note}”{r.fixed_count ? ` · fixed ${r.fixed_count}` : ""}</span></span>
-            <button type="button" role="switch" aria-checked={r.active} className="swb"
-              aria-label={`${r.active ? "Stop" : "Start"} applying: ${r.label}`} onClick={() => void setRuleActive(r.id, !r.active)}>
-              <span className={`sw sm${r.active ? " on" : ""}`} />
-            </button>
+            {canTune && (
+              <button type="button" role="switch" aria-checked={r.active} className="swb"
+                aria-label={`${r.active ? "Stop" : "Start"} applying: ${r.label}`} onClick={() => void setRuleActive(r.id, !r.active)}>
+                <span className={`sw sm${r.active ? " on" : ""}`} />
+              </button>
+            )}
           </li>
         ))}
       </ul>
