@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DEMO_PODS, demoAccess, demoSnapshot } from "../lib/demo.ts";
-import { canReview, cents, hasAccess, monthOf, parseAccess, podSnapshot, scopedPod, stuckPosts, usd } from "../lib/pods.ts";
+import { DEMO_PODS, demoAccess, demoEntry, demoSnapshot } from "../lib/demo.ts";
+import { NEXT_STEP, canReview, cents, eventText, hasAccess, monthOf, parseAccess, parseCents, podSnapshot, reversedIds, scopedPod, stuckPosts,
+  usd } from "../lib/pods.ts";
 import type { Pod } from "../lib/types.ts";
 
 const ZO = parseAccess({ admin: true, pods: [{ id: "pod-1", slug: "pod-1", name: "Pod 1", role: "owner" }] });
@@ -56,6 +57,29 @@ test("money is display formatting only", () => {
   assert.equal(usd(-8501), "-$85.01");
   assert.equal(cents(0), "0.00");
   assert.equal(monthOf(Date.parse("2026-11-30T23:59:00Z")), "2026-11-01");
+});
+
+test("ledger input and steps", () => {
+  assert.equal(parseCents("1,234.5"), 123450);
+  assert.equal(parseCents("$100.01"), 10001);
+  for (const bad of ["", "0", "-5", "1.234", "abc", "1e3"]) assert.equal(parseCents(bad), null, bad);
+  assert.equal(NEXT_STEP.pending, "cleared");
+  assert.equal(NEXT_STEP.approved, "paid");
+  assert.equal(NEXT_STEP.paid, null, "paid is final");
+});
+
+test("demo ledger mirrors the database split and statement view", () => {
+  const e = demoEntry({ id: "x", pod_id: "pod-1", source_ref: "r", campaign_id: null, gross_cents: 10001, created_at: "2026-11-20T00:00:00Z" });
+  assert.equal(e.agency_cut_cents, 1500);
+  assert.equal(e.pod_net_cents, 8501);
+  const s = demoSnapshot(Date.parse("2026-11-20T18:00:00Z"));
+  const p1 = s.statements.filter((r) => r.pod_id === "pod-1");
+  const net = p1.reduce((a, r) => a + r.pod_net_cents, 0);
+  assert.equal(net, s.ledger.filter((r) => r.pod_id === "pod-1").reduce((a, r) => a + r.pod_net_cents, 0));
+  for (const r of p1) assert.equal(r.pending_net_cents + r.owed_net_cents + r.paid_net_cents, r.pod_net_cents);
+  assert.ok(reversedIds(s.ledger).has("le-4"));
+  assert.ok(s.ledgerEvents.some((ev) => eventText(ev) === "Marked paid · ref T-881"));
+  assert.equal(podSnapshot(s, "pod-2").ledger.every((r) => r.pod_id === "pod-2"), true);
 });
 
 test("demo login switch", () => {

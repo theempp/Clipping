@@ -1,18 +1,68 @@
 // Sample day for demo mode (D057). Times are relative to page load so the
 // countdown and "live for" clocks move. Nothing here touches the network.
-import type { Access, BrainWeights, Campaign, Candidate, Clip, LiveStat, LongformVideo, Pod, PodCampaign, PodStatement, PostStat, Publication,
-  Snapshot, StatPoint, Streamer } from "./types.ts";
+import { entryMonth } from "./pods.ts";
+import type { Access, BrainWeights, Campaign, Candidate, Clip, LedgerEntry, LedgerEvent, LiveStat, LongformVideo, Pod, PodCampaign, PodStatement,
+  PostStat, Publication, Snapshot, StatPoint, Streamer } from "./types.ts";
 
-/** Demo pod_statements rows for this month (stand-in for the view; amounts are sample data). */
-function demoStatements(now: number): PodStatement[] {
-  const d = new Date(now);
-  const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
-  return [
-    { pod_id: "pod-1", month, entries: 3, gross_cents: 120000, agency_cut_cents: 18000, pod_net_cents: 102000,
-      pending_net_cents: 25500, owed_net_cents: 42500, paid_net_cents: 34000 },
-    { pod_id: "pod-2", month, entries: 1, gross_cents: 20000, agency_cut_cents: 3000, pod_net_cents: 17000,
-      pending_net_cents: 17000, owed_net_cents: 0, paid_net_cents: 0 },
-  ];
+// ---- Demo stand-ins for the database (D057). Live mode never runs these: Postgres generates the cut and net
+// columns and the pod_statements view; the UI only displays them. ----
+const pgRound = (x: number) => Math.sign(x) * Math.round(Math.abs(x));
+type NewEntry = Pick<LedgerEntry, "id" | "pod_id" | "source_ref" | "campaign_id" | "gross_cents" | "created_at"> & Partial<LedgerEntry>;
+/** A ledger_entries row as the database would return it (generated columns filled in). */
+export function demoEntry(p: NewEntry): LedgerEntry {
+  const rate = p.agency_rate ?? 0.15;
+  const cut = pgRound(p.gross_cents * rate);
+  return { source: "campaign", status: "pending", note: null, reverses_id: null, cleared_at: null, approved_at: null,
+    paid_at: null, paid_ref: null, ...p, agency_rate: rate, agency_cut_cents: cut, pod_net_cents: p.gross_cents - cut };
+}
+let evSeq = 0;
+/** What the ledger_audit trigger would write for this row. */
+export function demoEvent(e: LedgerEntry, from: LedgerEntry["status"] | null, at: string): LedgerEvent {
+  evSeq += 1;
+  return { id: evSeq, entry_id: e.id, pod_id: e.pod_id,
+    op: from === null ? "insert" : "update", from_status: from, to_status: e.status, actor: "admin", actor_id: "demo-zo",
+    row_after: { ...e }, at };
+}
+/** pod_statements view over demo entries. */
+export function demoStatements(rows: LedgerEntry[]): PodStatement[] {
+  const by = new Map<string, PodStatement>();
+  for (const e of rows) {
+    const month = entryMonth(e);
+    const k = `${e.pod_id}|${month}`;
+    const s = by.get(k) ?? { pod_id: e.pod_id, month, entries: 0, gross_cents: 0, agency_cut_cents: 0, pod_net_cents: 0,
+      pending_net_cents: 0, owed_net_cents: 0, paid_net_cents: 0 };
+    s.entries += 1; s.gross_cents += e.gross_cents; s.agency_cut_cents += e.agency_cut_cents; s.pod_net_cents += e.pod_net_cents;
+    if (e.status === "pending") s.pending_net_cents += e.pod_net_cents;
+    else if (e.status === "paid") s.paid_net_cents += e.pod_net_cents;
+    else s.owed_net_cents += e.pod_net_cents;
+    by.set(k, s);
+  }
+  return [...by.values()].sort((a, b) => b.month.localeCompare(a.month));
+}
+
+function demoLedger(iso: (msAgo: number) => string): { ledger: LedgerEntry[]; ledgerEvents: LedgerEvent[] } {
+  const h = 3600_000;
+  const steps = (e: LedgerEntry, at: string[]): LedgerEvent[] => {
+    const order: LedgerEntry["status"][] = ["pending", "cleared", "approved", "paid"];
+    const n = order.indexOf(e.status);
+    return at.slice(0, n + 1).map((t, i) => demoEvent({ ...e, status: order[i] }, i === 0 ? null : order[i - 1], t));
+  };
+  const e1 = demoEntry({ id: "le-1", pod_id: "pod-1", source_ref: "CR-1042", campaign_id: "c1", gross_cents: 40000, status: "paid",
+    created_at: iso(30 * h), cleared_at: iso(28 * h), approved_at: iso(26 * h), paid_at: iso(20 * h), paid_ref: "T-881" });
+  const e2 = demoEntry({ id: "le-2", pod_id: "pod-1", source_ref: "CR-1077", campaign_id: "c1", gross_cents: 50000, status: "approved",
+    created_at: iso(12 * h), cleared_at: iso(10 * h), approved_at: iso(9 * h) });
+  const e3 = demoEntry({ id: "le-3", pod_id: "pod-1", source_ref: "WH-220", campaign_id: "c2", gross_cents: 30000, created_at: iso(3 * h) });
+  const e4 = demoEntry({ id: "le-4", pod_id: "pod-1", source_ref: "CR-0999", campaign_id: "c1", gross_cents: 10001, status: "cleared",
+    created_at: iso(40 * h), cleared_at: iso(38 * h) });
+  const e5 = demoEntry({ id: "le-5", pod_id: "pod-1", source: "reversal", source_ref: "rev:le-4", campaign_id: "c1", gross_cents: -10001,
+    reverses_id: "le-4", note: "Payout clawed back by Content Rewards", created_at: iso(6 * h) });
+  const e6 = demoEntry({ id: "le-6", pod_id: "pod-2", source_ref: "CR-1101", campaign_id: "c1", gross_cents: 20000, created_at: iso(5 * h) });
+  const ledger = [e3, e5, e6, e2, e1, e4];
+  const ledgerEvents = [
+    ...steps(e1, [e1.created_at, e1.cleared_at!, e1.approved_at!, e1.paid_at!]), ...steps(e2, [e2.created_at, e2.cleared_at!, e2.approved_at!]),
+    ...steps(e3, [e3.created_at]), ...steps(e4, [e4.created_at, e4.cleared_at!]), ...steps(e5, [e5.created_at]), ...steps(e6, [e6.created_at]),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  return { ledger, ledgerEvents };
 }
 
 // Pods demo (D091): Pod 1 is Zo's roster; Pod 2 is a test pod with the two GTA-6-only streamers.
@@ -176,8 +226,9 @@ export function demoSnapshot(now = Date.now()): Snapshot {
     { clip_id: "demo-3", platform: "x", read_at: iso(4 * 3600_000), hours_since_post: 1, plays: 12 },
     { clip_id: "demo-14", platform: "youtube", read_at: iso(20 * min), hours_since_post: 1.1, plays: 8 },
   ];
+  const ledgerData = demoLedger(iso);
   return {
-    pods: DEMO_PODS, podCampaigns, postStats, statements: demoStatements(now),
+    pods: DEMO_PODS, podCampaigns, postStats, ...ledgerData, statements: demoStatements(ledgerData.ledger),
     live, history, publications, campaigns, brains,
     streamers,
     clips,

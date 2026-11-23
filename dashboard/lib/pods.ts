@@ -1,5 +1,5 @@
 // Pods (D091-D109): pure helpers shared by the store and pages. No network here.
-import type { Access, Clip, Pod, PodAccess, PodStatement, PostStat, Snapshot } from "./types.ts";
+import type { Access, Clip, LedgerEntry, LedgerEvent, LedgerStatus, Pod, PodAccess, PodStatement, PostStat, Snapshot } from "./types.ts";
 
 /** my_access() json -> Access. Anything unexpected reads as "no access". */
 export function parseAccess(raw: unknown): Access {
@@ -57,6 +57,8 @@ export function podSnapshot(s: Snapshot, pod: string | null): Snapshot {
     podCampaigns: s.podCampaigns.filter((pc) => pc.pod_id === pod),
     postStats: s.postStats.filter((r) => clipIds.has(r.clip_id)),
     statements: s.statements.filter((r) => r.pod_id === pod),
+    ledger: s.ledger.filter((r) => r.pod_id === pod),
+    ledgerEvents: s.ledgerEvents.filter((r) => r.pod_id === pod),
   };
 }
 
@@ -113,4 +115,47 @@ export function monthOf(now: number): string {
 /** pod_statements rows for one month. */
 export function statementsFor(rows: PodStatement[], month: string): PodStatement[] {
   return rows.filter((r) => r.month.slice(0, 10) === month);
+}
+
+// --- ledger (Phase 4): the admin records; the database guards every step (ledger_guard) ---
+/** Typed dollars -> whole cents ("1,234.5" -> 123450). Null when it is not a plain positive amount. */
+export function parseCents(text: string): number | null {
+  const t = text.replace(/[$,\s]/g, "");
+  if (!/^\d+(\.\d{1,2})?$/.test(t)) return null;
+  const [d, f = ""] = t.split(".");
+  const n = Number(d) * 100 + Number(f.padEnd(2, "0"));
+  return n > 0 && Number.isSafeInteger(n) ? n : null;
+}
+
+/** The one forward step ledger_guard allows from each status (paid is final). */
+export const NEXT_STEP: Record<LedgerStatus, LedgerStatus | null> = { pending: "cleared", cleared: "approved", approved: "paid", paid: null };
+
+/** Month an entry falls in, same rule as pod_statements: date_trunc('month', coalesce(cleared_at, created_at)). */
+export function entryMonth(e: Pick<LedgerEntry, "cleared_at" | "created_at">): string {
+  return monthOf(Date.parse(e.cleared_at ?? e.created_at));
+}
+
+/** Entries that already have a reversal (one reversal per entry, unique index). */
+export function reversedIds(rows: LedgerEntry[]): Set<string> {
+  return new Set(rows.filter((r) => r.reverses_id).map((r) => r.reverses_id as string));
+}
+
+/** Audit row -> what changed, in words. */
+export function eventText(ev: LedgerEvent): string {
+  const row = ev.row_after ?? {};
+  const gross = typeof row.gross_cents === "number" || typeof row.gross_cents === "string" ? Number(row.gross_cents) : null;
+  if (ev.op === "insert") {
+    if (row.source === "reversal") return `Reversal added${typeof row.note === "string" && row.note ? ` · ${row.note}` : ""}`;
+    return `Entry added${gross != null ? ` · ${usd(gross)} gross` : ""}`;
+  }
+  if (ev.to_status === "cleared") return "Marked cleared";
+  if (ev.to_status === "approved") return "Approved";
+  if (ev.to_status === "paid") return `Marked paid${typeof row.paid_ref === "string" ? ` · ref ${row.paid_ref}` : ""}`;
+  return ev.from_status === ev.to_status ? "Edited" : `${ev.from_status ?? "new"} -> ${ev.to_status}`;
+}
+
+/** Recent months for a picker: this month first, then any month with a statement row. */
+export function recentMonths(rows: PodStatement[], now: number, max = 6): string[] {
+  const set = new Set([monthOf(now), ...rows.map((r) => r.month.slice(0, 10))]);
+  return [...set].sort().reverse().slice(0, max);
 }

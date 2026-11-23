@@ -22,7 +22,16 @@ export const PAGES = [
   { href: "/campaigns", label: "Campaigns", icon: "flag", main: false },
   { href: "/library", label: "Library", icon: "folder", main: false },
   { href: "/settings", label: "Settings", icon: "gear", main: false },
+  // Pods (Phase 4). Icons reuse existing glyphs: Atlas GAP 4 (no money/ledger icon in the set yet).
+  { href: "/ledger", label: "Ledger", icon: "queue", main: false, pods: "admin" },
+  { href: "/statements", label: "Statements", icon: "text", main: false, pods: "all" },
 ] as const;
+type Page = (typeof PAGES)[number];
+/** Pages this user sees: pod pages only with pods on; Ledger only for the admin. */
+function usePages(): readonly Page[] {
+  const { podsOn, access } = useStore();
+  return PAGES.filter((p) => !("pods" in p) || (podsOn && (p.pods === "all" || !!access?.admin)));
+}
 // On a phone the dock keeps four pages; the rest sit behind "More".
 const PHONE = new Set(["/", "/review", "/streamers", "/editor"]);
 
@@ -67,6 +76,7 @@ export function Shell({ children }: { children: ReactNode }) {
   }, []);
 
   const alerts = useAlerts();
+  const pages = usePages();
 
   if (error === "not-owner") {
     return (
@@ -80,7 +90,7 @@ export function Shell({ children }: { children: ReactNode }) {
     );
   }
 
-  const dockLink = (p: (typeof PAGES)[number]) => {
+  const dockLink = (p: Page) => {
     const on = isOn(path, p.href);
     return (
       <Link key={p.href} href={p.href} className={`${on ? "on" : ""}${PHONE.has(p.href) ? "" : " extra"}`}
@@ -100,7 +110,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <nav className="dock" aria-label="Pages">
         <button type="button" className="fab" aria-label="Quick actions" aria-expanded={menu === "fab"}
           onClick={() => setMenu((m) => (m === "fab" ? null : "fab"))}><Icon name="plus" size={20} /></button>
-        {PAGES.map(dockLink)}
+        {pages.map(dockLink)}
         <button type="button" className="more-b" aria-label="More pages" aria-expanded={menu === "more"}
           onClick={() => setMenu((m) => (m === "more" ? null : "more"))}><Icon name="more" size={20} /></button>
         {menu && <button type="button" className="scrim" aria-label="Close menu" onClick={() => setMenu(null)} />}
@@ -115,7 +125,7 @@ export function Shell({ children }: { children: ReactNode }) {
         )}
         {menu === "more" && (
           <div className="menu" role="menu">
-            {PAGES.filter((p) => !PHONE.has(p.href)).map((p) => (
+            {pages.filter((p) => !PHONE.has(p.href)).map((p) => (
               <Link key={p.href} href={p.href} role="menuitem" className={isOn(path, p.href) ? "on" : ""}><Icon name={p.icon} /> {p.label}</Link>
             ))}
           </div>
@@ -135,7 +145,7 @@ export function Shell({ children }: { children: ReactNode }) {
           {podsOn && <PodSwitcher />}
           <span className="sp" />
           <nav className="pillnav" aria-label="Main">
-            {PAGES.filter((p) => p.main).map((p) => (
+            {pages.filter((p) => p.main).map((p) => (
               <Link key={p.href} href={p.href} className={isOn(path, p.href) ? "on" : ""} aria-current={isOn(path, p.href) ? "page" : undefined}>{p.label}</Link>
             ))}
           </nav>
@@ -215,18 +225,19 @@ function AlertsPanel({ alerts, onClose }: { alerts: Alert[]; onClose: () => void
 
 function SearchPanel({ onClose }: { onClose: () => void }) {
   const { snap } = useStore();
+  const all = usePages();
   const now = useNow(30_000);
   const [q, setQ] = useState("");
   const views = useMemo(() => streamerViews(snap, now), [snap, now]);
   const t = q.trim().toLowerCase();
   const hits = useMemo(() => {
-    const pages = PAGES.filter((p) => p.label.toLowerCase().includes(t)).map((p) => ({ k: p.href, href: p.href, label: p.label, meta: "page", s: null }));
+    const found = all.filter((p) => p.label.toLowerCase().includes(t)).map((p) => ({ k: p.href, href: p.href, label: p.label, meta: "page", s: null }));
     const ss = views.filter((v) => v.s.display_name.toLowerCase().includes(t))
       .map((v) => ({ k: v.s.id, href: `/streamers/${v.s.slug}`, label: v.s.display_name, meta: v.live ? "live" : "streamer", s: v.s }));
     const cs = snap.clips.filter((c) => (c.title ?? c.job_id).toLowerCase().includes(t)).slice(0, 8)
       .map((c) => ({ k: c.id, href: c.state === "pending_review" ? `/review?clip=${c.id}` : `/library?clip=${c.id}`, label: c.title ?? c.job_id, meta: c.state.replace("_", " "), s: null }));
-    return t ? [...pages, ...ss, ...cs] : [...ss.slice(0, 5), ...pages];
-  }, [t, views, snap.clips]);
+    return t ? [...found, ...ss, ...cs] : [...ss.slice(0, 5), ...found];
+  }, [t, views, snap.clips, all]);
   return (
     <Overlay label="Search" onClose={onClose}>
       <input autoFocus placeholder="Search streamers, clips, pages" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" />

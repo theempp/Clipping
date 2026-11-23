@@ -1,11 +1,11 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { demoAccess, demoSnapshot } from "./demo";
+import { demoAccess, demoEntry, demoEvent, demoSnapshot, demoStatements } from "./demo";
 import { IS_DEMO, PODS_ON } from "./env";
 import { canReview as podCanReview, hasAccess, isPodOwner, parseAccess, podSnapshot, scopedPod } from "./pods";
 import { browserClient } from "./supabase/client";
-import type { Access, Clip, EditPlan, LongformVideo, ReviewAction, Snapshot, TiktokStats } from "./types";
+import type { Access, Clip, EditPlan, LedgerEntry, LongformVideo, ReviewAction, Snapshot, TiktokStats } from "./types";
 import { editNote, editPayload } from "./logic";
 import type { LiveStat } from "./types";
 
@@ -41,6 +41,11 @@ type Store = {
   later: Deferred | null;
   /** Pod owner joins / declines a campaign for its pod (pod_campaign_set, D106). Decline waits for undo. */
   setPodCampaign: (pod: string, campaign: string, status: "joined" | "declined", label: string) => Promise<string | null>;
+  /** Ledger, admin only (D092: records money, never moves it). Each returns an error message or null. */
+  ledgerAdd: (pod: string, campaign: string | null, sourceRef: string, grossCents: number, note: string | null) => Promise<string | null>;
+  /** cleared / approved wait UNDO_MS (undoable); paid needs the transfer ref and is final. */
+  ledgerStep: (entry: LedgerEntry, to: "cleared" | "approved" | "paid", ref?: string) => Promise<string | null>;
+  ledgerReverse: (entry: LedgerEntry, reason: string) => Promise<string | null>;
   /** Approve / deny wait UNDO_MS before they reach the database, so a stray key press can be undone. */
   /** applyAll (revise only): the note's style asks also become standing rules for every clip (D078). */
   act: (clip: Clip, action: ReviewAction, note?: string, applyAll?: boolean) => void;
@@ -66,7 +71,7 @@ const EMPTY: Snapshot = {
   streamers: [], clips: [], submissions: [], heartbeat: null,
   control: { awake: false, updated_at: new Date(0).toISOString() }, candidates: [], spend: [], revisions: [], rules: [],
   longform: [], results: [], live: [], history: [], publications: [], campaigns: [], brains: [], pods: [],
-  podCampaigns: [], postStats: [], statements: [],
+  podCampaigns: [], postStats: [], statements: [], ledger: [], ledgerEvents: [],
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -158,6 +163,15 @@ async function loadLive(): Promise<Snapshot> {
       .gte("read_at", since30d).limit(3000),
     sb.from("pod_statements").select("*").order("month", { ascending: false }).limit(240),
   ]) : [none, none, none];
+  // Ledger reads are RLS-scoped (admin: all; pod: its own, D107). Required once pods are on.
+  const [le, lev] = PODS_ON ? await Promise.all([
+    sb.from("ledger_entries").select("id,pod_id,source,source_ref,campaign_id,gross_cents,agency_rate,agency_cut_cents,pod_net_cents,status,note,reverses_id,cleared_at,approved_at,paid_at,paid_ref,created_at")
+      .order("created_at", { ascending: false }).limit(500),
+    sb.from("ledger_events").select("id,entry_id,pod_id,op,from_status,to_status,actor,actor_id,row_after,at")
+      .order("at", { ascending: false }).limit(500),
+  ]) : [none, none];
+  if (le.error) throw new Error(le.error.message);
+  if (lev.error) throw new Error(lev.error.message);
   const num = (v: unknown) => Number(v ?? 0);
   const ok = <T,>(r: { data: T[] | null; error: unknown }): T[] => (r.error ? [] : r.data ?? []);
   const dest = new Map(ok(de).map((d) => [d.id, d]));
@@ -176,6 +190,10 @@ async function loadLive(): Promise<Snapshot> {
       agency_cut_cents: num(r.agency_cut_cents), pod_net_cents: num(r.pod_net_cents), pending_net_cents: num(r.pending_net_cents),
       owed_net_cents: num(r.owed_net_cents), paid_net_cents: num(r.paid_net_cents),
     })),
+    ledger: (le.data ?? []).map((r) => ({
+      ...r, gross_cents: num(r.gross_cents), agency_rate: num(r.agency_rate), agency_cut_cents: num(r.agency_cut_cents), pod_net_cents: num(r.pod_net_cents),
+    })),
+    ledgerEvents: lev.data ?? [],
   };
   return {
     ...opt,
@@ -523,6 +541,73 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return null;
   }, [refresh, defer]);
 
+  // Demo stand-in for ledger_guard + ledger_audit: apply the row, append its audit event, rebuild the statement view.
+  const demoLedgerWrite = useCallback((row: LedgerEntry, from: LedgerEntry["status"] | null) => {
+    const at = new Date().toISOString();
+    setSnap((s) => {
+      const ledger = from === null ? [row, ...s.ledger] : s.ledger.map((r) => (r.id === row.id ? row : r));
+      return { ...s, ledger, ledgerEvents: [demoEvent(row, from, at), ...s.ledgerEvents], statements: demoStatements(ledger) };
+    });
+  }, []);
+
+  const notAdmin = () => (accessRef.current?.admin ? null : "Only the agency admin changes the ledger.");
+
+  const ledgerAdd = useCallback(async (podId: string, campaign: string | null, sourceRef: string, grossCents: number, note: string | null) => {
+    const no = notAdmin(); if (no) return no;
+    if (IS_DEMO) {
+      if (snapRef.current.ledger.some((r) => r.pod_id === podId && r.source === "campaign" && r.source_ref === sourceRef)) {
+        return "This source ref is already in the ledger for this pod.";
+      }
+      demoLedgerWrite(demoEntry({ id: `le-${Date.now()}`, pod_id: podId, source_ref: sourceRef, campaign_id: campaign, gross_cents: grossCents,
+        note, created_at: new Date().toISOString() }), null);
+      return null;
+    }
+    const { error: e } = await browserClient().rpc("ledger_add", { p_pod: podId, p_campaign: campaign, p_source_ref: sourceRef,
+      p_gross_cents: grossCents, p_note: note });
+    if (e) return e.message;
+    await refresh();
+    return null;
+  }, [refresh, demoLedgerWrite]);
+
+  const ledgerStep = useCallback(async (entry: LedgerEntry, to: "cleared" | "approved" | "paid", ref?: string) => {
+    const no = notAdmin(); if (no) return no;
+    if (to === "paid" && !ref?.trim()) return "Mark paid needs the transfer reference.";
+    const save = async (): Promise<string | null> => {
+      if (IS_DEMO) {
+        const at = new Date().toISOString();
+        demoLedgerWrite({ ...entry, status: to, cleared_at: to === "cleared" ? at : entry.cleared_at,
+          approved_at: to === "approved" ? at : entry.approved_at, paid_at: to === "paid" ? at : entry.paid_at,
+          paid_ref: to === "paid" ? ref!.trim() : entry.paid_ref }, entry.status);
+        return null;
+      }
+      const { error: e } = await browserClient().rpc("ledger_set_status", { p_entry: entry.id, p_status: to, p_ref: to === "paid" ? ref!.trim() : null });
+      if (e) { setError(e.message); return e.message; }
+      await refresh();
+      return null;
+    };
+    if (to === "paid") return save();
+    const what = `${entry.source_ref} · ${entry.source === "reversal" ? "reversal" : "entry"}`;
+    defer(`ledger:${entry.id}`, to === "cleared" ? "Marked cleared" : "Approved", what, async () => { await save(); });
+    return null;
+  }, [refresh, defer, demoLedgerWrite]);
+
+  const ledgerReverse = useCallback(async (entry: LedgerEntry, reason: string) => {
+    const no = notAdmin(); if (no) return no;
+    if (!reason.trim()) return "A reversal needs a reason.";
+    if (IS_DEMO) {
+      if (entry.source === "reversal") return "cannot reverse a reversal";
+      if (snapRef.current.ledger.some((r) => r.reverses_id === entry.id)) return "This entry is already reversed.";
+      demoLedgerWrite(demoEntry({ id: `le-${Date.now()}`, pod_id: entry.pod_id, source: "reversal", source_ref: `rev:${entry.id}`,
+        campaign_id: entry.campaign_id, gross_cents: -entry.gross_cents, agency_rate: entry.agency_rate, note: reason.trim(),
+        reverses_id: entry.id, created_at: new Date().toISOString() }), null);
+      return null;
+    }
+    const { error: e } = await browserClient().rpc("ledger_reverse", { p_entry: entry.id, p_note: reason.trim() });
+    if (e) return e.message;
+    await refresh();
+    return null;
+  }, [refresh, demoLedgerWrite]);
+
   const setPod = useCallback((id: string | null) => {
     setPicked(id);
     try { if (id) localStorage.setItem(POD_KEY, id); else localStorage.removeItem(POD_KEY); } catch { /* pick lasts this visit */ }
@@ -533,10 +618,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const view = useMemo(() => (PODS_ON ? podSnapshot(snap, pod) : snap), [snap, pod]);
 
   const value = useMemo<Store>(() => ({
-    demo: IS_DEMO, ready, error, snap: view, podsOn: PODS_ON, access, pod, setPod, canReview, pending, later, setPodCampaign, act, undo,
+    demo: IS_DEMO, ready, error, snap: view, podsOn: PODS_ON, access, pod, setPod, canReview, pending, later, setPodCampaign, ledgerAdd, ledgerStep, ledgerReverse, act, undo,
     setRuleActive, setAwake, markSubmitted, mediaUrl,
     markTiktokPosted, addTiktokStats, setNotice, sendEdit, setBrain, setTiktokChannel, pollLive, signOut,
-  }), [ready, error, view, access, pod, setPod, canReview, pending, later, setPodCampaign, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl,
+  }), [ready, error, view, access, pod, setPod, canReview, pending, later, setPodCampaign, ledgerAdd, ledgerStep, ledgerReverse, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl,
     markTiktokPosted, addTiktokStats, setNotice, sendEdit, setBrain, setTiktokChannel, pollLive, signOut]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

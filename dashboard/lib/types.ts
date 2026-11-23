@@ -184,6 +184,9 @@ export type Snapshot = {
   /** Early post_stats readings (<= 2.5 h), enough for the stuck-post flag. */
   postStats: PostStat[];
   statements: PodStatement[];
+  /** Ledger (Phase 4): itemized entries and their append-only audit rows. */
+  ledger: LedgerEntry[];
+  ledgerEvents: LedgerEvent[];
 };
 
 /** Manual editor output (trim + crop + headline + captions), sent as a revision payload. */
@@ -216,4 +219,18 @@ export type PostStat = { clip_id: string; platform: "youtube" | "x" | "tiktok"; 
 export type PodStatement = {
   pod_id: string; month: string; entries: number; gross_cents: number; agency_cut_cents: number; pod_net_cents: number;
   pending_net_cents: number; owed_net_cents: number; paid_net_cents: number;
+};
+export type LedgerStatus = "pending" | "cleared" | "approved" | "paid";
+/** ledger_entries row. agency_cut_cents / pod_net_cents are generated columns: never computed in the UI. */
+export type LedgerEntry = {
+  id: string; pod_id: string; source: "campaign" | "reversal"; source_ref: string; campaign_id: string | null;
+  gross_cents: number; agency_rate: number; agency_cut_cents: number; pod_net_cents: number;
+  status: LedgerStatus; note: string | null; reverses_id: string | null;
+  cleared_at: string | null; approved_at: string | null; paid_at: string | null; paid_ref: string | null; created_at: string;
+};
+/** ledger_events row (trigger-written, append-only). */
+export type LedgerEvent = {
+  id: number; entry_id: string; pod_id: string; op: "insert" | "update";
+  from_status: LedgerStatus | null; to_status: LedgerStatus; actor: string; actor_id: string | null;
+  row_after: Record<string, unknown>; at: string;
 };
