@@ -30,6 +30,7 @@ from .pods import fair_order, resolve_pod_ids
 from .render import feedback, flashback, recipe, sfxlib
 from .render import tools as tools_mod
 from .render.ffmpeg import render_clip
+from .render.overlay import burn_overlay, parse_overlay
 from .store import Job, Store
 from .transcribe import Word, words_text
 
@@ -568,6 +569,35 @@ class Pipeline:
         self.store.advance(job.id, "uploaded")
         return job
 
+    def _overlay_revision(self, clip: dict, revs: list[dict], failed: dict) -> int:
+        """Burn a timed caption on top of the clip's current render and send it back to review.
+        Only the overlay changes; it never re-cuts, so it needs no local job or source footage."""
+        rev = int(clip.get("revision", 0)) + 1
+        ov = parse_overlay(revs[-1].get("payload"))  # latest caption wins
+        style = self.s.caption_style
+        work = self.s.work_dir / "overlays" / f"{clip['id']}-r{rev}"
+        try:
+            if style is None:
+                raise RuntimeError("no caption style configured")
+            src = self.sb.download(clip["storage_path"], work / "clip_in.mp4")
+            out = burn_overlay(src, work, ov, style, env("FFMPEG_BIN", "ffmpeg"))
+            self.sb.upload(clip["storage_path"], out, "video/mp4")
+        except Exception as e:  # noqa: BLE001 - recorded on the clip, shown on the dashboard
+            log.warning("caption overlay for %s failed: %s", clip["id"], e)
+            self.sb.update("clips", {"id": clip["id"]}, {"revise_failed": {
+                "rev": rev, "reason": f"caption overlay failed: {e}"[:300], "at": iso(self.clock()),
+                "revisions": [r["id"] for r in revs]}})
+            return 0
+        manifest = {**(clip.get("manifest") or {}),
+                    "overlay": {"text": ov.text, "start_s": ov.start_s, "end_s": ov.end_s, "revision": rev}}
+        self.sb.update("clips", {"id": clip["id"]}, {"revision": rev, "manifest": manifest,
+                                                     **({"revise_failed": None} if failed else {})})
+        self.sb.transition(clip, "pending_review", f"revision {rev}: caption overlay",
+                           {"revisions": [r["id"] for r in revs]})
+        for r in revs:
+            self.sb.update("revisions", {"id": r["id"]}, {"resolved_at": iso(self.clock())})
+        return 1
+
     def recheck_queue(self, max_fix: int = 2) -> int:
         """Clips already waiting for review that break a standing rule are hidden and re-edited,
         so Zo never reviews the same defect twice (D078). Re-renders `max_fix` per call."""
@@ -617,6 +647,10 @@ class Pipeline:
             failed = clip.get("revise_failed") or {}
             if failed and set(failed.get("revisions") or []) == {r["id"] for r in revs}:
                 continue  # these notes already failed QA; shown on the dashboard, waiting for Zo
+            if all(parse_overlay(r.get("payload")) for r in revs):
+                # caption over the existing render: works even when the stream footage is gone
+                n += self._overlay_revision(clip, revs, failed)
+                continue
             try:
                 job = self.store.job(clip["job_id"])
             except KeyError:

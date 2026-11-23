@@ -66,6 +66,16 @@ class Supabase:
         self._check(r)
         return path
 
+    def download(self, path: str, dest: Path) -> Path:
+        """Private bucket object -> local file (service key)."""
+        r = self.http.get(f"{self.url}/storage/v1/object/{self.bucket}/{path}", headers=self.h)
+        if r.status_code >= 400:
+            raise RuntimeError(f"storage download {path}: {r.status_code} {r.text[:200]}")
+        dest = Path(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(r.content)
+        return dest
+
     # domain helpers
     def transition(self, clip: dict, to: str, reason: str | None = None, detail: dict | None = None) -> dict:
         check_clip(clip["state"], to, "worker")
