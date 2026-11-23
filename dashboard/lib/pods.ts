@@ -95,13 +95,13 @@ export function stuckPosts(rows: PostStat[]): StuckPost[] {
 }
 
 // --- money: display formatting only; every amount comes from the database (D092) ---
-/** 123456 -> "1,234.56" (no sign, no symbol). */
+/** -123456 -> "-1,234.56" (no symbol). */
 export function cents(n: number): string {
-  return (Math.abs(n) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (n < 0 ? "-" : "") + (Math.abs(n) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 /** -123456 -> "-$1,234.56". */
 export function usd(n: number): string {
-  return `${n < 0 ? "-" : ""}$${cents(n)}`;
+  return `${n < 0 ? "-" : ""}$${cents(Math.abs(n))}`;
 }
 /** Adds database amounts for a totals tile (no rate math here). */
 export function total<T>(rows: T[], pick: (r: T) => number): number {

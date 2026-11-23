@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/pods/LedgerParts";
 import { useMemo, useState } from "react";
 import { EntryTable } from "@/components/pods/LedgerParts";
 import { NEXT_STEP, cents, parseCents, reversedIds, total } from "@/lib/pods";
@@ -101,15 +102,15 @@ function Ledger() {
   return (
     <>
       <section className="hero" style={{ marginBottom: 28 }}>
-        <div><h1>Ledger<br /><b>{snap.ledger.length} entr{snap.ledger.length === 1 ? "y" : "ies"}.</b></h1>
+        <div><h1>Ledger<br /><b>{rows.length} entr{rows.length === 1 ? "y" : "ies"}.</b></h1>
           <p>Record payouts as they land, then clear, approve and mark paid with the transfer reference. Corrections are reversing entries.</p></div>
       </section>
 
       <div className="row4">
-        <div className="glass stat"><span className="lab">Gross</span><div className="num sm tnum">{cents(gross)}<small>$</small></div></div>
-        <div className="glass stat"><span className="lab">15% cut</span><div className="num sm tnum">{cents(cut)}<small>$</small></div></div>
-        <div className="glass stat"><span className="lab">Pod net</span><div className="num sm tnum">{cents(net)}<small>$</small></div></div>
-        <div className="glass stat"><span className="lab">Unpaid</span><div className="num sm tnum">{cents(unpaid)}<small>$</small></div></div>
+        <div className="glass stat"><span className="lab">Gross</span><Money n={gross} sm /></div>
+        <div className="glass stat"><span className="lab">15% cut</span><Money n={cut} sm /></div>
+        <div className="glass stat"><span className="lab">Pod net</span><Money n={net} sm /></div>
+        <div className="glass stat"><span className="lab">Unpaid</span><Money n={unpaid} sm /></div>
       </div>
 
       <AddEntry defaultPod={pod} />
@@ -145,19 +146,21 @@ function AddEntry({ defaultPod }: { defaultPod: string | null }) {
   const [note, setNote] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [checked, setChecked] = useState(false);
   const target = defaultPod ?? podId;
   const amount = parseCents(gross);
   const ready = !!target && !!ref.trim() && amount != null && !busy;
   const campaigns = snap.campaigns;
 
   const add = async () => {
+    setChecked(true);
     if (!ready || amount == null) return;
     setBusy(true);
     const err = await ledgerAdd(target, campaign || null, ref.trim(), amount, note.trim() || null);
     setBusy(false);
     if (err) { setMsg({ ok: false, text: err }); return; }
     setMsg({ ok: true, text: `Added ${ref.trim()} as pending.` });
-    setRef(""); setGross(""); setNote("");
+    setRef(""); setGross(""); setNote(""); setChecked(false);
   };
 
   return (
@@ -177,11 +180,11 @@ function AddEntry({ defaultPod }: { defaultPod: string | null }) {
             {campaigns.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
           </select></label>
         <label>Source ref<input className="in" value={ref} maxLength={120} placeholder="Payout id" onChange={(e) => setRef(e.target.value)} /></label>
-        <label>Gross $<input className="in" inputMode="decimal" value={gross} placeholder="0.00" onChange={(e) => setGross(e.target.value)} /></label>
+        <label>Gross $<input className="in" inputMode="decimal" value={gross} placeholder="0.00" onBlur={() => setChecked(true)} onChange={(e) => setGross(e.target.value)} /></label>
         <label>Note<input className="in" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} /></label>
         <button type="button" className="b acc" disabled={!ready} onClick={() => void add()}>{busy ? "Adding…" : "Add"}</button>
       </div>
-      {gross && amount == null && <p className="fixing bad">Gross must be a positive amount like 125.50.</p>}
+      {checked && amount == null && <p className="fixing bad">Gross must be more than 0, like 125.50 (at most 2 decimals).</p>}
       {msg && <p className={msg.ok ? "quiet" : "fixing bad"} role="status">{msg.text}</p>}
     </section>
   );

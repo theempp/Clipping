@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/pods/LedgerParts";
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Bars, LineChart } from "@/components/Charts";
@@ -7,7 +8,10 @@ import { cents, isPodOwner, monthOf, statementsFor, stuckPosts, total, usd } fro
 import { useNow, useStore } from "@/lib/store";
 
 function age(iso: string, now: number): string {
-  const m = Math.max(0, Math.round((now - Date.parse(iso)) / 60000));
+  return mins((now - Date.parse(iso)) / 60000);
+}
+function mins(n: number): string {
+  const m = Math.max(0, Math.round(n));
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
@@ -69,7 +73,7 @@ export function PodHome({ podId }: { podId: string }) {
               const c = clipById.get(s.clip_id);
               return (
                 <ActionRow key={`${s.clip_id}|${s.platform}`} tone="warn" title={c?.title ?? c?.job_id ?? "Posted clip"}
-                  detail={`Stuck on ${s.platform}: ${s.plays} plays at ${s.hours_since_post.toFixed(1)} h · read ${age(s.read_at, now)} ago`}>
+                  detail={`Stuck on ${s.platform}: ${s.plays} plays at ${mins(s.hours_since_post * 60)} · read ${age(s.read_at, now)} ago`}>
                   <Link className="b" href={`/library?clip=${s.clip_id}`}>Open</Link>
                 </ActionRow>
               );
@@ -109,11 +113,11 @@ export function PodHome({ podId }: { podId: string }) {
       <div className="row2e" style={{ marginTop: 18 }}>
         <Link href="/statements" className="glass stat hot">
           <span className="lab">Owed</span>
-          <div className="num sm tnum">{cents(owed)}<small>$</small></div>
+          <Money n={owed} sm />
         </Link>
         <Link href="/statements" className="glass stat">
           <span className="lab">Paid this month</span>
-          <div className="num sm tnum">{cents(paidMonth)}<small>$</small></div>
+          <Money n={paidMonth} sm />
         </Link>
       </div>
 

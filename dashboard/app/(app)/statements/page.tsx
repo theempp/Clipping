@@ -1,4 +1,5 @@
 "use client";
+import { Money } from "@/components/pods/LedgerParts";
 import { useState } from "react";
 import { EntryTable, StatusWord } from "@/components/pods/LedgerParts";
 import { ago } from "@/lib/logic";
@@ -9,7 +10,7 @@ const monthLabel = (m: string) => new Date(`${m}T00:00:00Z`).toLocaleDateString(
 
 /** Read-only statement for one pod (D092): monthly totals from pod_statements, itemized entries, audit log. */
 export default function StatementsPage() {
-  const { podsOn, pod, snap } = useStore();
+  const { podsOn, pod, snap, ready, error } = useStore();
   if (!podsOn) return <section className="hero"><div><h1>Statements</h1><p>Statements come with pods.</p></div></section>;
   if (!pod) {
     return (
@@ -17,7 +18,12 @@ export default function StatementsPage() {
         <p>{snap.pods.length ? "Pick a pod in the top bar to see its statement." : "No pod to show."}</p></div></section>
     );
   }
-  return <Statement podId={pod} />;
+  return (
+    <>
+      {error && error !== "not-owner" && <div className="banner-line err" role="alert">{error}</div>}
+      {!ready ? <section className="glass"><p className="quiet">Loading…</p></section> : <Statement key={pod} podId={pod} />}
+    </>
+  );
 }
 
 function Statement({ podId }: { podId: string }) {
@@ -46,11 +52,11 @@ function Statement({ podId }: { podId: string }) {
       </section>
 
       <div className="row3">
-        <div className="glass stat"><span className="lab">Pending</span><div className="num tnum">{cents(pending)}<small>$</small></div>
+        <div className="glass stat"><span className="lab">Pending</span><Money n={pending} />
           <div className="sub">{empty ? "No activity" : <><StatusWord status="pending" /> not yet landed</>}</div></div>
-        <div className="glass stat"><span className="lab">Owed</span><div className="num tnum">{cents(owed)}<small>$</small></div>
+        <div className="glass stat"><span className="lab">Owed</span><Money n={owed} />
           <div className="sub">{empty ? "No activity" : <><StatusWord status="cleared" /> + <StatusWord status="approved" /></>}</div></div>
-        <div className="glass stat"><span className="lab">Paid</span><div className="num tnum">{cents(paid)}<small>$</small></div>
+        <div className="glass stat"><span className="lab">Paid</span><Money n={paid} />
           <div className="sub">{empty ? "No activity" : <><StatusWord status="paid" /> transferred</>}</div></div>
       </div>
 

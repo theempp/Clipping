@@ -1,6 +1,6 @@
 "use client";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
-import { podName, usd } from "@/lib/pods";
+import { cents, podName, reversedIds, usd } from "@/lib/pods";
 import { useStore } from "@/lib/store";
 import type { LedgerEntry } from "@/lib/types";
 
@@ -21,11 +21,16 @@ export function useNarrow(px = 720): boolean {
 const PILL: Record<LedgerEntry["status"], string> = { pending: "pill warn", cleared: "pill run", approved: "pill ok", paid: "pill st-scheduled" };
 
 export function StatusPill({ e }: { e: Pick<LedgerEntry, "status" | "source"> }) {
-  if (e.source === "reversal") return <span className="pill bad">reversal · {e.status}</span>;
+  if (e.source === "reversal") return <><span className="pill bad">reversal</span> <StatusWord status={e.status} /></>;
   return <span className={PILL[e.status]}>{e.status}</span>;
 }
 export function StatusWord({ status }: { status: LedgerEntry["status"] }) {
   return <span className={PILL[status]}>{status}</span>;
+}
+
+/** Money tile number; negative totals show the minus and the --bad colour. */
+export function Money({ n, sm }: { n: number; sm?: boolean }) {
+  return <div className={`num${sm ? " sm" : ""} tnum`} style={n < 0 ? { color: "var(--bad)" } : undefined}>{cents(n)}<small>$</small></div>;
 }
 
 const refText = (e: LedgerEntry) => (e.reverses_id ? `reverses #${e.reverses_id.slice(0, 8)}` : e.source_ref);
@@ -40,6 +45,13 @@ export function EntryTable({ rows, showPod, showDate, actions, below }: {
   const narrow = useNarrow();
   const camp = new Map(snap.campaigns.map((c) => [c.id, c.title]));
   const title = (e: LedgerEntry) => (e.campaign_id ? camp.get(e.campaign_id) ?? "Campaign" : "—");
+  // Looked up over the whole ledger, so a filtered table still marks reversed originals.
+  const rev = reversedIds(snap.ledger);
+  const byOrig = new Map(snap.ledger.filter((r) => r.reverses_id).map((r) => [r.reverses_id as string, r.id]));
+  const refCell = (e: LedgerEntry) => {
+    const r = rev.has(e.id) ? byOrig.get(e.id) : undefined;
+    return <>{refText(e)}{r && <span className="quiet"> · reversed by #{r.slice(0, 8)}</span>}</>;
+  };
   const bad = (e: LedgerEntry) => (e.source === "reversal" ? "bad" : undefined);
 
   if (narrow) {
@@ -48,7 +60,7 @@ export function EntryTable({ rows, showPod, showDate, actions, below }: {
         {rows.map((e) => (
           <li key={e.id} className="tt-row">
             <div className="tt-top">
-              <span className="tx"><b>{title(e)}</b><span>{[showPod ? podName(snap.pods, e.pod_id) : null, showDate ? day(e.created_at) : null, refText(e)].filter(Boolean).join(" · ")}</span></span>
+              <span className="tx"><b>{title(e)}</b><span>{[showPod ? podName(snap.pods, e.pod_id) : null, showDate ? day(e.created_at) : null, ""].filter((x) => x !== null).join(" · ")}{refCell(e)}</span></span>
               <StatusPill e={e} />
             </div>
             <dl className="metrics">
@@ -82,7 +94,7 @@ export function EntryTable({ rows, showPod, showDate, actions, below }: {
                   {showDate && <td>{day(e.created_at)}</td>}
                   {showPod && <td>{podName(snap.pods, e.pod_id)}</td>}
                   <td>{title(e)}</td>
-                  <td>{refText(e)}</td>
+                  <td>{refCell(e)}</td>
                   <td className={`tnum${e.source === "reversal" ? " bad" : ""}`}>{usd(e.gross_cents)}</td>
                   <td className={`tnum${e.source === "reversal" ? " bad" : ""}`}>{usd(e.agency_cut_cents)}</td>
                   <td className={`tnum${e.source === "reversal" ? " bad" : ""}`}>{usd(e.pod_net_cents)}</td>
