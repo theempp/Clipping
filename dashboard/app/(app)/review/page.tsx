@@ -8,6 +8,7 @@ import { Ring } from "@/components/Charts";
 import { ClipVideo } from "@/components/ClipCard";
 import { Icon } from "@/components/Icon";
 import { LearnedRules } from "@/components/LearnedRules";
+import { LinkBox } from "@/components/LinkBox";
 import { PodChip } from "@/components/PodChip";
 import { ReviewDock } from "@/components/ReviewDock";
 import { TikTokPanel, tagLine } from "@/components/TikTokPanel";
@@ -99,6 +100,7 @@ function Review() {
         </div>
 
         <aside className="stack">
+          <LinkBox />
           <section className="glass" aria-label="Up next">
             <div className="hd"><h3>Up next <span className="mut">· {Math.max(0, queue.length - 1)}</span></h3><span className="r">best first</span></div>
             <ul className="nextlist">

@@ -345,6 +345,10 @@ class LiveRunner:
             tasks.append(self.every(60, self.sync_brain, "streamer brain"))
         if self.s.features.viewer_clips:
             tasks.append(self.poll_viewer_clips())
+        if self.s.features.links and self.sb is not None:  # paste-a-link jobs (D115), one at a time
+            from .links import build_runner
+            links = build_runner(self.s, self.sb, self.pipe.transcriber, self.pipe.judge)
+            tasks.append(self.every(15, links.run_once, "links"))
         if self.s.features.clip_that and self.sb is not None:
             tasks.append(self.every(5, lambda: self.pipe.take_clip_requests(self.clock.now(), self.live),
                                     "clip_that"))
