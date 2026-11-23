@@ -66,6 +66,7 @@ export type Heartbeat = {
     games?: Record<string, string>;                      // channel key -> current category
     roster?: Record<string, "core" | "gta6_only">;       // active roster (D069); absent on older workers
     gpu?: { name?: string; util?: number; mem_used_gb?: number; mem_total_gb?: number };
+    disk?: { used_pct?: number; free_gb?: number };                 // optional; older workers omit it
   };
 };
 
@@ -111,6 +112,47 @@ export type EditRule = {
   clip_id: string | null; active: boolean; fixed_count: number; created_at: string;
 };
 
+/** One live number row (migration 20261123000000_live_stats): a streamer channel or one of Zo's own channels.
+ *  Written server-side by /api/live (Twitch Helix, Kick, YouTube, X) and pushed to the UI by Supabase Realtime. */
+export type LiveStat = {
+  key: string;                 // twitch:lacy · kick:adinross · youtube:own · x:own · tiktok:own
+  kind: "streamer" | "own";
+  platform: "twitch" | "kick" | "youtube" | "x" | "tiktok";
+  is_live: boolean | null;
+  viewers: number | null;
+  followers: number | null;
+  views: number | null;
+  posts: number | null;
+  title: string | null;
+  game: string | null;
+  started_at: string | null;
+  avatar_url: string | null;
+  updated_at: string;
+};
+
+/** A point on a growth chart: one metric of one live-stat key at one time. */
+export type StatPoint = { key: string; metric: string; value: number; at: string };
+
+export type Publication = {
+  id: string; clip_id: string; status: "pending" | "posting" | "posted" | "failed";
+  url: string | null; posted_at: string | null; created_at: string; platform: string | null; label: string | null;
+};
+
+export type Campaign = {
+  id: string; title: string; status: "draft" | "active" | "paused" | "ended" | "avoid";
+  source_url: string | null; streamer_slugs: string[]; platforms: string[];
+  cpm_usd: number | null; cap_usd: number | null; deadline: string | null;
+  score: number | null; recommendation: string | null; created_at: string;
+};
+
+/** What the detector weighs for one streamer (Streamer Brain, D089). 0-100 each. */
+export type BrainWeights = {
+  streamer_id: string;
+  weights: Record<string, number>;
+  words: string[];
+  updated_at: string;
+};
+
 export type Snapshot = {
   streamers: Streamer[];
   clips: Clip[];
@@ -123,6 +165,19 @@ export type Snapshot = {
   longform: LongformVideo[];
   results: LongformResult[];
   rules: EditRule[];
+  live: LiveStat[];
+  history: StatPoint[];
+  publications: Publication[];
+  campaigns: Campaign[];
+  brains: BrainWeights[];
+};
+
+/** Manual editor output (trim + crop + headline + captions), sent as a revision payload. */
+export type EditPlan = {
+  trim_in: number; trim_out: number; crop_x: number; zoom: number;
+  headline: string; caption_style: "words" | "line"; splits: number[];
+  /** Words the captions highlight (worker `emphasis_words`). */
+  emphasis_words: string[];
 };
 
 export type ReviewAction = "approve" | "revise" | "reject";

@@ -1,5 +1,5 @@
 // Pure helpers shared by the UI and the tests. No React, no network.
-import type { Clip, Heartbeat, Streamer, Submission } from "./types.ts";
+import type { Clip, EditPlan, Heartbeat, Streamer, Submission } from "./types.ts";
 
 /** Review queue order (D053): judge score 1-10 first, then confidence, then oldest first. */
 export function rankQueue(clips: Clip[]): Clip[] {
@@ -118,6 +118,58 @@ export function weekStats(clips: Clip[], now: number): WeekStats {
     avgScore: scored.length ? scored.reduce((a, c) => a + (c.score_10 ?? 0), 0) / scored.length : null,
     approved7: days.reduce((a, d) => a + d.approved, 0),
   };
+}
+
+/** Editor plan -> one readable revision note the PC and Zo can both read. */
+export function editNote(p: EditPlan, duration: number): string {
+  const parts: string[] = [];
+  const d = (s: number) => `${s.toFixed(1)}s`;
+  if (p.trim_in > 0.05 || p.trim_out < duration - 0.05) parts.push(`trim ${d(p.trim_in)}-${d(p.trim_out)}`);
+  if (p.splits.length) parts.push(`cut at ${p.splits.map(d).join(", ")}`);
+  if (Math.abs(p.crop_x - 0.5) > 0.01) parts.push(`crop centre ${Math.round(p.crop_x * 100)}%`);
+  if (Math.abs(p.zoom - 1) > 0.005) parts.push(`zoom ${Math.round(p.zoom * 100)}%`);
+  if (p.headline.trim()) parts.push(`headline "${p.headline.trim().slice(0, 80)}"`);
+  parts.push(p.caption_style === "words" ? "captions 2-3 words" : "captions full line");
+  if (p.emphasis_words.length) parts.push(`emphasis ${p.emphasis_words.join(" ")}`);
+  return `Editor: ${parts.join(" · ")}`;
+}
+
+/** Caption-words box -> emphasis list (max 12, no punctuation, lower case like the worker). */
+export function emphasisWords(text: string): string[] {
+  return text.split(/\s+/).map((w) => w.replace(/^[.,!?"']+|[.,!?"']+$/g, "").toLowerCase()).filter(Boolean).slice(0, 12);
+}
+
+/** The worker's `edit` payload (D091): only what Zo changed against `base`, so an untouched
+ *  slider never overrides the PC's own choice. Trim is clip-relative seconds. */
+export function editPayload(p: EditPlan, base: EditPlan): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (Math.abs(p.trim_in - base.trim_in) > 0.05 || Math.abs(p.trim_out - base.trim_out) > 0.05) {
+    out.trim_in = p.trim_in; out.trim_out = p.trim_out;
+  }
+  if (Math.abs(p.crop_x - base.crop_x) > 0.01) out.crop_x = p.crop_x;
+  if (Math.abs(p.zoom - base.zoom) > 0.005) out.zoom = p.zoom;
+  if (p.caption_style !== base.caption_style) out.caption_style = p.caption_style;
+  if (p.emphasis_words.join(" ") !== base.emphasis_words.join(" ")) out.emphasis_words = p.emphasis_words;
+  if (p.headline.trim() && p.headline.trim() !== base.headline.trim()) out.headline = p.headline.trim();
+  if (p.splits.length) out.splits = p.splits; // noted for Zo; the renderer does not cut yet
+  return out;
+}
+
+/** Clamp a trim so it stays inside the clip and at least `min` seconds long. */
+export function clampTrim(a: number, b: number, total: number, min = 1): [number, number] {
+  let x = Math.max(0, Math.min(a, total - min));
+  let y = Math.min(total, Math.max(b, x + min));
+  if (y - x < min) x = Math.max(0, y - min);
+  return [+x.toFixed(2), +y.toFixed(2)];
+}
+
+/** Short number: 1234 -> 1.2K, 2_910_000 -> 2.91M. */
+export function compact(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  const a = Math.abs(n);
+  if (a >= 1e6) return `${(n / 1e6).toFixed(a >= 1e7 ? 1 : 2).replace(/\.?0+$/, "")}M`;
+  if (a >= 1e3) return `${(n / 1e3).toFixed(a >= 1e4 ? 0 : 1).replace(/\.0$/, "")}K`;
+  return String(Math.round(n));
 }
 
 /** Revision box rule: plain English, trimmed, 3-500 chars. The worker parses it (P4). */

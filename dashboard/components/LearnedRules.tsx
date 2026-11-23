@@ -1,6 +1,5 @@
 "use client";
 import { useStore } from "@/lib/store";
-import { Icon } from "./Icon";
 
 /** Standing fixes learned from Zo's revision notes (D078), and what the PC is re-editing for them. */
 export function LearnedRules() {
@@ -10,20 +9,15 @@ export function LearnedRules() {
   if (!snap.rules.length && !fixing) return null;
   return (
     <div className="learned" aria-label="Learned from your notes">
-      <div className="learned-h">
-        <span className="brain" aria-hidden="true"><Icon name="spark" /></span>
-        <b>Learned from your notes</b>
-      </div>
-      {fixing > 0 && (
-        <p className="fixing"><i aria-hidden="true" />Re-editing {fixing} waiting clip{fixing === 1 ? "" : "s"} with your fixes. They come back here when done.</p>
-      )}
+      <h3 style={{ margin: 0, font: "600 14px var(--fd)" }}>Learned from your notes</h3>
+      {fixing > 0 && <p className="fixing">Re-editing {fixing} waiting clip{fixing === 1 ? "" : "s"} with your fixes. They come back here when done.</p>}
       <ul>
         {snap.rules.slice(0, 5).map((r) => (
           <li key={r.id} className={r.active ? "" : "off"}>
-            <span className="rt"><b>{r.label}</b><span title={r.note}>“{r.note}”{r.fixed_count ? ` · fixed ${r.fixed_count}` : ""}</span></span>
-            <button type="button" role="switch" aria-checked={r.active} className={`mini-sw${r.active ? " on" : ""}`}
+            <span className="rt2"><b>{r.label}</b><span title={r.note}>“{r.note}”{r.fixed_count ? ` · fixed ${r.fixed_count}` : ""}</span></span>
+            <button type="button" role="switch" aria-checked={r.active} className="swb"
               aria-label={`${r.active ? "Stop" : "Start"} applying: ${r.label}`} onClick={() => void setRuleActive(r.id, !r.active)}>
-              <i />
+              <span className={`sw sm${r.active ? " on" : ""}`} />
             </button>
           </li>
         ))}

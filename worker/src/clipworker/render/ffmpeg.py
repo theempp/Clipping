@@ -44,12 +44,18 @@ def output_fps(src: float) -> int:
 def video_filter(layout: Layout | None, captions_file: str | None, zooms: list[float] | None = None,
                  zoom: ZoomParams | None = None, fps: int = 30,
                  centres: list[tuple[float, float, float]] | None = None,
-                 duration: float | None = None) -> str:
+                 duration: float | None = None, crop_x: float | None = None) -> str:
     moving = bool(zoom) and (bool(zooms) or (zoom.drift > 0 and zoom.on))
     zp = ((lambda w, h: "," + zoompan_filter(zooms or [], zoom, w, h, fps, duration))
           if moving else (lambda w, h: ""))
     if layout is None:  # full frame: face-tracked per shot when centres given, else centre crop
-        crop = track_crop_filter(centres) if centres else "crop=ih*9/16:ih"
+        if centres:
+            crop = track_crop_filter(centres)
+        elif crop_x is not None:  # editor crop: centre of the 9:16 window, 0..1 of frame width (D091)
+            cx = min(1.0, max(0.0, float(crop_x)))
+            crop = f"crop=ih*9/16:ih:'max(0,min(iw-ih*9/16,iw*{cx:.4f}-ih*9/32))':0"
+        else:
+            crop = "crop=ih*9/16:ih"
         g = f"[0:v]{crop},scale={W}:{H},setsar=1{zp(W, H)}[v]"
     else:
         fh = layout.facecam_height
@@ -69,12 +75,13 @@ def render_command(src: Path, out: Path, t_in: float, t_out: float, layout: Layo
                    captions_file: str | None, fps: int, ffmpeg: str = "ffmpeg",
                    zooms: list[float] | None = None, zoom: ZoomParams | None = None,
                    centres: list[tuple[float, float, float]] | None = None,
-                   sfx: SfxParams | None = None, whoosh: Path | None = None) -> list[str]:
+                   sfx: SfxParams | None = None, whoosh: Path | None = None,
+                   crop_x: float | None = None) -> list[str]:
     a_graph, needs_sfx = audio_filter(zooms or [], sfx if whoosh else None)
     extra_in = ["-i", str(whoosh)] if needs_sfx else []
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
             "-ss", f"{t_in:.3f}", "-to", f"{t_out:.3f}", "-i", str(src), *extra_in,
-            "-filter_complex", video_filter(layout, captions_file, zooms, zoom, fps, centres, t_out - t_in)
+            "-filter_complex", video_filter(layout, captions_file, zooms, zoom, fps, centres, t_out - t_in, crop_x)
             + ";" + a_graph,
             "-map", "[v]", "-map", "[a]",
             "-r", str(fps), "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p",
@@ -98,7 +105,8 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
                 emphasis: list[str] | None = None, hook_offset: float | None = None,
                 manifest_extra: dict | None = None, ffmpeg: str = "ffmpeg",
                 ffprobe: str = "ffprobe", run=subprocess.run, zoom: ZoomParams | None = None,
-                track: bool = False, sfx: SfxParams | None = None) -> dict:
+                track: bool = False, sfx: SfxParams | None = None,
+                crop_x: float | None = None) -> dict:
     if style is None:
         raise ValueError("caption_style missing: design values must come from references/ (D022); "
                          "ask Zo before rendering")
@@ -116,7 +124,7 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
     out = out_dir / "clip.mp4"
     # cwd=out_dir so the ass filter gets a bare filename (no Windows drive-colon escaping).
     run(render_command(Path(src).resolve(), out.resolve(), t_in, t_out, layout, "captions.ass", fps,
-                       ffmpeg, zooms, zoom, centres, sfx, whoosh), check=True, cwd=str(out_dir))
+                       ffmpeg, zooms, zoom, centres, sfx, whoosh, crop_x), check=True, cwd=str(out_dir))
     # Before/after on the dashboard: the same window of the untouched 16:9 stream, small and light.
     source_prev = out_dir / "source.mp4"
     run(source_preview_command(Path(src).resolve(), source_prev.resolve(), t_in, t_out, ffmpeg),

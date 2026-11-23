@@ -1,6 +1,6 @@
 // Derived view data used by more than one screen.
 import { liveKeys, rankQueue, streamerKeys } from "./logic.ts";
-import type { Candidate, Snapshot, Streamer } from "./types.ts";
+import type { Candidate, LiveStat, Snapshot, StatPoint, Streamer } from "./types.ts";
 
 export type StreamerView = {
   s: Streamer;
@@ -8,6 +8,8 @@ export type StreamerView = {
   key: string | null;           // channel key that is live (or the first known one)
   viewers: number | null;
   since: string | null;
+  game: string | null;
+  title: string | null;
   heat: number[];               // 12 buckets x 5 min, levels 0-3
   queued: number;
   group: "core" | "gta6_only";
@@ -36,28 +38,61 @@ export function heatStrip(cands: Candidate[], keys: string[], now: number, steps
   return out;
 }
 
+/** A platform row counts as current for this long; older rows fall back to the PC heartbeat. */
+export const LIVE_FRESH_S = 300;
+
+/** Lacy leads every streamer list (D091), then live first, then A-Z. */
+export const FIRST_SLUG = "lacy";
+
 export function streamerViews(snap: Snapshot, now: number): StreamerView[] {
   const live = liveKeys(snap.heartbeat, now);
   const queue = rankQueue(snap.clips);
   const roster = snap.heartbeat?.status.roster ?? {};
+  const rows = new Map((snap.live ?? [])
+    .filter((r) => r.kind === "streamer" && (now - Date.parse(r.updated_at)) / 1000 < LIVE_FRESH_S)
+    .map((r) => [r.key, r]));
   return snap.streamers
     .map((s): StreamerView => {
       const keys = streamerKeys(s);
-      const k = keys.find((x) => live.has(x)) ?? null;
+      // Platform API (Realtime) wins over the PC heartbeat: it works even when the PC is asleep.
+      const kApi = keys.find((x) => rows.get(x)?.is_live) ?? null;
+      const k = kApi ?? keys.find((x) => live.has(x)) ?? null;
+      const row = k ? rows.get(k) : rows.get(keys[0] ?? "");
       const rk = keys.find((x) => x in roster);
+      const pic = s.avatar_url ?? keys.map((x) => rows.get(x)?.avatar_url).find(Boolean) ?? null;
       return {
         group: rk ? roster[rk] : "core",
         inRoster: rk !== undefined,
-        s,
+        s: pic === s.avatar_url ? s : { ...s, avatar_url: pic },
         live: k !== null,
         key: k ?? keys[0] ?? null,
-        viewers: k ? snap.heartbeat?.status.viewers?.[k] ?? null : null,
-        since: k ? snap.heartbeat?.status.live_since?.[k] ?? null : null,
+        viewers: k ? (kApi ? row?.viewers : null) ?? snap.heartbeat?.status.viewers?.[k] ?? null : null,
+        since: k ? (kApi ? row?.started_at : null) ?? snap.heartbeat?.status.live_since?.[k] ?? null : null,
+        game: k ? (kApi ? row?.game : null) ?? snap.heartbeat?.status.games?.[k] ?? null : null,
+        title: k && kApi ? row?.title ?? null : null,
         heat: heatStrip(snap.candidates, keys, now),
         queued: queue.filter((c) => c.streamer_id === s.id).length,
       };
     })
-    .sort((a, b) => Number(b.live) - Number(a.live) || a.s.display_name.localeCompare(b.s.display_name));
+    .sort((a, b) => Number(b.s.slug === FIRST_SLUG) - Number(a.s.slug === FIRST_SLUG)
+      || Number(b.live) - Number(a.live) || a.s.display_name.localeCompare(b.s.display_name));
+}
+
+/** Zo's own channels (YouTube, X, TikTok) from live_stats. */
+export function ownChannels(snap: Snapshot): Record<"youtube" | "x" | "tiktok", LiveStat | null> {
+  const get = (p: string) => snap.live.find((r) => r.kind === "own" && r.platform === p) ?? null;
+  return { youtube: get("youtube"), x: get("x"), tiktok: get("tiktok") };
+}
+
+/** Series for one metric of one key, oldest first. */
+export function series(snap: Snapshot, key: string, metric: string): StatPoint[] {
+  return snap.history.filter((p) => p.key === key && p.metric === metric).sort((a, b) => a.at.localeCompare(b.at));
+}
+
+/** Fallback picture when the platform has not given one yet: a public avatar mirror keyed by the channel name. */
+export function avatarFallback(s: Streamer): string | null {
+  if (s.twitch_login) return `https://unavatar.io/twitch/${encodeURIComponent(s.twitch_login)}?fallback=false`;
+  return null;
 }
 
 export type LivePlayer = {
@@ -99,21 +134,33 @@ export function liveClock(since: string | null, now: number): string {
   return `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}`;
 }
 
+/** D012: $100-$250 a month all-in; $250 is the ceiling the rings and meters measure against. */
+export const BUDGET_USD = 250;
+
+/** "2h 14m" / "48m" since a start time; "" when unknown. */
+export function liveFor(since: string | null, now: number): string {
+  if (!since) return "";
+  const m = Math.max(0, Math.floor((now - Date.parse(since)) / 60_000));
+  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+}
+
 export function monthSpend(snap: Snapshot): { total: number; grok: number } {
   const total = snap.spend.reduce((a, r) => a + r.usd, 0);
   const grok = snap.spend.filter((r) => r.kind === "grok").reduce((a, r) => a + r.usd, 0);
   return { total, grok };
 }
 
-/** Avatar background: a fixed gradient per streamer from the Stage palette. */
-export function avatarBg(slug: string): string {
-  const g = [
-    "linear-gradient(135deg,#ff8962,#7f5e4d)",
-    "linear-gradient(135deg,#415a6a,#262a2d)",
-    "linear-gradient(135deg,#60f3bd,#2f6e58)",
-    "linear-gradient(135deg,#9aa6ad,#3a3f43)",
-  ];
+/** Per-streamer hue for card glows, from the Broadcast moodboard's card range (concept C: 165-265). */
+export function streamerHue(slug: string): number {
+  const fixed: Record<string, number> = { lacy: 225, jynxzi: 265, stableronaldo: 165 };
+  if (slug in fixed) return fixed[slug];
   let h = 0;
   for (const ch of slug) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return g[h % g.length];
+  return 165 + (h % 101);
+}
+
+/** Avatar background (shown under the picture and when there is none): concept C avatar gradient, per-streamer hue. */
+export function avatarBg(slug: string): string {
+  const h = streamerHue(slug);
+  return `linear-gradient(135deg,hsl(${h} 90% 78%),hsl(${h} 56% 51%))`;
 }
