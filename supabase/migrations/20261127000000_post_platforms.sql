@@ -1,5 +1,5 @@
 -- Halo Pro dashboard (D116): Zo picks the platforms when confirming a post.
--- Additive only. NOT applied automatically: Zo approves before it runs.
+-- Additive only. Applied to the clipp project 2026-11-23 on Zo's go-ahead.
 --
 -- clips.post_platforms: platforms picked in the post confirm dialog ('youtube', 'x', ...).
 --   null = older clips / not picked = every active destination (the publisher's old behaviour).
@@ -24,7 +24,7 @@ begin
   if p_action = 'revise' and coalesce(p_note, '') = '' then raise exception 'revise needs a note'; end if;
   if p_action = 'approve' and jsonb_typeof(p_payload -> 'platforms') = 'array' then
     select coalesce(array_agg(distinct lower(x)), '{}') into v_platforms
-    from jsonb_array_elements_text(p_payload -> 'platforms') as x
+    from jsonb_array_elements_text(p_payload -> 'platforms') as t(x)
     where lower(x) in ('youtube', 'x', 'tiktok');
     if cardinality(v_platforms) = 0 then raise exception 'pick at least one platform'; end if;
   end if;
