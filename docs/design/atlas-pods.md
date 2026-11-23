@@ -63,6 +63,9 @@ Layout:
 ## Nav
 Add to `PAGES` (Shell.tsx) with `main:false` so they live under the dock / "More" menu: Ledger (admin only), Statements. Icons: see GAPS #4.
 
+## Settled by Zo (D110, 2026-11-23)
+- Money: "$" before the number. Oldest-waiting warn after 6h. Add-entry: inline row atop the ledger card. Phone pod switcher: sideways-scrolling `.seg`.
+
 ## GAPS (no traceable value; do not invent, decide or add a reference)
 1. **Five ledger states, four pill colours.** `.pill` only has run/warn/ok/bad. Paid mapped to `.pill.st-scheduled` (`--c3`) is a reuse of a colour that means "scheduled" elsewhere. Alternatives: paid = plain `.pill` (muted, "done, no attention"). Needs a call.
 2. **No section-level loading/skeleton class.** Only `.loading` (40vh block). Interim: `.quiet` "Loading..." inside the `.glass`; a real skeleton needs a reference.

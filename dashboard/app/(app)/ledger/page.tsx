@@ -113,8 +113,6 @@ function Ledger() {
         <div className="glass stat"><span className="lab">Unpaid</span><Money n={unpaid} sm /></div>
       </div>
 
-      <AddEntry defaultPod={pod} />
-
       <div className="filters" style={{ marginTop: 18 }}>
         <div className="seg" role="tablist" aria-label="Status">
           {STATUSES.map(([k, l]) => <button key={k} type="button" className={st === k ? "on" : ""} onClick={() => setSt(k)}>{l}</button>)}
@@ -129,6 +127,7 @@ function Ledger() {
       </div>
 
       <section className="glass" aria-label="Entries">
+        <AddEntry defaultPod={pod} />
         {rows.length === 0 ? <p className="quiet">No entries for this filter.</p>
           : <EntryTable rows={rows} showPod={!pod} actions={actions} below={below} />}
       </section>
@@ -164,8 +163,7 @@ function AddEntry({ defaultPod }: { defaultPod: string | null }) {
   };
 
   return (
-    <section className="glass" aria-label="Add entry" style={{ marginTop: 18 }}>
-      <div className="hd"><h3>Add entry</h3><span className="r">starts pending</span></div>
+    <div className="ledger-add" role="group" aria-label="Add entry (starts pending)">
       <div className="tt-form">
         {!defaultPod && (
           <label>Pod
@@ -182,10 +180,10 @@ function AddEntry({ defaultPod }: { defaultPod: string | null }) {
         <label>Source ref<input className="in" value={ref} maxLength={120} placeholder="Payout id" onChange={(e) => setRef(e.target.value)} /></label>
         <label>Gross $<input className="in" inputMode="decimal" value={gross} placeholder="0.00" onBlur={() => setChecked(true)} onChange={(e) => setGross(e.target.value)} /></label>
         <label>Note<input className="in" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} /></label>
-        <button type="button" className="b acc" disabled={!ready} onClick={() => void add()}>{busy ? "Adding…" : "Add"}</button>
+        <button type="button" className="b acc" disabled={!ready} onClick={() => void add()}>{busy ? "Adding…" : "Add pending"}</button>
       </div>
       {checked && amount == null && <p className="fixing bad">Gross must be more than 0, like 125.50 (at most 2 decimals).</p>}
       {msg && <p className={msg.ok ? "quiet" : "fixing bad"} role="status">{msg.text}</p>}
-    </section>
+    </div>
   );
 }

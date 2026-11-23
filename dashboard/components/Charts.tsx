@@ -83,7 +83,7 @@ export function LineChart({ series, labels, height = 240, fmt = (v) => String(v)
         {[0, 1, 2, 3, 4].map((i) => {
           const y = pt + (ih * i) / 4;
           return <g key={i}><line x1={pl} x2={W - pr} y1={y} y2={y} className="gl" />
-            <text x={pl - 8} y={y + 4} textAnchor="end" className="ax">{fmt(mx - ((mx - mn) * i) / 4)}</text></g>;
+            <text x={pl - 8} y={y + 4} textAnchor="end" className="ax">{fmt(Math.round((mx - ((mx - mn) * i) / 4) * 10) / 10)}</text></g>;
         })}
         {labels.map((t, i) => (t ? <text key={i} x={X(i)} y={H - 7} textAnchor="middle" className="ax">{t}</text> : null))}
         {series.map((s, j) => {

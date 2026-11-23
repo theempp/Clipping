@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DEMO_PODS, demoAccess, demoEntry, demoSnapshot } from "../lib/demo.ts";
-import { NEXT_STEP, canReview, cents, eventText, hasAccess, monthOf, parseAccess, parseCents, podSnapshot, reversedIds, scopedPod, stuckPosts,
+import { NEXT_STEP, canReview, cents, eventText, hasAccess, isAdminView, isMemberOnly, monthOf, parseAccess, parseCents, podSnapshot, reversedIds, scopedPod, stuckPosts,
   usd } from "../lib/pods.ts";
 import type { Pod } from "../lib/types.ts";
 
@@ -27,6 +27,20 @@ test("canReview mirrors review_clip (D102, D103)", () => {
   assert.equal(canReview({ pod_id: "pod-2" }, P2_MEMBER, pods), false, "members are read-only");
   const ended: Pod[] = pods.map((p) => (p.id === "pod-2" ? { ...p, status: "ended" } : p));
   assert.equal(canReview({ pod_id: "pod-2" }, P2_OWNER, ended), false, "ended pod loses tool access");
+});
+
+test("isMemberOnly / isAdminView gate brain tuning and Wake Up (D108)", () => {
+  assert.equal(isMemberOnly(true, P2_MEMBER), true);
+  assert.equal(isMemberOnly(true, P2_OWNER), false);
+  assert.equal(isMemberOnly(true, ZO), false);
+  assert.equal(isMemberOnly(false, P2_MEMBER), false, "pods off");
+  assert.equal(isMemberOnly(true, null), false, "no access loaded");
+  assert.equal(isMemberOnly(true, parseAccess(null)), false, "no access");
+  assert.equal(isAdminView(true, ZO), true);
+  assert.equal(isAdminView(true, P2_OWNER), false);
+  assert.equal(isAdminView(true, P2_MEMBER), false);
+  assert.equal(isAdminView(true, null), false);
+  assert.equal(isAdminView(false, null), true, "pods off = single owner");
 });
 
 test("scope: admin picks, members are pinned", () => {
