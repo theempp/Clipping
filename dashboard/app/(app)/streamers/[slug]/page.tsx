@@ -62,7 +62,7 @@ export default function StreamerPage() {
   const reels = clips.filter((c) => c.state === "published" || c.state === "scheduled");
   const queue = rankQueue(clips);
   const cands = snap.candidates.filter((c) => keys.includes(c.channel_key));
-  const pcUp = pcState(snap.heartbeat, snap.control.awake, now) !== "offline";
+  const pcUp = pcState(snap.heartbeat, now) !== "offline";
   const status: LiveStatus = v.live ? "live" : pcUp || snap.live.length ? "offline" : "unknown";
   const player = livePlayer(v.s, v.live ? v.key : null, host);
   const platform = (v.live ? v.key?.split(":")[0] : player?.platform) ?? (v.s.twitch_login ? "twitch" : "kick");

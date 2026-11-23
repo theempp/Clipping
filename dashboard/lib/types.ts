@@ -14,6 +14,8 @@ export type Streamer = {
 };
 
 export type Clip = {
+  /** Platforms Zo picked in the post confirm dialog (migration 20261127000000). Null = not posted yet / older clip. */
+  post_platforms?: string[] | null;
   id: string;
   job_id: string;
   streamer_id: string | null;
@@ -65,6 +67,7 @@ export type Heartbeat = {
   seen_at: string;
   status: {
     version?: string;
+    /** Older workers still send it; ignored since D116 (always on). */
     awake?: boolean;
     live?: string[];
     capturing?: string[];
@@ -78,11 +81,11 @@ export type Heartbeat = {
   };
 };
 
-export type Control = { awake: boolean; updated_at: string };
-
 export type Candidate = { channel_key: string; moment_at: string; score: number; outcome: string; pod_id?: string | null };
 
 export type Spend = { kind: string; usd: number };
+export type SpendDay = { day: string; usd: number };
+export type Destination = { id: string; platform: string; label: string; active: boolean; streamer_id: string | null };
 
 export type Revision = { id: string; clip_id: string; kind: string; note: string; created_at: string; resolved_at: string | null };
 
@@ -166,7 +169,10 @@ export type Snapshot = {
   clips: Clip[];
   submissions: Submission[];
   heartbeat: Heartbeat | null;
-  control: Control;
+  /** Posting accounts (destinations). The worker posts only to active ones, and only the platforms Zo picks. */
+  destinations: Destination[];
+  /** AI spend per day, last 14 days (spend table). */
+  spendDays: SpendDay[];
   candidates: Candidate[];
   spend: Spend[];
   revisions: Revision[];

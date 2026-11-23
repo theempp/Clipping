@@ -12,20 +12,16 @@ export function rankQueue(clips: Clip[]): Clip[] {
       a.created_at.localeCompare(b.created_at));
 }
 
-/** Heartbeat older than this means the PC is off, asleep or disconnected. */
+/** Heartbeat older than this means the PC is off or disconnected. */
 export const ONLINE_WINDOW_S = 45;
 
-export type PcState = "offline" | "waking" | "watching" | "idle" | "sleeping" | "asleep";
+export type PcState = "offline" | "watching" | "idle";
 
-/** What the PC is really doing, from its own heartbeat. The switch alone never says "watching". */
-export function pcState(hb: Heartbeat | null, wantAwake: boolean, now: number): PcState {
+/** What the PC is doing, from its own heartbeat. Always on (D116): there is no sleep switch any more. */
+export function pcState(hb: Heartbeat | null, now: number): PcState {
   if (!hb) return "offline";
   const age = (now - Date.parse(hb.seen_at)) / 1000;
   if (age > ONLINE_WINDOW_S) return "offline";
-  const awake = hb.status.awake !== false;
-  if (wantAwake && !awake) return "waking";
-  if (!wantAwake && awake) return "sleeping";
-  if (!awake) return "asleep";
   return (hb.status.live?.length ?? 0) > 0 ? "watching" : "idle";
 }
 

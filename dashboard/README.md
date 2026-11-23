@@ -1,8 +1,12 @@
-# Clipp dashboard (v1)
+# Zwoclippe dashboard
 
-The private review dashboard for Clipp: review queue sorted by score, 9:16 clip player, Deny / Revise / Approve, the plain-English revision box, the 30-minute Content Rewards countdown, the Wake Up switch, and a Cinema live page per streamer. Design is the Stage direction (D049); decisions D053-D058 are in the vault Decision Log.
+The private review console. Design is **Halo Pro** (D116; source `dashboard-concepts/zwoclippe-halo-final/`): live streamer cards on the left, the top pick in the middle (9:16 player, chat heat, Grok score, headline, Approve / Revise / Reject, **Edit clip**, post toggles), the queue on the right (each clip opens a review popup), and AI spend, today's pipeline, the next 24 h of posts and channel growth along the bottom. Live, Pods & ledger and Stats keep their content inside the same frame.
 
-It works on a computer and a phone. On a phone the streamer rail becomes an avatar strip at the top and the Deny / Revise / Approve buttons stay pinned to the bottom.
+There is no Wake Up switch any more: the dashboard and the worker are always on (D116 supersedes D055).
+
+**Posting always asks first.** Approve only marks a clip ready. Post needs an approved clip and at least one platform, then a confirm dialog, then a 4-second undo. Only then does the dashboard call `review_clip(approve)`, which is what the PC's publisher reads. Edit clip opens the editor (Trim, Captions, Headline, Crop, Flashback, Audio; no zoom, D112); Save sends only what changed as a revision, the PC re-renders it, and the learn loop logs it as a manual edit (D114).
+
+On desktop (1181 px wide and 701 px tall and up) the console fills the screen with no page scroll; below that it stacks and scrolls.
 
 ## Daily launch on Zo's PC
 
@@ -12,9 +16,6 @@ the terminal says Ready. Keep the terminal open while using the dashboard.
 If the dashboard is already running, use the existing server instead of
 starting another one on a different port.
 
-The November 22 dashboard update includes before/after review, weekly stats,
-revision memory, and the updated Wake Up control. The `v1` label is the app's
-release label, not an indication that the old dashboard is running.
 
 Do not launch a copied `dashboard-active` folder. Update `main` in the maintained
 checkout before starting it. The Desktop path includes `HOME!`; Webpack rejects
@@ -39,10 +40,10 @@ Demo mode uses sample clips that ship with the app. It needs no Supabase, no key
 To see the phone layout, open the same address on your phone while it is on the same Wi-Fi, using the PC's address instead of `localhost` (for example `http://192.168.1.20:3000`; `ipconfig` shows it as "IPv4 Address"). Windows may ask to allow Node.js through the firewall; allow it on private networks.
 
 Things to try:
-- **A**, **D**, **R** keys approve, deny, or open the revision box. Approve and Deny wait 4 seconds with an **Undo** button before they count.
-- The **Wake Up** switch (top right) puts the whole page to sleep and wakes it again.
-- Click a streamer in the left rail to open their Cinema live page.
-- **Save** under "Approved · ready on phone" downloads the clip.
+- **Approve** the top pick, pick platforms, press **Post**, then confirm. The bar at the bottom gives 4 seconds to **Undo**; in demo the clip "posts" a few seconds later.
+- **Edit clip**: drag the trim handles, change captions or the headline, then **Save changes**. The clip comes back as the top pick tagged "Edited by you", re-renders (5 s in demo) and can be posted.
+- Click any clip in the queue for the review popup. **Post batch** posts every approved clip after one confirm.
+- **/** focuses search; **Esc** closes popups.
 
 Stop the server with **Ctrl+C**.
 
@@ -104,25 +105,25 @@ Open http://localhost:3000, enter your email, and click the link in the email on
 ## How access is protected
 
 - Every page except `/login` needs a signed-in session (middleware).
-- Postgres decides who sees data: row-level security lets only users in `owners` read anything, and the only writes are the `review_clip`, `mark_submitted` and `set_awake` functions, which check `is_owner()` again. A signed-in stranger sees "Not allowed" and an empty database.
+- Postgres decides who sees data: row-level security lets only users in `owners` read anything, and the only writes are owner-checked functions such as `review_clip`, `mark_submitted` and `request_clip`, which check `is_owner()` again. A signed-in stranger sees "Not allowed" and an empty database.
 - Sign-in is by email link with sign-ups turned off, so nobody can create an account.
 - Clips stay in a private Storage bucket. The dashboard asks for a signed link that expires after 1 hour each time it plays or downloads a clip.
 
 **Pods (`NEXT_PUBLIC_CLIPP_PODS=1`, needs migration `20261124000000_pods.sql`).** The gate calls `my_access()` instead of `is_owner()`. The admin (Zo) sees every pod and picks one in the top bar (All by default); a pod login is pinned to its pod and RLS returns only that pod's rows. Approve, revise and deny show only to the owner of the clip's pod; untagged clips stay admin-only (D102, D103). `review_clip` refuses everyone else anyway. New member = add the user by hand in Supabase Auth plus a `pod_members` row (sign-ups stay off). Demo mode previews a pod login with `?as=pod-2` (owner) or `?as=pod-2&role=member`.
 `NEXT_PUBLIC_CLIPP_POD_HOME=1` turns Overview into the pod's action list (stuck posts, to approve, campaigns to join, earnings). Ledger (admin only) records payouts through `ledger_add` / `ledger_set_status` / `ledger_reverse`; the database computes the 15% cut and pod net and allows only pending -> cleared -> approved -> paid. Statements are read-only per pod. The dashboard never moves money (D092).
 
-## Wake Up
+## Always on
 
-The switch records what you want in the `control` table. The worker on the PC reads it every 15 seconds:
-- **On**: it watches live streams and clips them.
-- **Off**: it stops watching and capturing. Clips already rendering, waiting for review or posting still finish.
+The worker watches and clips whenever it runs; nothing in the dashboard can pause it (D116). The badge in the top bar and the line in the bottom-left come from the PC's own heartbeat, so they say "PC offline" when it stops reporting. The old `control` table and `set_awake` function stay in the database for older dashboards but nothing reads them.
 
-The small line under the switch is what the PC itself last reported (watching, awake, waking up, offline and when it was last seen), so the switch never pretends the PC is running when it is off.
+## Platform picking (migration `20261127000000_post_platforms.sql`, not applied yet)
+
+The post toggles save the picked platforms on the clip (`clips.post_platforms`) and the publisher posts only there. Until that migration is applied the toggles are locked on and the confirm dialog says every connected account gets the post, which is what the publisher does today. Platforms without an active `destinations` row are greyed out; TikTok stays a by-hand upload (D074).
 
 ## Checks
 
 ```powershell
-npm test        # logic tests (queue order, countdown, PC state, revision text)
+npm test        # logic tests (queue order, countdown, PC state, revision text, review-page numbers)
 npm run lint    # TypeScript
 npm run build   # production build
 ```

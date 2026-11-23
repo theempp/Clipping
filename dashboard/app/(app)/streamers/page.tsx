@@ -39,7 +39,7 @@ export default function Streamers() {
     <>
       <section className="hero" style={{ marginBottom: 28 }}>
         <div><h1>Streamers<br /><b>{live.length} live now.</b></h1>
-          <p>Live status and viewers come straight from Twitch and Kick, so they stay right even while the PC sleeps.</p></div>
+          <p>Live status and viewers come straight from Twitch and Kick, so they stay right even when the PC is offline.</p></div>
       </section>
       <div className="sec first"><h2>Core roster</h2><span>{core.filter((v) => v.live).length} live</span></div>
       <div className="slist">{core.map(card)}</div>

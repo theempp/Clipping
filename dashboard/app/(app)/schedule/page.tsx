@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { ApprovedList } from "@/components/ApprovedList";
 import { Countdown } from "@/components/Countdown";
+import { TikTokPanel } from "@/components/TikTokPanel";
 import { useNow, useStore } from "@/lib/store";
 
 type Ev = { id: string; at: number; title: string; meta: string; kind: "posted" | "failed" | "queued" | "window" };
@@ -49,7 +50,8 @@ export default function Schedule() {
         <ApprovedList />
         <Countdown />
       </div>
-      <p className="quiet" style={{ marginTop: 18 }}>Want something changed before it posts? Open it in the <Link href="/editor" style={{ textDecoration: "underline" }}>editor</Link>.</p>
+      <div style={{ marginTop: 18 }}><TikTokPanel /></div>
+      <p className="quiet" style={{ marginTop: 18 }}>Want something changed before it posts? Open it from the <Link href="/" style={{ textDecoration: "underline" }}>review queue</Link> and press Edit clip.</p>
     </>
   );
 }
