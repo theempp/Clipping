@@ -102,7 +102,7 @@ Status: structure agreed in chat with zo; terms, numbers and legal setup are ope
 
 **Risks to resolve before he joins.**
 1. Campaign/platform payouts go to the registered payout account; channels or payout details must sit with the agency, or earnings are sent in manually. Check how Zo's campaigns handle payout details.
-2. Holding others' money: separate business account, contractor tax forms, per-payout records, accountant. Not a lawyer or accountant call; get a real one.
+2. Holding others' money: separate business account, contractor tax forms, per-payout records. v1: no outside professionals; keep the ledger records clean.
 3. Worker capacity: one GPU PC serves all pods. Test load first.
 4. Roster fit (D069 GTA-6-only) and D080 originality rule apply to every pod.
 5. zo owns the tech and holds the leverage; write down what happens to his pod if they split.
