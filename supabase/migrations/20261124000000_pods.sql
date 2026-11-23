@@ -383,3 +383,136 @@ grant execute on function public.default_pod_id() to authenticated, service_role
 grant execute on function public.my_access() to authenticated;
 grant execute on function public.ledger_add(uuid, uuid, text, bigint, text, numeric) to authenticated;
 grant execute on function public.ledger_set_status(uuid, public.ledger_status, text) to authenticated;
+
+-- ================= Amendments from Zo's answers (D102-D108) =================
+-- D102 admin sees every pod but approves only untagged clips; D103 only the pod owner approves;
+-- D105 corrections are reversing entries; D106 pod owner joins campaigns; D107 an ended pod keeps
+-- read-only ledger access until fully paid; D108 pod owner tunes its own streamers' brain.
+
+create or replace function public.is_pod_owner(p_pod uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.pod_members m join public.pods p on p.id = m.pod_id
+                 where m.pod_id = p_pod and m.user_id = auth.uid() and m.role = 'owner' and p.status <> 'ended');
+$$;
+
+-- Tool access ends on exit (D093): ended pods drop out of my_pod_ids().
+create or replace function public.my_pod_ids() returns setof uuid
+language sql stable security definer set search_path = public as $$
+  select m.pod_id from public.pod_members m join public.pods p on p.id = m.pod_id
+  where m.user_id = auth.uid() and p.status <> 'ended';
+$$;
+
+-- Ledger reads also cover an ended pod while any entry is unpaid (D107).
+create or replace function public.my_ledger_pod_ids() returns setof uuid
+language sql stable security definer set search_path = public as $$
+  select m.pod_id from public.pod_members m join public.pods p on p.id = m.pod_id
+  where m.user_id = auth.uid()
+    and (p.status <> 'ended' or exists (select 1 from public.ledger_entries e
+                                        where e.pod_id = p.id and e.status <> 'paid'));
+$$;
+
+drop policy if exists pod_read on public.ledger_entries;
+create policy pod_read on public.ledger_entries for select to authenticated
+  using (pod_id in (select public.my_ledger_pod_ids()));
+drop policy if exists pod_read on public.ledger_events;
+create policy pod_read on public.ledger_events for select to authenticated
+  using (pod_id in (select public.my_ledger_pod_ids()));
+drop policy if exists pod_read_ledger on public.pods;
+create policy pod_read_ledger on public.pods for select to authenticated
+  using (id in (select public.my_ledger_pod_ids()));
+
+-- Review: only the owner of the clip's pod (D102, D103). Untagged clips stay admin-only.
+create or replace function public.review_clip(p_clip uuid, p_action text, p_note text default null,
+                                              p_kind text default 'other', p_payload jsonb default '{}')
+returns public.clips language plpgsql security definer set search_path = public as $$
+declare r public.clips; v_pod uuid;
+begin
+  select pod_id into v_pod from public.clips where id = p_clip;
+  if not ((v_pod is not null and public.is_pod_owner(v_pod)) or (v_pod is null and public.is_admin())) then
+    raise exception 'not allowed';
+  end if;
+  if p_action not in ('approve', 'revise', 'reject') then raise exception 'bad action %', p_action; end if;
+  if p_action = 'revise' and coalesce(p_note, '') = '' then raise exception 'revise needs a note'; end if;
+  perform set_config('app.reason', coalesce(p_note, p_action), true);
+  update public.clips set state = case p_action when 'approve' then 'approved'::public.clip_state
+                                                when 'revise' then 'revise'::public.clip_state
+                                                else 'rejected'::public.clip_state end
+  where id = p_clip returning * into r;
+  if r.id is null then raise exception 'clip % not found', p_clip; end if;
+  if p_action = 'revise' then
+    insert into public.revisions(clip_id, kind, note, payload, created_by)
+    values (p_clip, p_kind, p_note, p_payload, auth.uid());
+  end if;
+  return r;
+end $$;
+
+create or replace function public.mark_submitted(p_submission uuid)
+returns public.submissions language plpgsql security definer set search_path = public as $$
+declare r public.submissions; v_pod uuid; v_found boolean;
+begin
+  select c.pod_id, true into v_pod, v_found from public.submissions s
+    join public.publications p on p.id = s.publication_id join public.clips c on c.id = p.clip_id
+    where s.id = p_submission;
+  if not coalesce(v_found, false) then raise exception 'submission % not found', p_submission; end if;
+  if not ((v_pod is not null and public.is_pod_owner(v_pod)) or (v_pod is null and public.is_admin())) then
+    raise exception 'not allowed';
+  end if;
+  update public.submissions set submitted_at = coalesce(submitted_at, now())
+  where id = p_submission returning * into r;
+  return r;
+end $$;
+
+-- Corrections = reversing entries (D105): negative gross, linked to the original, same status flow.
+alter table public.ledger_entries add column if not exists reverses_id uuid references public.ledger_entries(id);
+alter table public.ledger_entries drop constraint if exists ledger_entries_gross_cents_check;
+alter table public.ledger_entries drop constraint if exists ledger_entries_source_check;
+alter table public.ledger_entries drop constraint if exists ledger_entries_sign_check;
+alter table public.ledger_entries add constraint ledger_entries_source_check check (source in ('campaign', 'reversal'));
+alter table public.ledger_entries add constraint ledger_entries_sign_check check (
+  (source = 'campaign' and reverses_id is null and gross_cents >= 0) or
+  (source = 'reversal' and reverses_id is not null and gross_cents < 0));
+create unique index if not exists ledger_entries_one_reversal on public.ledger_entries(reverses_id)
+  where reverses_id is not null;
+
+create or replace function public.ledger_reverse(p_entry uuid, p_note text)
+returns public.ledger_entries language plpgsql security definer set search_path = public as $$
+declare o public.ledger_entries; r public.ledger_entries;
+begin
+  if not public.is_admin() then raise exception 'not allowed'; end if;
+  if coalesce(p_note, '') = '' then raise exception 'a reversal needs a reason'; end if;
+  select * into o from public.ledger_entries where id = p_entry;
+  if o.id is null then raise exception 'ledger entry % not found', p_entry; end if;
+  if o.source = 'reversal' then raise exception 'cannot reverse a reversal'; end if;
+  insert into public.ledger_entries(pod_id, source, source_ref, campaign_id, gross_cents, agency_rate, note, reverses_id)
+  values (o.pod_id, 'reversal', 'rev:' || o.id, o.campaign_id, -o.gross_cents, o.agency_rate, p_note, o.id)
+  returning * into r;
+  return r;
+end $$;
+
+-- Pod owner joins / declines / leaves campaigns for its pod (D106).
+create or replace function public.pod_campaign_set(p_pod uuid, p_campaign uuid, p_status text)
+returns public.pod_campaigns language plpgsql security definer set search_path = public as $$
+declare r public.pod_campaigns;
+begin
+  if not public.is_pod_owner(p_pod) then raise exception 'not allowed'; end if;
+  if p_status not in ('joined', 'declined', 'left') then raise exception 'bad status %', p_status; end if;
+  insert into public.pod_campaigns(pod_id, campaign_id, status) values (p_pod, p_campaign, p_status)
+  on conflict (pod_id, campaign_id) do update set status = excluded.status
+  returning * into r;
+  return r;
+end $$;
+
+-- Pod owner tunes the brain of its own streamers (D108). Edit rules and Wake Up stay admin-only until
+-- they carry a pod tag (build plan Phase 1).
+drop policy if exists pod_owner_write on public.streamer_brain;
+create policy pod_owner_write on public.streamer_brain for all to authenticated
+  using (exists (select 1 from public.streamers s
+                 where s.id = streamer_brain.streamer_id and public.is_pod_owner(s.pod_id)))
+  with check (exists (select 1 from public.streamers s
+                      where s.id = streamer_brain.streamer_id and public.is_pod_owner(s.pod_id)));
+grant insert, update on public.streamer_brain to authenticated;
+
+revoke execute on function public.is_pod_owner(uuid), public.my_ledger_pod_ids(),
+  public.ledger_reverse(uuid, text), public.pod_campaign_set(uuid, uuid, text) from public, anon;
+grant execute on function public.is_pod_owner(uuid), public.my_ledger_pod_ids(),
+  public.ledger_reverse(uuid, text), public.pod_campaign_set(uuid, uuid, text) to authenticated;

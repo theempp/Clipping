@@ -190,4 +190,40 @@ do $$ begin
     raise exception 'FAIL: Pod 1 member sees Pod 2 data'; end if;
 end $$;
 reset role;
+-- D102/D103: admin and plain members cannot approve Pod 2 clips
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000dd"}', false);
+do $$ begin
+  perform public.review_clip((select id from public.clips where job_id = 'p2job'), 'reject');
+  raise exception 'FAIL: pod member reviewed a clip';
+exception when raise_exception then if sqlerrm like 'FAIL%' then raise; end if; end $$;
+reset role;
+select set_config('test.p2job', (select id::text from public.clips where job_id = 'p2job'), false);
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000aa"}', false);
+do $$ begin
+  perform public.review_clip(current_setting('test.p2job')::uuid, 'reject');
+  raise exception 'FAIL: admin reviewed a Pod 2 clip';
+exception when raise_exception then if sqlerrm like 'FAIL%' then raise; end if; end $$;
+-- D105: reversal mirrors the original, only once, never a reversal of a reversal
+do $$ declare o public.ledger_entries; r public.ledger_entries; begin
+  o := public.ledger_add((select id from public.pods where slug = 'pod-2'), null, 'rev-test', 2000);
+  r := public.ledger_reverse(o.id, 'clawback');
+  if r.gross_cents <> -2000 or r.agency_cut_cents <> -300 or r.pod_net_cents <> -1700 or r.status <> 'pending' then
+    raise exception 'FAIL: reversal %', row_to_json(r); end if;
+  begin perform public.ledger_reverse(o.id, 'again'); raise exception 'FAIL: double reversal';
+  exception when unique_violation then null; end;
+  begin perform public.ledger_reverse(r.id, 'x'); raise exception 'FAIL: reversed a reversal';
+  exception when raise_exception then if sqlerrm like 'FAIL%' then raise; end if; end;
+end $$;
+reset role;
+-- D107: ended pod loses clips, keeps ledger reads while unpaid
+update public.pods set status = 'ended', ended_at = now() where slug = 'pod-2';
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000cc"}', false);
+do $$ begin
+  if exists (select 1 from public.clips) then raise exception 'FAIL: ended pod still sees clips'; end if;
+  if not exists (select 1 from public.ledger_entries) then raise exception 'FAIL: ended pod lost unpaid ledger'; end if;
+end $$;
+reset role;
 select 'ALL POD CHECKS PASSED';
