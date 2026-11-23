@@ -163,7 +163,7 @@ export const DEFAULT_TOOLS = ["hard_cut", "headline_box"];
 export const TOOL_LABEL: Record<string, string> = {
   black_spacer: "Black spacer", slowmo_vignette: "Slow-mo + vignette", music_cue: "Music cue",
   sfx_whoosh: "Whoosh", sfx_hit: "Hit", sfx_glitch: "Glitch",
-  swap_full_face: "Full-face swap", swap_full_game: "Full-game swap",
+  swap_full_face: "Full-face swap", swap_full_game: "Full-game swap", gta_stinger: "GTA stinger",
 };
 export type FlashbackProposal = { reason: string; source_moment: string };
 export type ClipRecipe = {

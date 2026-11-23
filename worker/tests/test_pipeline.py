@@ -220,7 +220,8 @@ def test_revision_note_fixes_clips_already_waiting(tmp_path, source_video):
     assert rule["key"] == "zoom_style" and rule["value"] == "smooth"
     b = next(c for c in sb.t["clips"] if c["id"] == b["id"])
     assert b["state"] == "pending_review" and b["revision"] == 1 and not b.get("fixing")
-    assert b["manifest"]["motion"]["motion_version"] == 2
+    from clipworker.render.ffmpeg import MOTION_VERSION
+    assert b["manifest"]["motion"]["motion_version"] == MOTION_VERSION
     assert sb.t["edit_rules"][0]["fixed_count"] == 1
 
 

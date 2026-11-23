@@ -25,11 +25,12 @@ TOOLBOX: dict[str, tuple[str, frozenset[str]]] = {
     "sfx_glitch": ("sfx", frozenset({"reveal", "layout_swap"})),
     "swap_full_face": ("layout", frozenset({"reaction_peak"})),
     "swap_full_game": ("layout", frozenset({"game_punchline"})),
+    "gta_stinger": ("transition", frozenset({"gta6_sting"})),  # D115: GTA 6 only, a baked sting must fit
 }
 BANNED = frozenset({"zoom", "zoom_in", "zoom_out", "punch_in"})  # D112
 MANUAL_ONLY = frozenset({"flashback"})  # D113: proposed by the agent, approved by Zo, never auto-picked
 
-LAYOUTS = ("split", "full_face", "full_game")
+LAYOUTS = ("split", "full_face", "full_game", "track")  # track = full-frame face-tracked (IRL)
 CAPTION_STYLES = ("headline", "headline+words")  # D073 A/B
 DEFAULT_TOOLS = ("hard_cut", "headline_box")  # always on, listed first
 MIN_TOOLS, MAX_TOOLS = 2, 5  # defaults plus 0-3 extras that fit the moment
@@ -232,6 +233,8 @@ def moment_tags(j: dict) -> set[str]:
         tags |= {"tense", "mock_serious"}
     if j.get("compilation"):
         tags.add("compilation")
+    if j.get("gta6") and cat in ("fail", "rage", "clutch", "funny"):  # a sting in stingers.STINGS fits
+        tags.add("gta6_sting")
     return tags
 
 

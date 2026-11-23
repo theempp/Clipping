@@ -189,12 +189,17 @@ def main(argv: list[str] | None = None) -> int:
     lk.add_argument("--full-frame", action="store_true", help="IRL / full cam: face-tracked full frame")
     bl = sub.add_parser("brain-learn", help="labels -> new brain version (features.brain)")
     bl.add_argument("--channel", required=True)
+    sub.add_parser("face-model", help="download + hash-check the MediaPipe face model (D115 IRL reframe)")
     a = p.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
         if a.cmd == "replay":
             return cmd_replay(a)
+        if a.cmd == "face-model":
+            from .render.motion import detector_name, ensure_face_model
+            print(f"face model ok: {ensure_face_model()}; detector: {detector_name()}")
+            return 0
         if a.cmd == "check":
             s = load_settings(Path(a.config) if a.config else None)
             print(f"work dir {s.work_dir}; {len(s.channels)} channel(s), up to {s.max_channels} captured at once")
