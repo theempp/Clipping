@@ -530,3 +530,8 @@ create trigger owner_to_pod1 after insert on public.owners for each row execute 
 
 -- The ledger guard runs as the caller; the worker (service_role) must be able to evaluate it.
 grant execute on function public.is_admin(), public.is_pod_owner(uuid), public.my_pod_ids(), public.my_ledger_pod_ids() to service_role;
+
+-- Pod logins see stuck-post stats for their own clips (Phase 3 action list).
+drop policy if exists pod_read on public.post_stats;
+create policy pod_read on public.post_stats for select to authenticated using (exists (
+  select 1 from public.clips c where c.id = post_stats.clip_id and c.pod_id in (select public.my_pod_ids())));
