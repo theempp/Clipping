@@ -82,7 +82,7 @@ def cmd_dryrun(a) -> int:
     tr = CachedTranscriber(WhisperXTranscriber.auto(), s.cache_dir)
     out = run_dry(s, a.channel, Path(a.video), Path(a.chat), s.work_dir / "dryrun", tr, judge,
                   max_moments=a.max, ffmpeg=env("FFMPEG_BIN", "ffmpeg"), supabase=sb,
-                  vod_started_at=a.vod_started_at)
+                  vod_started_at=a.vod_started_at, video_offset=a.video_offset)
     print((out / "report.md").read_text(encoding="utf-8"))
     print(f"report: {out / 'report.md'}")
     return 0
@@ -175,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--review", action="store_true",
                    help="upload QA-passed clips to the dashboard review queue (never posts)")
     d.add_argument("--vod-started-at", type=float, default=0.0, help="VOD start, unix seconds")
+    d.add_argument("--video-offset", type=float, default=0.0,
+                   help="VOD time (s) where the video file starts, e.g. 3600 for a section from 1:00:00")
     bl = sub.add_parser("brain-learn", help="labels -> new brain version (features.brain)")
     bl.add_argument("--channel", required=True)
     a = p.parse_args(argv)

@@ -23,13 +23,13 @@ from .remote.rights import RightsGate
 from .store import Store
 
 
-def vod_extractor(vod: Path, ffmpeg: str = "ffmpeg", run=subprocess.run):
+def vod_extractor(vod: Path, ffmpeg: str = "ffmpeg", run=subprocess.run, offset: float = 0.0):
     """extract_window stand-in that cuts [start, end] (VOD offsets) straight from the file."""
     def extract(_buf_dir, start: float, end: float, out_dir: Path) -> dict:
         out_dir.mkdir(parents=True, exist_ok=True)
-        start = max(0.0, start)
+        start = max(offset, start)
         video, audio = out_dir / "window.mp4", out_dir / "window.wav"
-        run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}", "-i", str(vod),
+        run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start - offset:.3f}", "-i", str(vod),
              # crop boxes are measured on 1920x1080 live frames; a lower-res VOD is scaled up to match
              "-t", f"{end - start:.3f}", "-map", "0:v:0", "-map", "0:a:0",
              "-vf", "scale=1920:1080:flags=bicubic,setsar=1", "-c:v", "libx264",
@@ -39,15 +39,16 @@ def vod_extractor(vod: Path, ffmpeg: str = "ffmpeg", run=subprocess.run):
     return extract
 
 
-def vod_loudness(vod: Path, ffmpeg: str = "ffmpeg", run=subprocess.run) -> list[tuple[float, float]]:
+def vod_loudness(vod: Path, ffmpeg: str = "ffmpeg", run=subprocess.run,
+                 offset: float = 0.0) -> list[tuple[float, float]]:
     r = run([ffmpeg, "-hide_banner", "-nostats", "-i", str(vod), "-map", "0:a:0", "-vn",
              "-filter:a", "ebur128=peak=none", "-f", "null", "-"], capture_output=True, text=True)
-    return parse_ebur128((r.stderr or "").splitlines(), 0.0, step_s=0.5)
+    return parse_ebur128((r.stderr or "").splitlines(), offset, step_s=0.5)
 
 
 def run_dry(s: Settings, channel_key: str, vod: Path, chat: Path, out_root: Path, transcriber, judge,
             max_moments: int = 12, ffmpeg: str = "ffmpeg", loudness=None, extract=None,
-            render=None, qa=None, supabase=None, vod_started_at: float = 0.0) -> Path:
+            render=None, qa=None, supabase=None, vod_started_at: float = 0.0, video_offset: float = 0.0) -> Path:
     """supabase set = review mode: QA-passed clips upload as pending_review (the publisher
     is never started here, and the DB refuses to publish anything a human has not approved).
     vod_started_at (unix) turns VOD offsets into real moment times on the dashboard."""
@@ -58,7 +59,7 @@ def run_dry(s: Settings, channel_key: str, vod: Path, chat: Path, out_root: Path
         b = brain.load(s.state_dir(ch), ch.streamer)
         params, lift = brain.apply(b, ch.detector), (None if b.learning else b.chat_word_lift)
     msgs = load_twitchdownloader_chat(chat)
-    loud = vod_loudness(vod, ffmpeg) if loudness is None else loudness
+    loud = vod_loudness(vod, ffmpeg, offset=video_offset) if loudness is None else loudness
     gate = DeadAirGate(s.dead_air) if s.features.dead_air_gate else None
     moments, det = replay(msgs, params, ch.reaction_weights, channel=ch.key, loudness=loud,
                           gate=gate, lift=lift)
@@ -70,7 +71,7 @@ def run_dry(s: Settings, channel_key: str, vod: Path, chat: Path, out_root: Path
     rights = RightsGate(lambda: [], roster={ch.streamer})
     kw = {k: v for k, v in (("render", render), ("qa", qa)) if v is not None}
     pipe = Pipeline(s, store, rights, transcriber, judge, supabase, clock=lambda: float("inf"),
-                    extract=extract or vod_extractor(vod, ffmpeg), **kw)
+                    extract=extract or vod_extractor(vod, ffmpeg, offset=video_offset), **kw)
     pipe.ts_offset = vod_started_at
     top = sorted(moments, key=lambda m: -m.peak_score)[:max_moments]
     jobs = [j for j in (pipe.on_moment(m) for m in sorted(top, key=lambda m: m.start_ts)) if j]
