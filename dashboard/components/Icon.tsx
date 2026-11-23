@@ -31,6 +31,28 @@ const P: Record<string, string> = {
   trophy: "M8 4h8v5a4 4 0 0 1-8 0zM8 6H4v1a4 4 0 0 0 4 4M16 6h4v1a4 4 0 0 1-4 4M12 13v4M8 21h8M9 17h6v4H9z",
   target: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 12h.01",
   moon:"M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z",
+  // Broadcast dock + editor set (concept C)
+  chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  user: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6",
+  cal: "M4 6h16v14H4zM4 10h16M9 3v4M15 3v4",
+  flag: "M5 21V4M5 4h12l-2 4 2 4H5",
+  folder: "M3 6h6l2 2h10v11H3z",
+  gear: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2",
+  plus: "M12 5v14M5 12h14",
+  search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-5-5",
+  bell: "M6 16v-5a6 6 0 1 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0",
+  review: "M5 4h14v16H5zM9 12l2 2 4-4",
+  cut: "M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5",
+  crop: "M7 3v14h14M3 7h14v14",
+  type: "M5 6V4h14v2M12 4v16M9 20h6",
+  pause: "M7 5h4v14H7zM13 5h4v14h-4z",
+  more: "M5 12h.01M12 12h.01M19 12h.01",
+  vol: "M4 9h4l5-4v14l-5-4H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11",
+  mute: "M4 9h4l5-4v14l-5-4H4zM17 9l5 6M22 9l-5 6",
+  refresh: "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7",
+  yt: "M3 8.5a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3zM10 9v6l5-3z",
+  xlogo: "M4 4l16 16M20 4L4 20",
+  tt: "M14 3v11a4 4 0 1 1-4-4M14 3c.5 3 2.5 5 6 5",
 };
 
 export function Icon({ name, size = "1em" }: { name: keyof typeof P | string; size?: string | number }) {

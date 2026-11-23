@@ -1,7 +1,6 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Icon } from "@/components/Icon";
 import { IS_DEMO } from "@/lib/env";
 import { browserClient } from "@/lib/supabase/client";
 
@@ -41,13 +40,12 @@ export default function LoginPage() {
 
   return (
     <main className="gate">
-      <form className="gate-card" onSubmit={sent ? verify : send}>
-        <span className="mk"><Icon name="bolt" size={22} /></span>
-        <h1>Clipp</h1>
+      <form className="gate-card glass" onSubmit={sent ? verify : send}>
+        <h1 className="brand" style={{ fontSize: 30 }}>zwocl<b>i</b>ppe</h1>
         {IS_DEMO ? (
           <>
             <p>Demo mode is on, so there is nothing to sign in to.</p>
-            <Link className="btn light" href="/">Open the demo</Link>
+            <Link className="b ok lg" href="/">Open the demo</Link>
           </>
         ) : sent ? (
           <>
@@ -55,7 +53,7 @@ export default function LoginPage() {
             <label htmlFor="code" className="sr-only">Code</label>
             <input id="code" inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code"
               value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))} />
-            <button className="btn light" disabled={busy || code.length < 6}>{busy ? "Checking…" : "Sign in with code"}</button>
+            <button className="b ok lg" disabled={busy || code.length < 6}>{busy ? "Checking…" : "Sign in with code"}</button>
             {err && <p className="err" role="alert">{err}</p>}
           </>
         ) : (
@@ -64,7 +62,7 @@ export default function LoginPage() {
             <label htmlFor="email" className="sr-only">Email</label>
             <input id="email" type="email" autoComplete="email" required placeholder="you@email.com"
               value={email} onChange={(e) => setEmail(e.target.value)} />
-            <button className="btn light" disabled={busy || !email}>{busy ? "Sending…" : "Email me a link"}</button>
+            <button className="b ok lg" disabled={busy || !email}>{busy ? "Sending…" : "Email me a link"}</button>
             {err && <p className="err" role="alert">{err}</p>}
           </>
         )}

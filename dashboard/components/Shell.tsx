@@ -1,29 +1,46 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PC_NAME } from "@/lib/env";
-import { ago, pcState, rankQueue } from "@/lib/logic";
+import { openSubmissions, pcState, rankQueue } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
-import { fmtViewers, monthSpend, rosterSections, streamerViews, type StreamerView } from "@/lib/view";
+import { BUDGET_USD, monthSpend, streamerViews } from "@/lib/view";
 import { Avatar } from "./Avatar";
+import { Ring } from "./Charts";
 import { Icon } from "./Icon";
 import { UndoToast } from "./UndoToast";
-import { SleepBanner, WakeToggle } from "./WakeToggle";
+import { SleepBanner } from "./WakeToggle";
+
+export const PAGES = [
+  { href: "/", label: "Overview", icon: "grid", main: true },
+  { href: "/review", label: "Review", icon: "review", main: true },
+  { href: "/analytics", label: "Analytics", icon: "chart", main: true },
+  { href: "/streamers", label: "Streamers", icon: "user", main: true },
+  { href: "/editor", label: "Editor", icon: "film", main: true },
+  { href: "/schedule", label: "Schedule", icon: "cal", main: false },
+  { href: "/campaigns", label: "Campaigns", icon: "flag", main: false },
+  { href: "/library", label: "Library", icon: "folder", main: false },
+  { href: "/settings", label: "Settings", icon: "gear", main: false },
+] as const;
+// On a phone the dock keeps four pages; the rest sit behind "More".
+const PHONE = new Set(["/", "/review", "/streamers", "/editor"]);
+
+const isOn = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`));
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { snap, demo, error, ready, signOut } = useStore();
+  const { snap, demo, error, ready, signOut, setAwake, pollLive } = useStore();
   const now = useNow(5000);
   const path = usePathname();
-  const views = streamerViews(snap, now);
-  const sections = rosterSections(views, !!snap.heartbeat?.status.roster);
+  const router = useRouter();
   const queue = rankQueue(snap.clips);
-  const approved = snap.clips.filter((c) => c.state === "approved").length;
-  const games = snap.heartbeat?.status.games ?? {};
   const awake = snap.control.awake;
   const st = pcState(snap.heartbeat, awake, now);
   const gpu = snap.heartbeat?.status.gpu;
+  const disk = snap.heartbeat?.status.disk;
   const spend = monthSpend(snap);
+  const [menu, setMenu] = useState<null | "fab" | "more">(null);
+  const [panel, setPanel] = useState<null | "search" | "alerts">(null);
 
   // Power-on / power-off sweep: only when the switch changes after load, never on first paint.
   const [fx, setFx] = useState<"" | "fx-on" | "fx-off">("");
@@ -38,117 +55,171 @@ export function Shell({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [awake, ready]);
 
-  const row = (v: StreamerView) => {
-    const on = path === `/live/${v.s.slug}`;
-    const game = v.live && v.key ? games[v.key] : undefined;
-    return (
-      <Link key={v.s.id} href={`/live/${v.s.slug}`} title={game ? `${v.s.display_name} · ${game}` : v.s.display_name}
-        className={`sr${v.live ? " lv" : ""}${on ? " on" : ""}`} aria-current={on ? "page" : undefined}>
-        <Avatar s={v.s} live={v.live} size={34} />
-        <span className="sr-t">
-          <b>{v.s.display_name}</b>
-          <span>{v.live
-            ? <>{fmtViewers(v.viewers) ? `${fmtViewers(v.viewers)} watching` : "live now"}</>
-            : v.queued ? `${v.queued} in queue` : "offline"}</span>
-        </span>
-        {v.live
-          ? <span className="tag live"><span className="eq" aria-hidden="true"><i /><i /><i /></span>LIVE</span>
-          : <span className="hs" aria-hidden="true">{v.heat.slice(-6).map((h, i) => <i key={i} className={h ? `h${h}` : ""} />)}</span>}
-      </Link>
-    );
-  };
+  useEffect(() => { setMenu(null); setPanel(null); }, [path]);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setMenu(null); setPanel(null); }
+      const t = e.target as HTMLElement;
+      if (e.key === "/" && !t.closest("input,textarea,select,[contenteditable]")) { e.preventDefault(); setPanel("search"); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+
+  const alerts = useAlerts();
 
   if (error === "not-owner") {
     return (
       <main className="gate">
-        <div className="gate-card">
+        <div className="gate-card glass">
           <h1>Not allowed</h1>
           <p>This account is signed in but is not the owner. Clipp is private.</p>
-          <button className="btn light" onClick={() => void signOut()}>Sign out</button>
+          <button className="b ok lg" onClick={() => void signOut()}>Sign out</button>
         </div>
       </main>
     );
   }
 
-  const liveCore = sections.core.filter((v) => v.live).length;
-  const liveGta = sections.gta6.filter((v) => v.live).length;
+  const dockLink = (p: (typeof PAGES)[number]) => {
+    const on = isOn(path, p.href);
+    return (
+      <Link key={p.href} href={p.href} className={`${on ? "on" : ""}${PHONE.has(p.href) ? "" : " extra"}`}
+        aria-label={p.label} aria-current={on ? "page" : undefined}>
+        <Icon name={p.icon} size={18} />
+        {p.href === "/review" && queue.length > 0 && <em>{queue.length}</em>}
+        <span className="tip">{p.label}</span>
+      </Link>
+    );
+  };
 
   return (
     <div className={`app ${!ready ? "booting" : awake ? "awake" : "asleep"}${fx ? ` ${fx}` : ""}`}>
-      <div className="aurora" aria-hidden="true"><i /><i /><i /></div>
+      <div className="aurora" aria-hidden="true" />
       {fx === "fx-on" && <div className="ignite" aria-hidden="true"><i /></div>}
-      <nav className="rail" aria-label="Main">
-        <div className="brand">
-          <span className="mk"><Icon name="bolt" size={18} /></span>
-          <b>Clipp</b>
-          <small>{demo ? "demo" : "v1"}</small>
-        </div>
 
-        <div className="nav">
-          <Link href="/" className={path === "/" ? "on" : ""} aria-current={path === "/" ? "page" : undefined}>
-            <Icon name="queue" /> <span>Review queue</span> <em>{queue.length}</em>
-          </Link>
-          <Link href="/#approved">
-            <Icon name="download" /> <span>Approved</span> <em>{approved}</em>
-          </Link>
-        </div>
-
-        <h6><span>Streamers</span>{liveCore > 0 && <em>{liveCore} live</em>}</h6>
-        <div className="srs">
-          {sections.core.map(row)}
-          {views.length === 0 && <p className="quiet">No streamers yet. The worker adds them from its channel config.</p>}
-        </div>
-        {sections.gta6.length > 0 && <>
-          <h6><span>GTA 6 only</span>{liveGta > 0 && <em>{liveGta} live</em>}</h6>
-          <div className="srs">{sections.gta6.map(row)}</div>
-        </>}
-
-        <div className="rail-end">
-          <div className={`mach pc-${st}`}>
-            <div className="r1">
-              <Icon name="chip" />
-              <b>{PC_NAME}</b>
-              <span className="state">{st === "offline" ? "offline" : st === "watching" ? "watching" : st}</span>
-            </div>
-            <div className="gb" aria-hidden="true"><i style={{ width: `${st === "offline" ? 0 : gpu?.util ?? 6}%` }} /></div>
-            <div className="r2">
-              <span>{gpu?.name ?? "GPU"}{st !== "offline" && gpu?.util != null ? ` · ${gpu.util}%` : ""}</span>
-              <span>{st === "offline"
-                ? snap.heartbeat ? ago(snap.heartbeat.seen_at, now) : "never seen"
-                : gpu?.mem_used_gb != null ? `${gpu.mem_used_gb}/${gpu.mem_total_gb} GB` : "online"}</span>
-            </div>
+      <nav className="dock" aria-label="Pages">
+        <button type="button" className="fab" aria-label="Quick actions" aria-expanded={menu === "fab"}
+          onClick={() => setMenu((m) => (m === "fab" ? null : "fab"))}><Icon name="plus" size={20} /></button>
+        {PAGES.map(dockLink)}
+        <button type="button" className="more-b" aria-label="More pages" aria-expanded={menu === "more"}
+          onClick={() => setMenu((m) => (m === "more" ? null : "more"))}><Icon name="more" size={20} /></button>
+        {menu && <button type="button" className="scrim" aria-label="Close menu" onClick={() => setMenu(null)} />}
+        {menu === "fab" && (
+          <div className="menu" role="menu">
+            <button role="menuitem" onClick={() => { setMenu(null); router.push(queue[0] ? `/editor?clip=${queue[0].id}` : "/editor"); }}>
+              <Icon name="film" /> Edit the top clip</button>
+            <button role="menuitem" onClick={() => { setMenu(null); router.push("/review"); }}><Icon name="review" /> Open review queue</button>
+            <button role="menuitem" onClick={() => { setMenu(null); void pollLive(true); }}><Icon name="refresh" /> Refresh live numbers</button>
+            <button role="menuitem" onClick={() => { setMenu(null); void setAwake(!awake); }}><Icon name="power" /> {awake ? `Put ${PC_NAME} to sleep` : `Wake ${PC_NAME} up`}</button>
           </div>
-          <div className="rail-foot">
-            <span>${spend.total.toFixed(0)} spent this month</span>
-            {!demo && <button type="button" onClick={() => void signOut()} aria-label="Sign out"><Icon name="out" /></button>}
+        )}
+        {menu === "more" && (
+          <div className="menu" role="menu">
+            {PAGES.filter((p) => !PHONE.has(p.href)).map((p) => (
+              <Link key={p.href} href={p.href} role="menuitem" className={isOn(path, p.href) ? "on" : ""}><Icon name={p.icon} /> {p.label}</Link>
+            ))}
           </div>
-        </div>
+        )}
       </nav>
 
-      <header className="mhead">
-        <div className="mrow">
-          <Link href="/" className="mbrand"><span className="mk"><Icon name="bolt" size={16} /></span>Clipp{demo && <small>demo</small>}</Link>
-          <Link href="/" className="mq"><Icon name="queue" /> {queue.length}</Link>
-          <WakeToggle compact />
-        </div>
-        <div className="strip" role="list">
-          {[...sections.core, ...sections.gta6].map((v) => (
-            <Link key={v.s.id} href={`/live/${v.s.slug}`} role="listitem" aria-label={`${v.s.display_name}${v.live ? " (live)" : ""}`}
-              className={`${path === `/live/${v.s.slug}` ? "on" : ""}${v.live ? " lv" : ""}`}>
-              <Avatar s={v.s} live={v.live} size={42} />
-              <span>{v.s.display_name.split(" ")[0]}</span>
-            </Link>
-          ))}
-        </div>
-      </header>
+      <aside className="rdock" aria-label="Machine">
+        <div><Ring pct={st === "offline" ? 0 : gpu?.util ?? 0} label={`GPU ${gpu?.util ?? 0}%`} />GPU</div>
+        <div><Ring pct={disk?.used_pct ?? 0} color="var(--c2)" text={disk?.used_pct == null ? "—" : undefined} label={`Disk ${disk?.used_pct ?? "unknown"}%`} />Disk</div>
+        <div><Ring pct={(spend.total / BUDGET_USD) * 100} color="var(--c3)" label={`AI spend ${Math.round((spend.total / BUDGET_USD) * 100)}% of budget`} />AI $</div>
+      </aside>
 
-      <main className="main">
-        {demo && <div className="demo-tag">Demo data. Nothing here is saved or posted.</div>}
-        {error && error !== "not-owner" && <div className="err" role="alert">{error}</div>}
+      <div className="wrap">
+        <header className="top">
+          <Link href="/" className="brand" aria-label="Clipp home">zwocl<b>i</b>ppe{demo && <small>demo</small>}</Link>
+          <span className="sp" />
+          <nav className="pillnav" aria-label="Main">
+            {PAGES.filter((p) => p.main).map((p) => (
+              <Link key={p.href} href={p.href} className={isOn(path, p.href) ? "on" : ""} aria-current={isOn(path, p.href) ? "page" : undefined}>{p.label}</Link>
+            ))}
+          </nav>
+          <span className="sp" />
+          <button type="button" className="icb" aria-label="Search (press /)" onClick={() => setPanel("search")}><Icon name="search" size={18} /></button>
+          <button type="button" className="icb" aria-label={`Alerts (${alerts.length})`} onClick={() => setPanel("alerts")}>
+            <Icon name="bell" size={18} />{alerts.length > 0 && <em />}
+          </button>
+        </header>
+
+        {error && error !== "not-owner" && <div className="banner-line err" role="alert">{error}</div>}
         {ready && !awake && <SleepBanner />}
-        {!ready ? <div className="loading"><i />Loading…</div> : <div className="page">{children}</div>}
-      </main>
+        {!ready ? <div className="loading">Loading…</div> : children}
+        {demo && <p className="foot">Demo data. Nothing here is saved or posted.</p>}
+      </div>
+
+      {panel === "search" && <SearchPanel onClose={() => setPanel(null)} />}
+      {panel === "alerts" && <AlertsPanel alerts={alerts} onClose={() => setPanel(null)} />}
       <UndoToast />
     </div>
+  );
+}
+
+type Alert = { id: string; text: string; href: string; tone: "warn" | "run" | "ok" };
+
+function useAlerts(): Alert[] {
+  const { snap } = useStore();
+  const now = useNow(5000);
+  const out: Alert[] = [];
+  for (const s of openSubmissions(snap.submissions, now)) {
+    out.push({ id: s.id, text: `Submit window open: ${Math.ceil((Date.parse(s.deadline_at) - now) / 60000)} min left`, href: "/", tone: "warn" });
+  }
+  const q = rankQueue(snap.clips).length;
+  if (q) out.push({ id: "q", text: `${q} clip${q === 1 ? "" : "s"} waiting on you`, href: "/review", tone: "run" });
+  const st = pcState(snap.heartbeat, snap.control.awake, now);
+  if (st === "offline" && snap.control.awake) out.push({ id: "pc", text: `${PC_NAME} is not reporting`, href: "/settings", tone: "warn" });
+  return out;
+}
+
+function Overlay({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="search" role="dialog" aria-modal="true" aria-label={label} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="search-box">{children}</div>
+    </div>
+  );
+}
+
+function AlertsPanel({ alerts, onClose }: { alerts: Alert[]; onClose: () => void }) {
+  return (
+    <Overlay label="Alerts" onClose={onClose}>
+      <div className="hd" style={{ padding: "6px 8px 0" }}><h3>Alerts</h3><button className="b" onClick={onClose}>Close</button></div>
+      <ul>
+        {alerts.length === 0 && <li><div className="mut">All clear.</div></li>}
+        {alerts.map((a) => (
+          <li key={a.id}><Link href={a.href} onClick={onClose}><span className={`dotst ${a.tone}`} /><span>{a.text}</span></Link></li>
+        ))}
+      </ul>
+    </Overlay>
+  );
+}
+
+function SearchPanel({ onClose }: { onClose: () => void }) {
+  const { snap } = useStore();
+  const now = useNow(30_000);
+  const [q, setQ] = useState("");
+  const views = useMemo(() => streamerViews(snap, now), [snap, now]);
+  const t = q.trim().toLowerCase();
+  const hits = useMemo(() => {
+    const pages = PAGES.filter((p) => p.label.toLowerCase().includes(t)).map((p) => ({ k: p.href, href: p.href, label: p.label, meta: "page", s: null }));
+    const ss = views.filter((v) => v.s.display_name.toLowerCase().includes(t))
+      .map((v) => ({ k: v.s.id, href: `/streamers/${v.s.slug}`, label: v.s.display_name, meta: v.live ? "live" : "streamer", s: v.s }));
+    const cs = snap.clips.filter((c) => (c.title ?? c.job_id).toLowerCase().includes(t)).slice(0, 8)
+      .map((c) => ({ k: c.id, href: c.state === "pending_review" ? `/review?clip=${c.id}` : `/library?clip=${c.id}`, label: c.title ?? c.job_id, meta: c.state.replace("_", " "), s: null }));
+    return t ? [...pages, ...ss, ...cs] : [...ss.slice(0, 5), ...pages];
+  }, [t, views, snap.clips]);
+  return (
+    <Overlay label="Search" onClose={onClose}>
+      <input autoFocus placeholder="Search streamers, clips, pages" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" />
+      <ul>
+        {hits.map((h) => (
+          <li key={h.k}><Link href={h.href} onClick={onClose}>
+            {h.s ? <Avatar s={h.s} size={26} /> : <Icon name="arrow" />}<span>{h.label}</span><small>{h.meta}</small>
+          </Link></li>
+        ))}
+        {hits.length === 0 && <li><div className="mut">Nothing matches “{q}”.</div></li>}
+      </ul>
+    </Overlay>
   );
 }

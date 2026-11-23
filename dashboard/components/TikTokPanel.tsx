@@ -69,29 +69,29 @@ function Row({ v }: { v: LongformVideo }) {
             {v.posted_at ? " · posted" : clip?.state === "approved" ? " · approved, not posted" : clip ? ` · ${clip.state.replace("_", " ")}` : ""}</span>
         </span>
         {v.tiktok_url
-          ? <a className="lnk" href={v.tiktok_url} target="_blank" rel="noreferrer">Open <Icon name="arrow" /></a>
-          : <button type="button" className="btn sm" disabled={busy || !clip || clip.state !== "approved"} onClick={() => void save()}>
+          ? <a className="b" href={v.tiktok_url} target="_blank" rel="noreferrer">Open <Icon name="arrow" /></a>
+          : <button type="button" className="b" disabled={busy || !clip || clip.state !== "approved"} onClick={() => void save()}>
               <Icon name="download" /> Save</button>}
       </div>
       <div className="chips">{tagLine(v).map((t) => <span key={t} className="chip">{t}</span>)}</div>
       {!v.posted_at && clip?.state === "approved" && (
         <div className="tt-post">
-          <input type="url" inputMode="url" placeholder="Paste the TikTok link after you post" value={url}
+          <input type="url" inputMode="url" className="in" placeholder="Paste the TikTok link after you post" value={url}
             onChange={(e) => setUrl(e.target.value)} aria-label="TikTok link" />
-          <button type="button" className="btn light sm" disabled={!okUrl || busy}
+          <button type="button" className="b ok" disabled={!okUrl || busy}
             onClick={async () => { setBusy(true); await markTiktokPosted(v.id, url.trim()); setBusy(false); }}>
             Mark posted</button>
         </div>
       )}
       {v.posted_at && (
         <div className="tt-post">
-          <label className="lbl" htmlFor={`n-${v.id}`}>TikTok notice</label>
-          <select id={`n-${v.id}`} value={v.notice} onChange={(e) => void setNotice(v.id, e.target.value as LongformVideo["notice"])}>
+          <label className="r" htmlFor={`n-${v.id}`}>TikTok notice</label>
+          <select className="in" style={{ width: "auto" }} id={`n-${v.id}`} value={v.notice} onChange={(e) => void setNotice(v.id, e.target.value as LongformVideo["notice"])}>
             <option value="none">None</option>
             <option value="ineligible">Not eligible for rewards</option>
             <option value="unoriginal">Unoriginal content</option>
           </select>
-          <button type="button" className="btn sm" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          <button type="button" className="b" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
             {saved ? "Stats saved · add more" : "Enter stats"}</button>
         </div>
       )}
@@ -99,10 +99,10 @@ function Row({ v }: { v: LongformVideo }) {
         <div className="tt-form" role="group" aria-label="TikTok Studio numbers">
           {FIELDS.map((f) => (
             <label key={f.k}><span>{f.label}</span>
-              <input type="number" min="0" step={f.step ?? "1"} inputMode="decimal" value={vals[f.k] ?? ""}
+              <input className="in" type="number" min="0" step={f.step ?? "1"} inputMode="decimal" value={vals[f.k] ?? ""}
                 onChange={(e) => setVals((x) => ({ ...x, [f.k]: e.target.value }))} /></label>
           ))}
-          <button type="button" className="btn light sm" disabled={busy} onClick={() => void submitStats()}>Save stats</button>
+          <button type="button" className="b ok" disabled={busy} onClick={() => void submitStats()}>Save stats</button>
         </div>
       )}
     </li>
@@ -118,15 +118,15 @@ export function TikTokPanel() {
   }).slice(0, 12);
   const results = [...snap.results].sort((a, b) => (b.follows_per_1k ?? -1) - (a.follows_per_1k ?? -1));
   return (
-    <section className="card tt" id="tiktok" aria-label="TikTok long videos">
-      <div className="card-h"><h2>TikTok · Zwoclipp <span className="ct">{list.length}</span></h2><span className="lbl">over 1 min · manual post</span></div>
+    <section className="glass" id="tiktok" aria-label="TikTok long videos">
+      <div className="hd"><h3>TikTok · Zwoclipp <span className="mut"> · {list.length}</span></h3><span className="r">over 1 min · manual post</span></div>
       {list.length === 0 && <p className="quiet">Long videos show up here once the PC builds them (needs the Grok key for narration).</p>}
-      <ul>{list.map((v) => <Row key={v.id} v={v} />)}</ul>
+      <ul className="tt-list">{list.map((v) => <Row key={v.id} v={v} />)}</ul>
       {results.length > 0 && (
         <div className="tt-res">
-          <div className="card-h"><h2>Test results</h2><span className="lbl">best follows per 1K first</span></div>
-          <div className="tt-scroll">
-            <table>
+          <div className="hd"><h3>Test results</h3><span className="r">best follows per 1K first</span></div>
+          <div className="scroll-x">
+            <table className="tbl">
               <thead><tr><th>Cell</th><th>Posts</th><th>Notices</th><th>Avg watch</th><th>5 s hold</th><th>Follows/1K</th><th>RPM</th></tr></thead>
               <tbody>
                 {results.map((r) => (

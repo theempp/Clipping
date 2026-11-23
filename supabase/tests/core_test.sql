@@ -152,4 +152,70 @@ do $$ begin
     raise exception 'FAIL: rpm wrong'; end if;
 end $$;
 reset role;
+
+-- live_stats migration (D092/D093)
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000bb"}', false);
+do $$ begin
+  perform public.set_brain_weights((select id from public.streamers where slug = 'lacy'), '{"chat_spike":1}');
+  raise exception 'FAIL: non-owner set brain weights';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if;
+end $$;
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000aa"}', false);
+-- first save of one slider keeps the other defaults; junk, null, out-of-range and unknown keys handled
+select public.set_brain_weights((select id from public.streamers where slug = 'lacy'),
+  '{"chat_spike":"150","voice_peak":null,"chat_words":"abc","viewer_clips":12.6,"bogus":5}', array['  Clip ', 'clip', '', 'W']);
+do $$ declare b public.streamer_brain; begin
+  select * into b from public.streamer_brain limit 1;
+  if b.weights <> '{"chat_spike":100,"voice_peak":55,"chat_words":75,"viewer_clips":13,"approved_match":60}'::jsonb then
+    raise exception 'FAIL: brain weights %', b.weights; end if;
+  if b.words <> array['clip', 'w'] then raise exception 'FAIL: brain words %', b.words; end if;
+end $$;
+select public.set_brain_weights((select id from public.streamers where slug = 'lacy'), '{"approved_match":-4}');
+do $$ begin
+  if (select weights->>'approved_match' from public.streamer_brain) <> '0'
+     or (select weights->>'chat_spike' from public.streamer_brain) <> '100'
+     or (select cardinality(words) from public.streamer_brain) <> 2 then
+    raise exception 'FAIL: brain update merge'; end if;
+end $$;
+-- TikTok: blank keeps the last number, negatives refused, snapshots written
+select public.set_manual_stat(1200, 50000, 30);
+select public.set_manual_stat(1300, null, null);
+do $$ begin
+  if not exists (select 1 from public.live_stats where key = 'tiktok:own'
+                 and followers = 1300 and views = 50000 and posts = 30) then
+    raise exception 'FAIL: tiktok blank wiped a value'; end if;
+  if (select count(*) from public.stat_snapshots where key = 'tiktok:own') <> 4 then
+    raise exception 'FAIL: tiktok snapshots'; end if;
+end $$;
+do $$ begin
+  perform public.set_manual_stat(-1, null, null);
+  raise exception 'FAIL: negative tiktok count accepted';
+exception when raise_exception then
+  if sqlerrm like 'FAIL%' then raise; end if;
+end $$;
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000bb"}', false);
+do $$ begin
+  if exists (select 1 from public.live_stats) or exists (select 1 from public.stat_snapshots)
+     or exists (select 1 from public.streamer_brain) then
+    raise exception 'FAIL: non-owner reads live tables'; end if;
+end $$;
+reset role;
+do $$ begin
+  if (select count(*) from pg_publication_tables where pubname = 'supabase_realtime' and tablename in ('live_stats', 'streamer_brain')) <> 2 then
+    raise exception 'FAIL: realtime publication'; end if;
+end $$;
+reset role;
+-- snapshot slots: a second poller in the same bucket is a no-op; manual (null slot) rows never collide
+insert into public.stat_snapshots(key, metric, value, slot) values ('x:own', 'followers', 1, 42)
+  on conflict (key, metric, slot) do nothing;
+insert into public.stat_snapshots(key, metric, value, slot) values ('x:own', 'followers', 2, 42)
+  on conflict (key, metric, slot) do nothing;
+do $$ begin
+  if (select count(*) from public.stat_snapshots where key = 'x:own') <> 1 then
+    raise exception 'FAIL: duplicate snapshot in one slot'; end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'clips' and column_name = 'revise_failed') then
+    raise exception 'FAIL: clips.revise_failed missing'; end if;
+end $$;
 select 'ALL SQL CHECKS PASSED';

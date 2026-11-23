@@ -18,7 +18,9 @@ export async function middleware(req: NextRequest) {
     },
   });
   const { data: { user } } = await sb.auth.getUser();
-  const open = req.nextUrl.pathname.startsWith("/login") || req.nextUrl.pathname.startsWith("/auth");
+  // /api/live checks the owner or the cron secret itself, so a scheduler without a cookie can reach it.
+  const p = req.nextUrl.pathname;
+  const open = p.startsWith("/login") || p.startsWith("/auth") || p.startsWith("/api/live");
   if (!user && !open) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";

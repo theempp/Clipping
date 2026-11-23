@@ -31,29 +31,29 @@ export function LiveStage({ s, status, liveKey, view, clip }: {
 
   if (view === "clip") {
     return (
-      <div className="screen clipv">
+      <div className="clipv">
         <ClipPlayer clip={clip} autoPlay />
       </div>
     );
   }
   if (showPlayer && player) {
     return (
-      <div className="screen">
+      <div className="stage">
         <iframe key={player.src} src={player.src} title={`${s.display_name} live on ${player.platform}`}
           allow={FRAME_ALLOW} allowFullScreen sandbox={SANDBOX} referrerPolicy="origin" />
       </div>
     );
   }
   return (
-    <div className="screen off">
-      <div className="off-c">
+    <div className="stage">
+      <div className="off">
         <Avatar s={s} size={88} />
         <b>{player ? `${s.display_name} is offline` : host ? "No player for this channel" : "Loading player…"}</b>
         <span>{player ? "Clipp starts watching the moment they go live." : "This streamer has no Twitch or Kick channel saved."}</span>
         {player && (
-          <div className="off-a">
-            <button type="button" className="btn light sm" onClick={() => setForce(true)}><Icon name="play" /> Load player anyway</button>
-            <a className="btn sm" href={player.watch} target="_blank" rel="noreferrer noopener"><Icon name="external" /> Open on {player.platform === "kick" ? "Kick" : "Twitch"}</a>
+          <div className="chips">
+            <button type="button" className="b ok" onClick={() => setForce(true)}><Icon name="play" /> Load player anyway</button>
+            <a className="b" href={player.watch} target="_blank" rel="noreferrer noopener"><Icon name="external" /> Open on {player.platform === "kick" ? "Kick" : "Twitch"}</a>
           </div>
         )}
       </div>

@@ -4,7 +4,16 @@ import type { ReactNode } from "react";
 import { demoSnapshot } from "./demo";
 import { IS_DEMO } from "./env";
 import { browserClient } from "./supabase/client";
-import type { Clip, LongformVideo, ReviewAction, Snapshot, TiktokStats } from "./types";
+import type { Clip, EditPlan, LongformVideo, ReviewAction, Snapshot, TiktokStats } from "./types";
+import { editNote, editPayload } from "./logic";
+import type { LiveStat } from "./types";
+
+/** Demo only: nudge live viewer counts a little, like a real stream. */
+function driftLive(rows: LiveStat[]): LiveStat[] {
+  const at = new Date().toISOString();
+  return rows.map((r) => (r.is_live && r.viewers != null
+    ? { ...r, viewers: Math.max(50, Math.round(r.viewers * (1 + (Math.random() - 0.48) * 0.02))), updated_at: at } : r));
+}
 
 export const UNDO_MS = 4000;
 
@@ -28,13 +37,19 @@ type Store = {
   markTiktokPosted: (id: string, url: string) => Promise<boolean>;
   addTiktokStats: (id: string, stats: TiktokStats) => Promise<boolean>;
   setNotice: (id: string, notice: LongformVideo["notice"]) => Promise<void>;
+  /** Editor: trim/crop/headline/caption plan goes back to the PC as a revision (clip leaves the queue until re-rendered). */
+  sendEdit: (clip: Clip, plan: EditPlan, base: EditPlan) => Promise<boolean>;
+  setBrain: (streamerId: string, weights: Record<string, number>, words?: string[]) => Promise<void>;
+  setTiktokChannel: (followers: number | null, views: number | null, posts: number | null) => Promise<boolean>;
+  /** Ask the server to poll the platforms now (throttled server-side). */
+  pollLive: (force?: boolean) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const EMPTY: Snapshot = {
   streamers: [], clips: [], submissions: [], heartbeat: null,
   control: { awake: false, updated_at: new Date(0).toISOString() }, candidates: [], spend: [], revisions: [], rules: [],
-  longform: [], results: [],
+  longform: [], results: [], live: [], history: [], publications: [], campaigns: [], brains: [],
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -97,7 +112,28 @@ async function loadLive(): Promise<Snapshot> {
   ]);
   const err = [st, cl, su, hb, co, ca, sp, rv, ru, lf, lr].find((r) => r.error)?.error;
   if (err) throw new Error(err.message);
+  // Newer tables (live numbers, brain, schedule) are optional: until their migration is applied they read as empty.
+  const since30d = new Date(Date.now() - 30 * 86400_000).toISOString();
+  const [li, hi, pu, de, cm, br] = await Promise.all([
+    sb.from("live_stats").select("*"),
+    sb.from("stat_snapshots").select("key,metric,value,at").gte("at", since30d).order("at").limit(5000),
+    sb.from("publications").select("id,clip_id,destination_id,status,url,posted_at,created_at").order("created_at", { ascending: false }).limit(200),
+    sb.from("destinations").select("id,platform,label"),
+    sb.from("campaigns").select("id,title,status,source_url,streamer_slugs,platforms,cpm_usd,cap_usd,deadline,score,recommendation,created_at")
+      .order("created_at", { ascending: false }).limit(100),
+    sb.from("streamer_brain").select("streamer_id,weights,words,updated_at"),
+  ]);
+  const ok = <T,>(r: { data: T[] | null; error: unknown }): T[] => (r.error ? [] : r.data ?? []);
+  const dest = new Map(ok(de).map((d) => [d.id, d]));
+  const opt = {
+    live: ok(li),
+    history: ok(hi).map((p) => ({ ...p, value: Number(p.value) })),
+    publications: ok(pu).map((p) => ({ ...p, platform: dest.get(p.destination_id)?.platform ?? null, label: dest.get(p.destination_id)?.label ?? null })),
+    campaigns: ok(cm).map((c) => ({ ...c, cpm_usd: c.cpm_usd == null ? null : Number(c.cpm_usd), cap_usd: c.cap_usd == null ? null : Number(c.cap_usd), score: c.score == null ? null : Number(c.score) })),
+    brains: ok(br),
+  };
   return {
+    ...opt,
     streamers: st.data ?? [],
     clips: cl.data ?? [],
     submissions: su.data ?? [],
@@ -155,19 +191,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
       // The fake PC keeps reporting in, so demo never drifts to "offline".
       const beat = setInterval(() => setSnap((s) => (s.heartbeat
         ? { ...s, heartbeat: { ...s.heartbeat, seen_at: new Date().toISOString() } } : s)), 15_000);
-      return () => clearInterval(beat);
+      // Demo stand-in for the Realtime push: live viewer counts drift every few seconds.
+      const tick = setInterval(() => setSnap((s) => ({ ...s, live: driftLive(s.live) })), 4_000);
+      return () => { clearInterval(beat); clearInterval(tick); };
     }
     void refresh();
     const sb = browserClient();
     let t: ReturnType<typeof setTimeout> | null = null;
     const bump = () => { if (t) clearTimeout(t); t = setTimeout(() => void refresh(), 400); };
     const ch = sb.channel("clipp-dashboard");
-    for (const table of ["clips", "worker_heartbeat", "submissions", "control", "edit_rules", "longform_videos"]) {
+    for (const table of ["clips", "worker_heartbeat", "submissions", "control", "edit_rules", "longform_videos", "streamer_brain", "publications"]) {
       ch.on("postgres_changes", { event: "*", schema: "public", table }, bump);
     }
+    // Live numbers are patched in place: no full reload for a viewer count.
+    ch.on("postgres_changes", { event: "*", schema: "public", table: "live_stats" }, (m) => {
+      const row = m.new as LiveStat | undefined;
+      if (!row?.key) return;
+      setSnap((s) => ({ ...s, live: [...s.live.filter((x) => x.key !== row.key), row] }));
+    });
     ch.subscribe();
     const poll = setInterval(() => void refresh(), 30_000);
-    return () => { clearInterval(poll); if (t) clearTimeout(t); void sb.removeChannel(ch); };
+    // While the dashboard is open and visible, ask the server for fresh platform numbers every minute.
+    const kick = () => { if (document.visibilityState === "visible") void fetch("/api/live", { method: "POST" }).catch(() => {}); };
+    kick();
+    const live = setInterval(kick, 60_000);
+    return () => { clearInterval(poll); clearInterval(live); if (t) clearTimeout(t); void sb.removeChannel(ch); };
   }, [refresh]);
 
   const commit = useCallback(async (p: Pending) => {
@@ -309,6 +357,56 @@ export function DataProvider({ children }: { children: ReactNode }) {
     await refresh();
   }, [refresh]);
 
+  const sendEdit = useCallback(async (clip: Clip, plan: EditPlan, base: EditPlan) => {
+    const note = editNote(plan, base);
+    if (IS_DEMO) {
+      setSnap((s) => ({
+        ...s,
+        clips: s.clips.map((c) => (c.id === clip.id ? { ...c, state: "revise", title: plan.headline || c.title } : c)),
+        revisions: [{ id: `demo-rev-${Date.now()}`, clip_id: clip.id, kind: "trim", note, created_at: new Date().toISOString(), resolved_at: null }, ...s.revisions],
+      }));
+      return true;
+    }
+    const { error: e } = await browserClient().rpc("review_clip", {
+      p_clip: clip.id, p_action: "revise", p_note: note, p_kind: "trim", p_payload: { edit: editPayload(plan, base), apply_all: false },
+    });
+    if (e) { setError(e.message); return false; }
+    await refresh();
+    return true;
+  }, [refresh]);
+
+  const setBrain = useCallback(async (streamerId: string, weights: Record<string, number>, words?: string[]) => {
+    const at = new Date().toISOString();
+    setSnap((s) => {
+      const cur = s.brains.find((b) => b.streamer_id === streamerId);
+      const next = { streamer_id: streamerId, weights: { ...cur?.weights, ...weights }, words: words ?? cur?.words ?? [], updated_at: at };
+      return { ...s, brains: [...s.brains.filter((b) => b.streamer_id !== streamerId), next] };
+    });
+    if (IS_DEMO) return;
+    const { error: e } = await browserClient().rpc("set_brain_weights", { p_streamer: streamerId, p_weights: weights, p_words: words ?? null });
+    if (e) setError(`Brain weights did not save: ${e.message}`);
+  }, []);
+
+  const setTiktokChannel = useCallback(async (followers: number | null, views: number | null, posts: number | null) => {
+    const at = new Date().toISOString();
+    const row: LiveStat = { key: "tiktok:own", kind: "own", platform: "tiktok", is_live: null, viewers: null, followers, views, posts,
+      title: null, game: null, started_at: null, avatar_url: null, updated_at: at };
+    setSnap((s) => ({ ...s, live: [...s.live.filter((x) => x.key !== row.key), row] }));
+    if (IS_DEMO) return true;
+    const { error: e } = await browserClient().rpc("set_manual_stat", { p_followers: followers, p_views: views, p_posts: posts });
+    if (e) { setError(e.message); return false; }
+    return true;
+  }, []);
+
+  const pollLive = useCallback(async (force = false) => {
+    if (IS_DEMO) { setSnap((s) => ({ ...s, live: driftLive(s.live) })); return; }
+    const r = await fetch(`/api/live${force ? "?force=1" : ""}`, { method: "POST" }).catch(() => null);
+    if (r && !r.ok) {
+      const j = (await r.json().catch(() => ({}))) as { error?: string };
+      setError(`Live numbers: ${j.error ?? r.status}`);
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     if (IS_DEMO) return;
     await browserClient().auth.signOut();
@@ -317,9 +415,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<Store>(() => ({
     demo: IS_DEMO, ready, error, snap, pending, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl,
-    markTiktokPosted, addTiktokStats, setNotice, signOut,
+    markTiktokPosted, addTiktokStats, setNotice, sendEdit, setBrain, setTiktokChannel, pollLive, signOut,
   }), [ready, error, snap, pending, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl, markTiktokPosted,
-    addTiktokStats, setNotice, signOut]);
+    addTiktokStats, setNotice, sendEdit, setBrain, setTiktokChannel, pollLive, signOut]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
