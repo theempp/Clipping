@@ -153,3 +153,20 @@ def test_build_recipe_is_valid_and_deterministic_per_clip():
     b = R.build_recipe("c9", "lacy", {"category": "funny"}, R.StreamerWeights(), random.Random("c9"), 16.0)
     assert a == b and R.validate(a) == []
     assert a.tools[:2] == ["hard_cut", "headline_box"]
+
+
+from clipworker.render import feedback as FB
+
+
+def test_note_blames_named_tools_only_when_negative():
+    assert FB.tools_to_avoid("remove the slow mo, it is too much") == ["slowmo_vignette"]
+    assert FB.tools_to_avoid("love the slow mo") == []
+    assert FB.tools_to_avoid("no sound effects please", ["hard_cut", "sfx_hit"]) == ["sfx_hit"]
+    assert FB.tools_to_avoid("music is annoying") == ["music_cue"]
+
+
+def test_outcome_mapping():
+    assert FB.outcome("approved", 0) == "approved_clean"
+    assert FB.outcome("published", 2) == "approved_with_note"
+    assert FB.outcome("rejected", 0) == "rejected"
+    assert FB.outcome("pending_review", 0) is None and FB.outcome("revise", 1) is None

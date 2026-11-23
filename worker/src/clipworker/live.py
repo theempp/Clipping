@@ -336,6 +336,7 @@ class LiveRunner:
         tasks = [self.poll_status(), self.tick_loop(),
                  self.every(2, self.pipe.run_once, "pipeline"),
                  self.every(30, self.pipe.process_revisions, "revisions"),
+                 self.every(60, self.pipe.learn_recipes, "recipe learning"),
                  self.every(15, self.heartbeat, "heartbeat"),
                  self.every(60, self.prune, "prune")]
         if self.publisher is not None and not self.s.features.dry_run:

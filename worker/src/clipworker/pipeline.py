@@ -27,7 +27,7 @@ from .qa import CampaignRules, check_clip
 from .remote.rights import RightsGate
 from .editplan import edit_overrides
 from .pods import fair_order, resolve_pod_ids
-from .render import recipe
+from .render import feedback, recipe
 from .render import tools as tools_mod
 from .render.ffmpeg import render_clip
 from .store import Job, Store
@@ -340,7 +340,11 @@ class Pipeline:
         if not path:
             return None
         if j.get("recipe"):
-            return recipe.Recipe.from_json(j["recipe"])
+            rec = recipe.Recipe.from_json(j["recipe"])
+            drop = set(j.get("remove_tools") or []) - set(recipe.DEFAULT_TOOLS)  # editor: Zo took a tool off
+            if drop:
+                rec.tools = [t for t in rec.tools if t not in drop]
+            return rec
         store = recipe.WeightStore(path)
         sw = store.get(job.channel)
         rec = recipe.build_recipe(job.id, job.channel, j, sw, random.Random(job.id),
@@ -447,6 +451,36 @@ class Pipeline:
                 log.warning("could not parse revision note %r: %s", note[:80], e)
         cache[note] = dict(edit)
         return edit
+
+    def learn_recipes(self) -> int:
+        """D114 learning loop: a clip's final review outcome, its notes and the tools Zo removed in the
+        editor move that streamer's tool weights. Each clip is learned once (recipe_learned_at)."""
+        if self.sb is None or not self.s.extra.get("recipe_weights"):
+            return 0
+        store, n = recipe.WeightStore(self.s.extra["recipe_weights"]), 0
+        for clip in self.sb.select("clips", recipe_learned_at="is.null", order="created_at.asc",
+                                   limit="50", select="*"):
+            res = feedback.outcome(clip["state"], int(clip.get("revision") or 0))
+            if res is None:
+                continue
+            rec = (clip.get("manifest") or {}).get("recipe")
+            if rec:
+                tools = list(rec.get("tools") or [])
+                removed, blamed = [], []
+                for r in self.sb.select("revisions", clip_id=f"eq.{clip['id']}", select="*"):
+                    p = r.get("payload") or {}
+                    removed += [t for t in (p.get("edit") or {}).get("remove_tools", []) if t in tools]
+                    blamed += feedback.tools_to_avoid(r.get("note") or "", tools)
+                sw = store.get(rec.get("streamer") or clip["channel_key"])
+                recipe.apply_feedback(sw, tools, "manual_edit" if removed else res, removed=removed)
+                for t in dict.fromkeys(blamed):
+                    recipe.apply_feedback(sw, [], "approved_with_note", bad_tool=t)
+                n += 1
+            self.sb.update("clips", {"id": clip["id"]}, {"recipe_learned_at": iso(self.clock())})
+        if n:
+            store.save()
+            log.info("learned recipe weights from %d reviewed clip(s)", n)
+        return n
 
     def learn_rules(self) -> int:
         """Read every new revision note; style asks become standing rules (D078)."""

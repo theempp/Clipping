@@ -260,3 +260,24 @@ def test_recipe_off_by_default(tmp_path, source_video):
     for _ in range(8):
         pipe.run_once()
     assert "recipe" not in store.job(job).data["manifest"]
+
+
+@needs_ffmpeg
+def test_learning_loop_moves_weights_once_per_clip(tmp_path, source_video):
+    import dataclasses
+    import json as _json
+    pipe, sb, store = _env(tmp_path, source_video)
+    wpath = tmp_path / "weights.json"
+    pipe.s = dataclasses.replace(pipe.s, extra={"recipe_weights": str(wpath)})
+    job = pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    clip = sb.t["clips"][0]
+    tools = clip["manifest"]["recipe"]["tools"]
+    assert pipe.learn_recipes() == 0                       # still pending review: nothing learned
+    sb.human(clip["id"], "approved")
+    assert pipe.learn_recipes() == 1 and pipe.learn_recipes() == 0   # once only
+    sw = _json.loads(wpath.read_text())["twitch:lacy"]
+    extras = [t for t in tools if t not in ("hard_cut", "headline_box")]
+    assert all(sw["weights"][t] > 1.0 for t in extras)
+    assert sb.t["clips"][0]["recipe_learned_at"]
