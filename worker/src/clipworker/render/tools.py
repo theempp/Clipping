@@ -7,6 +7,7 @@ darkening of the edges, slow-mo is time only.
   slowmo_vignette  half-speed window with darkened edges, for a punchline
   black_spacer     0.2-0.5 s of black and silence at a time, between jokes in a compilation
   music_cue        a music file under the source audio, ducked while anyone talks
+  gta_stinger      a pre-baked transparent GTA sting (Wasted, Mission passed...) laid over the peak
 """
 from __future__ import annotations
 
@@ -97,6 +98,22 @@ def sfx_mix_command(src: Path, out: Path, hits: list[tuple[Path, float, float]],
             "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", str(out)]
 
 
+def stinger_command(src: Path, out: Path, asset: Path, at: float, length: float, mono: bool = False,
+                    size: tuple[int, int] = (1080, 1920), ffmpeg: str = "ffmpeg") -> list[str]:
+    """Lay a transparent sting (ProRes 4444 .mov baked from gta-components, see ops/stingers) over the clip
+    from `at` for `length` s. The sting is fitted to the frame, never the footage: the clip itself is not
+    scaled or cropped (D112). mono drains the clip to black-and-white under the sting (Wasted / Failed)."""
+    w, h = size
+    end = at + length
+    base = f"[0:v]hue=s=0:enable='between(t,{at:.3f},{end:.3f})'[b]" if mono else "[0:v]null[b]"
+    g = (f"{base};[1:v]scale={w}:{h},format=yuva420p,setpts=PTS-STARTPTS+{at:.3f}/TB[o];"
+         f"[b][o]overlay=0:0:eof_action=pass:enable='between(t,{at:.3f},{end:.3f})',format=yuv420p[v]")
+    return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), "-i", str(asset),
+            "-filter_complex", g, "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-profile:v", "high",
+            "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "20", "-c:a", "copy",
+            "-movflags", "+faststart", str(out)]
+
+
 def shift_time(t: float, applied: list[tuple[str, float, float, float]]) -> float:
     """Where a moment lands after time-changing effects. applied: [(tool, at, length, speed)] in the
     order they ran: slowmo stretches [at, at+length], spacer/flashback insert `length` at `at`."""
@@ -127,6 +144,9 @@ def apply_effects(clip: Path, effects: list[dict], dur: float, ffmpeg: str = "ff
                                             ffmpeg=ffmpeg)
         elif tool == "sfx" and e.get("hits"):
             cmd = sfx_mix_command(clip, tmp, [(Path(h[0]), float(h[1]), float(h[2])) for h in e["hits"]], ffmpeg)
+        elif tool == "gta_stinger" and e.get("file") and Path(e["file"]).exists():
+            cmd = stinger_command(clip, tmp, Path(e["file"]), float(e["at"]), float(e["length"]),
+                                  bool(e.get("mono")), ffmpeg=ffmpeg)
         elif tool == "music_cue" and e.get("file") and Path(e["file"]).exists():
             cmd = music_cue_command(clip, tmp, Path(e["file"]), float(e.get("start", 0.0)),
                                     float(e.get("db", -16.0)), ffmpeg)

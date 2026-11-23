@@ -15,7 +15,7 @@ from ..config import CaptionStyle, Layout, SfxParams
 from ..transcribe import Word
 from .captions import H, W, build_ass, shift_words
 from .sfx import audio_filter, ensure_whoosh
-from .motion import ZoomParams, shot_centres, track_crop_filter, zoom_times, zoompan_filter
+from .motion import ZoomParams, detector_name, path_crop_filter, track as face_track, track_crop_filter, zoom_times, zoompan_filter
 
 CAPTION_VERSION = "ass-v1"
 
@@ -45,12 +45,15 @@ def video_filter(layout: Layout | None, captions_file: str | None, zooms: list[f
                  zoom: ZoomParams | None = None, fps: int = 30,
                  centres: list[tuple[float, float, float]] | None = None,
                  duration: float | None = None, crop_x: float | None = None,
-                 swap: tuple[str, float, float] | None = None) -> str:
+                 swap: tuple[str, float, float] | None = None,
+                 keys: list[tuple[float, float, bool]] | None = None) -> str:
     moving = bool(zoom) and (bool(zooms) or (zoom.drift > 0 and zoom.on))
     zp = ((lambda w, h: "," + zoompan_filter(zooms or [], zoom, w, h, fps, duration))
           if moving else (lambda w, h: ""))
-    if layout is None:  # full frame: face-tracked per shot when centres given, else centre crop
-        if centres:
+    if layout is None:  # full frame: face-tracked (D115 path, or per shot), else editor crop, else centre
+        if keys:
+            crop = path_crop_filter(keys)
+        elif centres:
             crop = track_crop_filter(centres)
         elif crop_x is not None:  # editor crop: centre of the 9:16 window, 0..1 of frame width (D098)
             cx = min(1.0, max(0.0, float(crop_x)))
@@ -85,12 +88,13 @@ def render_command(src: Path, out: Path, t_in: float, t_out: float, layout: Layo
                    zooms: list[float] | None = None, zoom: ZoomParams | None = None,
                    centres: list[tuple[float, float, float]] | None = None,
                    sfx: SfxParams | None = None, whoosh: Path | None = None,
-                   crop_x: float | None = None, swap: tuple[str, float, float] | None = None) -> list[str]:
+                   crop_x: float | None = None, swap: tuple[str, float, float] | None = None,
+                   keys: list[tuple[float, float, bool]] | None = None) -> list[str]:
     a_graph, needs_sfx = audio_filter(zooms or [], sfx if whoosh else None)
     extra_in = ["-i", str(whoosh)] if needs_sfx else []
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
             "-ss", f"{t_in:.3f}", "-to", f"{t_out:.3f}", "-i", str(src), *extra_in,
-            "-filter_complex", video_filter(layout, captions_file, zooms, zoom, fps, centres, t_out - t_in, crop_x, swap)
+            "-filter_complex", video_filter(layout, captions_file, zooms, zoom, fps, centres, t_out - t_in, crop_x, swap, keys)
             + ";" + a_graph,
             "-map", "[v]", "-map", "[a]",
             "-r", str(fps), "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p",
@@ -98,7 +102,7 @@ def render_command(src: Path, out: Path, t_in: float, t_out: float, layout: Layo
             "-c:a", "aac", "-ar", "48000", "-b:a", "160k", "-movflags", "+faststart", str(out)]
 
 
-MOTION_VERSION = 2  # 2 = eased, rare zooms + gliding reframe (D077)
+MOTION_VERSION = 3  # 3 = continuous face path (D115); 2 = eased, rare zooms + gliding reframe (D077)
 
 
 def source_preview_command(src: Path, out: Path, t_in: float, t_out: float, ffmpeg: str = "ffmpeg") -> list[str]:
@@ -126,15 +130,15 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
     fps = output_fps(source_fps(probe(src, ffprobe, run)))
     dur = t_out - t_in
     zooms = zoom_times(rel, dur, zoom, hook_offset) if zoom else []
-    centres = (shot_centres(Path(src), t_in, t_out, out_dir / "shots", ffmpeg, run)
-               if track and layout is None else None)
+    keys, centres = (face_track(Path(src), t_in, t_out, out_dir / "shots", ffmpeg, run)
+                     if track and layout is None else (None, None))
     whoosh = None
     if sfx is not None and sfx.enabled and zooms:
         whoosh = Path(sfx.file).resolve() if sfx.file else ensure_whoosh(out_dir.parent / "_sfx", ffmpeg, run)
     out = out_dir / "clip.mp4"
     # cwd=out_dir so the ass filter gets a bare filename (no Windows drive-colon escaping).
     run(render_command(Path(src).resolve(), out.resolve(), t_in, t_out, layout, "captions.ass", fps,
-                       ffmpeg, zooms, zoom, centres, sfx, whoosh, crop_x, swap), check=True, cwd=str(out_dir))
+                       ffmpeg, zooms, zoom, centres, sfx, whoosh, crop_x, swap, keys), check=True, cwd=str(out_dir))
     # Before/after on the dashboard: the same window of the untouched 16:9 stream, small and light.
     source_prev = out_dir / "source.mp4"
     run(source_preview_command(Path(src).resolve(), source_prev.resolve(), t_in, t_out, ffmpeg),
@@ -152,7 +156,8 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
          "-frames:v", "1", "-q:v", "3", str(thumb)], check=True)
     manifest = {"clip_id": clip_id, "source": str(src), "window": [t_in, t_out], "fps": fps,
                 "layout": asdict(layout) if layout else None, "caption_version": CAPTION_VERSION,
-                "zooms": zooms, "swap": list(swap) if swap else None, "shots": centres, "sfx": bool(whoosh), "source_preview": str(source_prev),
+                "zooms": zooms, "swap": list(swap) if swap else None, "shots": centres, "track_keys": keys,
+                "reframe": (detector_name() if keys else None), "sfx": bool(whoosh), "source_preview": str(source_prev),
                 "motion": {"zoom_scale": zoom.scale if zoom else 1.0, "ease": zoom.ease if zoom else None,
                            "moments": zoom.moments if zoom else None, "drift": zoom.drift if zoom else 0.0,
                            "motion_version": MOTION_VERSION},

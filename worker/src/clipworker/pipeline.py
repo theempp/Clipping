@@ -27,7 +27,7 @@ from .qa import CampaignRules, check_clip
 from .remote.rights import RightsGate
 from .editplan import edit_overrides
 from .pods import fair_order, resolve_pod_ids
-from .render import feedback, flashback, recipe, sfxlib
+from .render import feedback, flashback, recipe, sfxlib, stingers
 from .render import tools as tools_mod
 from .render.ffmpeg import render_clip
 from .store import Job, Store
@@ -52,6 +52,18 @@ def dry_run_row(job: Job) -> dict:
             "send_test": j.get("send_test"), "badges": j.get("badges") or job.data.get("badges"),
             "trim": [j.get("trim_in"), j.get("trim_out")], "reason": j.get("reason"),
             "video": m.get("video"), "qa": job.data.get("qa"), "dead_air": job.data.get("dead_air")}
+
+
+IRL_CATEGORIES = ("IRL", "Just Chatting", "Travel & Outdoors", "Food & Drink", "Sports", "Music",
+                  "Talk Shows & Podcasts", "Pools, Hot Tubs, and Beaches")
+
+
+def is_irl(game: str | None, categories: list[str] | None = None) -> bool:
+    """D115: the stream's category says the streamer is on camera full frame (no game, no facecam box)."""
+    if not game:
+        return False
+    cats = categories if categories is not None else IRL_CATEGORIES
+    return game.strip().lower() in {c.lower() for c in cats}
 
 
 class Pipeline:
@@ -281,15 +293,29 @@ class Pipeline:
         # standing rules learned from Zo's notes (D078) sit under this clip's own overrides
         j = {**job.data["judgment"], **self.rule_settings(), **(overrides or {})}
         words = [Word(**w) for w in job.data["words"]]
+        game = (job.data.get("features") or {}).get("game")
+        j["gta6"] = self.s.gta6.matches(None, game)  # D115: GTA stingers only on GTA 6 streams
+        irl = is_irl(game, self.s.extra.get("irl_categories"))
+        layout, track = ch.layout, ch.layout is None
+        if irl and not j.get("recipe"):  # D115: IRL / Just Chatting = full frame, face-tracked
+            layout, track = None, True
+        if j.get("layout_mode") == "track":  # kept so re-renders keep the full frame
+            layout, track = None, True
         rec = self._recipe_for(job, j, words)
         if rec is not None:  # D114: the recipe sets caption style, SFX; zooms are off whatever it says
+            if layout is None and track:
+                rec.layout = "track"
+                rec.tools = [t for t in rec.tools if t not in ("swap_full_face", "swap_full_game")]
             j = {**j, **recipe.to_judgment(rec), "recipe": rec.to_json()}
-        layout, track = ch.layout, ch.layout is None
+        if track and layout is None:
+            j["layout_mode"] = "track"
         if overrides and overrides.get("layout"):
             lay = overrides["layout"]
             if lay.get("mode") == "track":  # IRL / full cam: face-tracked full frame
                 layout, track = None, True
+                j["layout_mode"] = "track"
             else:
+                j.pop("layout_mode", None)
                 layout = Layout(Crop(**lay["facecam"]), Crop(**lay["gameplay"]),
                                 int(lay.get("facecam_height", 640)))
         crop_x = j.get("crop_x")  # kept in the judgment, so later re-renders keep Zo's crop
@@ -393,6 +419,16 @@ class Pipeline:
             except Exception as e:  # noqa: BLE001 - a missing source must not lose the clip; Zo sees the reason
                 log.warning("flashback not rendered for %s: %s", rec.clip_id, e)
                 out["flashback_error"] = str(e)[:200]
+        if "gta_stinger" in rec.tools:  # D115: baked GTA sting on the peak; skipped when none is baked
+            sting = stingers.choose(j.get("category"), random.Random(rec.clip_id), self.s.extra.get("stinger_dir"))
+            if sting is not None:
+                at, length = stingers.placement(tools_mod.shift_time(peak_rel, applied), dur, sting.length_s)
+                tools_mod.apply_effects(video, [{"tool": "gta_stinger", "at": at, "length": length, "mono": sting.mono,
+                                                 "file": str(stingers.asset_path(self.s.extra["stinger_dir"], sting))}],
+                                        dur, ff)
+                out["stinger"] = {"name": sting.name, "at": at, "length": length}
+            else:
+                out["stinger"] = None
         if "music_cue" in rec.tools and self.s.extra.get("music_cue_file"):
             tools_mod.apply_effects(video, [{"tool": "music_cue", "file": self.s.extra["music_cue_file"],
                                              "start": 0.0}], dur, ff)
