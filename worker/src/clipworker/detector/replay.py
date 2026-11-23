@@ -29,9 +29,13 @@ def load_twitchdownloader_chat(path: Path) -> list[tuple[float, str, str]]:
 def replay(messages: list[tuple[float, str, str]], params: DetectorParams,
            reactions: dict[str, float], channel: str = "replay",
            loudness: list[tuple[float, float]] | None = None,
-           keep_ticks: bool = False) -> tuple[list[Moment], SpikeDetector]:
-    det = SpikeDetector(channel, params, reactions)
+           keep_ticks: bool = False, gate=None,
+           lift: dict[str, float] | None = None) -> tuple[list[Moment], SpikeDetector]:
+    """`gate`: optional DeadAirGate (replay-test it here before enabling live).
+    `lift`: a brain's chat-word lift table."""
+    det = SpikeDetector(channel, params, reactions, lift=lift)
     det.keep_ticks = keep_ticks
+    det.gate = gate
     if not messages:
         return [], det
     loud = sorted(loudness or [])
