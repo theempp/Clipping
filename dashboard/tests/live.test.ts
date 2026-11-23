@@ -97,7 +97,10 @@ test("editor payload: changed fields only, in the worker's names and clip second
   const p = editPayload({ ...BASE, trim_in: 2, trim_out: 20, crop_x: 0.3, zoom: 1, caption_style: "line",
     headline: "  New  ", emphasis_words: ["map"], splits: [5] }, BASE);
   assert.deepEqual(p, { trim_in: 2, trim_out: 20, crop_x: 0.3, zoom: 1, caption_style: "line",
-    emphasis_words: ["map"], headline: "New", splits: [5] });
+    emphasis_words: ["map"], headline: "New" }); // a split alone drops nothing
+  // Dropping the piece between two splits sends it as a cut; the last piece can never be dropped too.
+  assert.deepEqual(editPayload({ ...BASE, splits: [5, 9], drop: [5] }, BASE), { cuts: [[5, 9]] });
+  assert.deepEqual(editPayload({ ...BASE, splits: [5], drop: [0, 5] }, BASE), {});
   assert.deepEqual(editPayload({ ...BASE, headline: "   " }, BASE), {}); // blank headline never wipes the title
 });
 

@@ -207,4 +207,15 @@ do $$ begin
     raise exception 'FAIL: realtime publication'; end if;
 end $$;
 reset role;
+-- snapshot slots: a second poller in the same bucket is a no-op; manual (null slot) rows never collide
+insert into public.stat_snapshots(key, metric, value, slot) values ('x:own', 'followers', 1, 42)
+  on conflict (key, metric, slot) do nothing;
+insert into public.stat_snapshots(key, metric, value, slot) values ('x:own', 'followers', 2, 42)
+  on conflict (key, metric, slot) do nothing;
+do $$ begin
+  if (select count(*) from public.stat_snapshots where key = 'x:own') <> 1 then
+    raise exception 'FAIL: duplicate snapshot in one slot'; end if;
+  if not exists (select 1 from information_schema.columns where table_name = 'clips' and column_name = 'revise_failed') then
+    raise exception 'FAIL: clips.revise_failed missing'; end if;
+end $$;
 select 'ALL SQL CHECKS PASSED';

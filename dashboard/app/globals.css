@@ -277,6 +277,7 @@ textarea { resize: vertical; }
 .learned .rt2 span { color: var(--mut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .swb { border: 0; background: none; padding: 0; display: inline-flex; }
 .fixing { font-size: 12px; color: var(--acc-l); margin: 0; }
+.fixing.bad { color: var(--bad); margin-top: 6px; }
 .keys { color: var(--mut); font-size: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .days { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; }
 .days li { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; color: var(--mut); }
@@ -362,6 +363,7 @@ textarea { resize: vertical; }
 .hdl { position: absolute; top: 4px; bottom: 4px; width: 12px; border-radius: 99px; background: #fff; cursor: ew-resize; touch-action: none; border: 0; padding: 0; z-index: 2; }
 .hdl.l { left: 4px; } .hdl.r { right: 4px; }
 .splitm { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--warn); z-index: 2; }
+.dropm { position: absolute; top: 0; bottom: 0; background: #00000080; border: 1px dashed var(--bad); border-radius: 6px; z-index: 1; pointer-events: none; }
 .wav { display: flex; align-items: center; gap: 2px; height: 100%; padding: 0 14px; }
 .wav i { flex: 1; border-radius: 2px; background: var(--c2); opacity: .7; }
 .ctk span { position: absolute; top: 3px; bottom: 3px; border-radius: 99px; background: #c38bff40; color: #e7d6ff; font-size: 11px; display: flex; align-items: center; padding: 0 12px; white-space: nowrap; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }

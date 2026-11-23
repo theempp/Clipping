@@ -10,12 +10,16 @@ import { serverClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 const MIN_GAP_S = 30;          // never hit the platforms more than twice a minute, however many tabs are open
-const SNAP_OWN_MIN = 55;       // own-channel history point about once an hour
-const SNAP_LIVE_MIN = 9;       // streamer viewer history point about every 10 min while live
+const SNAP_OWN_MIN = 60;       // own-channel history point once an hour
+const SNAP_LIVE_MIN = 10;      // streamer viewer history point every 10 min while live
+
+function isCron(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET;
+  return !!secret && req.headers.get("authorization") === `Bearer ${secret}`;
+}
 
 async function allowed(req: NextRequest): Promise<boolean> {
-  const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.get("authorization") === `Bearer ${secret}`) return true;
+  if (isCron(req)) return true;
   const sb = await serverClient();
   const { data } = await sb.rpc("is_owner");
   return data === true;
@@ -29,6 +33,7 @@ function admin() {
 
 export async function GET(req: NextRequest) {
   if (IS_DEMO) return NextResponse.json({ demo: true, configured: sourcesConfigured(process.env) });
+  if (isCron(req)) return POST(req);   // Vercel cron calls GET with the secret
   if (!(await allowed(req))) return NextResponse.json({ error: "not allowed" }, { status: 401 });
   return NextResponse.json({ configured: sourcesConfigured(process.env), writer: !!process.env.SUPABASE_SERVICE_ROLE_KEY });
 }
@@ -60,21 +65,23 @@ export async function POST(req: NextRequest) {
     if (r?.avatar_url && r.avatar_url !== s.avatar_url) await db.from("streamers").update({ avatar_url: r.avatar_url }).eq("id", s.id);
   }
 
-  // History for the growth charts, thinned so the table stays small.
-  const { data: recent } = await db.from("stat_snapshots").select("key,at").gte("at", new Date(Date.now() - SNAP_OWN_MIN * 60_000).toISOString());
-  const lastAt = new Map<string, number>();
-  for (const p of recent ?? []) lastAt.set(p.key, Math.max(lastAt.get(p.key) ?? 0, Date.parse(p.at)));
-  const points: { key: string; metric: string; value: number; at: string }[] = [];
+  // History for the growth charts, one point per time bucket. The unique (key, metric, slot) index makes a
+  // second poller in the same bucket a no-op, so two open dashboards never write a duplicate point.
+  const now = Date.now();
+  const points: { key: string; metric: string; value: number; at: string; slot: number }[] = [];
   for (const r of rows) {
-    const gapMin = (Date.now() - (lastAt.get(r.key) ?? 0)) / 60_000;
-    if (r.kind === "own" && gapMin >= SNAP_OWN_MIN) {
-      for (const m of ["followers", "views", "posts"] as const) if (r[m] != null) points.push({ key: r.key, metric: m, value: r[m]!, at });
+    if (r.kind === "own") {
+      const slot = Math.floor(now / (SNAP_OWN_MIN * 60_000));
+      for (const m of ["followers", "views", "posts"] as const) if (r[m] != null) points.push({ key: r.key, metric: m, value: r[m]!, at, slot });
     }
-    if (r.kind === "streamer" && r.is_live && r.viewers != null && gapMin >= SNAP_LIVE_MIN) {
-      points.push({ key: r.key, metric: "viewers", value: r.viewers, at });
+    if (r.kind === "streamer" && r.is_live && r.viewers != null) {
+      points.push({ key: r.key, metric: "viewers", value: r.viewers, at, slot: Math.floor(now / (SNAP_LIVE_MIN * 60_000)) });
     }
   }
-  if (points.length) await db.from("stat_snapshots").insert(points);
+  if (points.length) {
+    const { error: pe } = await db.from("stat_snapshots").upsert(points, { onConflict: "key,metric,slot", ignoreDuplicates: true });
+    if (pe) errors.snapshots = pe.message;
+  }
 
   return NextResponse.json({ updated: rows.length, snapshots: points.length, errors });
 }

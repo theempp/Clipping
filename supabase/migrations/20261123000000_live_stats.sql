@@ -27,9 +27,12 @@ create table if not exists public.stat_snapshots (
   key text not null,
   metric text not null check (metric in ('followers', 'views', 'posts', 'viewers')),
   value numeric not null,
-  at timestamptz not null default now()
+  at timestamptz not null default now(),
+  slot bigint                                             -- time bucket from /api/live; null for manual entries
 );
 create index if not exists stat_snapshots_key_at on public.stat_snapshots(key, at desc);
+-- Two dashboards (or the cron and a dashboard) polling at once write one point per bucket, not two.
+create unique index if not exists stat_snapshots_slot on public.stat_snapshots(key, metric, slot);
 
 create table if not exists public.streamer_brain (
   streamer_id uuid primary key references public.streamers(id) on delete cascade,
@@ -115,7 +118,4 @@ do $$ declare t text; begin
   end loop;
 end $$;
 
--- Optional server-side schedule (needs pg_cron + pg_net, and CRON_SECRET set on Vercel). Left commented on purpose:
--- select cron.schedule('clipp-live-stats', '* * * * *', $$
---   select net.http_post(url := 'https://<dashboard-host>/api/live', headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>'))
--- $$);
+-- Schedule: supabase/snippets/schedule_live_stats.sql (pg_cron + pg_net + Vault secret), run after deploy.

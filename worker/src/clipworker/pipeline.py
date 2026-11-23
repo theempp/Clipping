@@ -202,7 +202,8 @@ class Pipeline:
                                 manifest_extra={"tags": tags, "channel": job.channel,
                                                 "revision": job.data.get("revision", 0)},
                                 zoom=zoom, track=track, sfx=sfx,
-                                **({"crop_x": float(crop_x)} if crop_x is not None else {}))
+                                **({"crop_x": float(crop_x)} if crop_x is not None else {}),
+                                **({"cuts": j["cuts"]} if j.get("cuts") else {}))
         self.store.advance(job.id, "rendered", {"manifest": manifest, "title": title,
                                                 "description": desc, "judgment": j})
         return True
@@ -377,6 +378,9 @@ class Pipeline:
                                   order="created_at.asc", select="*")
             if not revs:
                 continue
+            failed = clip.get("revise_failed") or {}
+            if failed and set(failed.get("revisions") or []) == {r["id"] for r in revs}:
+                continue  # these notes already failed QA; shown on the dashboard, waiting for Zo
             try:
                 job = self.store.job(clip["job_id"])
             except KeyError:
@@ -391,7 +395,8 @@ class Pipeline:
                     # dashboard editor (D091): clip-relative plan -> window-relative overrides
                     base = job.data.get("judgment") or {}
                     edit, head = edit_overrides(p["edit"], float(base.get("trim_in", 0.0)),
-                                                float(base.get("trim_out", clip.get("duration_s") or 0.0)))
+                                                float(base.get("trim_out", clip.get("duration_s") or 0.0)),
+                                                base.get("cuts"))
                     overrides.update(edit)
                     title = head or title
                 elif r["kind"] == "trim":
@@ -410,7 +415,13 @@ class Pipeline:
                     overrides.update(edit)
             rev = int(clip.get("revision", 0)) + 1
             if self._rerender(clip, job, overrides, title, rev) is None:
+                qa = self.store.job(job.id).data.get("qa") or {}
+                self.sb.update("clips", {"id": clip["id"]}, {"revise_failed": {
+                    "rev": rev, "reason": "; ".join(qa.get("failures") or [])[:300] or "render failed", "at": iso(self.clock()),
+                    "revisions": [r["id"] for r in revs]}})
                 continue
+            if failed:
+                self.sb.update("clips", {"id": clip["id"]}, {"revise_failed": None})
             self.sb.transition(clip, "pending_review", f"revision {rev}",
                                {"revisions": [r["id"] for r in revs]})
             for r in revs:

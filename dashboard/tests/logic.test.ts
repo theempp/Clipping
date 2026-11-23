@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cleanNote, downloadName, mmss, openSubmissions, pcState, rankQueue, secondsLeft, weekStats } from "../lib/logic.ts";
+import { cleanNote, downloadName, editNote, mmss, openSubmissions, pcState, rankQueue, secondsLeft, weekStats } from "../lib/logic.ts";
 import { demoSnapshot } from "../lib/demo.ts";
 import { heatStrip } from "../lib/view.ts";
-import type { Clip, Heartbeat, Submission } from "../lib/types.ts";
+import type { Clip, EditPlan, Heartbeat, Submission } from "../lib/types.ts";
 
 const NOW = Date.parse("2026-11-20T18:00:00Z");
 const clip = (p: Partial<Clip>): Clip => ({
@@ -97,4 +97,11 @@ test("demo data has a live queue, an open countdown and a heartbeat", () => {
   assert.ok(rankQueue(d.clips).length >= 5);
   assert.equal(openSubmissions(d.submissions, NOW).length, 1);
   assert.equal(pcState(d.heartbeat, d.control.awake, NOW), "watching");
+});
+
+test("editor note lists only what changed (untouched zoom and headline are left out)", () => {
+  const base: EditPlan = { trim_in: 0, trim_out: 30, crop_x: 0.5, zoom: 1.12, headline: "He did it", caption_style: "words", splits: [], emphasis_words: ["no"] };
+  assert.equal(editNote(base, base), "Editor: no changes yet");
+  assert.equal(editNote({ ...base, trim_in: 2 }, base), "Editor: trim 2.0s-30.0s");
+  assert.equal(editNote({ ...base, zoom: 1.3, headline: "New one" }, base), 'Editor: zoom 130% · headline "New one"');
 });

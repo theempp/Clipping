@@ -358,7 +358,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const sendEdit = useCallback(async (clip: Clip, plan: EditPlan, base: EditPlan) => {
-    const note = editNote(plan, clip.duration_s ?? plan.trim_out);
+    const note = editNote(plan, base);
     if (IS_DEMO) {
       setSnap((s) => ({
         ...s,

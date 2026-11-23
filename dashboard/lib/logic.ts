@@ -120,18 +120,20 @@ export function weekStats(clips: Clip[], now: number): WeekStats {
   };
 }
 
-/** Editor plan -> one readable revision note the PC and Zo can both read. */
-export function editNote(p: EditPlan, duration: number): string {
+/** Editor plan -> one readable revision note the PC and Zo can both read. Lists only what Zo changed
+ *  against `base` (the same rule as `editPayload`), so an untouched zoom or headline is not reported. */
+export function editNote(p: EditPlan, base: EditPlan): string {
   const parts: string[] = [];
   const d = (s: number) => `${s.toFixed(1)}s`;
-  if (p.trim_in > 0.05 || p.trim_out < duration - 0.05) parts.push(`trim ${d(p.trim_in)}-${d(p.trim_out)}`);
-  if (p.splits.length) parts.push(`cut at ${p.splits.map(d).join(", ")}`);
-  if (Math.abs(p.crop_x - 0.5) > 0.01) parts.push(`crop centre ${Math.round(p.crop_x * 100)}%`);
-  if (Math.abs(p.zoom - 1) > 0.005) parts.push(`zoom ${Math.round(p.zoom * 100)}%`);
-  if (p.headline.trim()) parts.push(`headline "${p.headline.trim().slice(0, 80)}"`);
-  parts.push(p.caption_style === "words" ? "captions 2-3 words" : "captions full line");
-  if (p.emphasis_words.length) parts.push(`emphasis ${p.emphasis_words.join(" ")}`);
-  return `Editor: ${parts.join(" · ")}`;
+  const e = editPayload(p, base);
+  if ("trim_in" in e) parts.push(`trim ${d(p.trim_in)}-${d(p.trim_out)}`);
+  if ("cuts" in e) parts.push(droppedCuts(p).length ? `drop ${droppedCuts(p).map(([a, b]) => `${d(a)}-${d(b)}`).join(", ")}` : "keep every piece");
+  if ("crop_x" in e) parts.push(`crop centre ${Math.round(p.crop_x * 100)}%`);
+  if ("zoom" in e) parts.push(`zoom ${Math.round(p.zoom * 100)}%`);
+  if ("headline" in e) parts.push(`headline "${p.headline.trim().slice(0, 80)}"`);
+  if ("caption_style" in e) parts.push(p.caption_style === "words" ? "captions 2-3 words" : "captions full line");
+  if ("emphasis_words" in e) parts.push(p.emphasis_words.length ? `emphasis ${p.emphasis_words.join(" ")}` : "no emphasis");
+  return parts.length ? `Editor: ${parts.join(" · ")}` : "Editor: no changes yet";
 }
 
 /** Caption-words box -> emphasis list (max 12, no punctuation, lower case like the worker). */
@@ -151,8 +153,23 @@ export function editPayload(p: EditPlan, base: EditPlan): Record<string, unknown
   if (p.caption_style !== base.caption_style) out.caption_style = p.caption_style;
   if (p.emphasis_words.join(" ") !== base.emphasis_words.join(" ")) out.emphasis_words = p.emphasis_words;
   if (p.headline.trim() && p.headline.trim() !== base.headline.trim()) out.headline = p.headline.trim();
-  if (p.splits.length) out.splits = p.splits; // noted for Zo; the renderer does not cut yet
+  const cuts = droppedCuts(p);
+  if (cuts.length || droppedCuts(base).length) out.cuts = cuts;
   return out;
+}
+
+/** Pieces of the trimmed clip between splits: [start, end] in clip seconds. */
+export function pieces(p: EditPlan): [number, number][] {
+  const edges = [p.trim_in, ...p.splits.filter((s) => s > p.trim_in && s < p.trim_out), p.trim_out];
+  return edges.slice(0, -1).map((a, i) => [a, edges[i + 1]]);
+}
+
+/** Dropped pieces as cut ranges. Never all of them: at least one piece always stays. */
+export function droppedCuts(p: EditPlan): [number, number][] {
+  const all = pieces(p);
+  const drop = new Set(p.drop ?? []);
+  const cut = all.filter(([a]) => drop.has(a));
+  return cut.length < all.length ? cut : [];
 }
 
 /** Clamp a trim so it stays inside the clip and at least `min` seconds long. */

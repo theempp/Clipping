@@ -20,6 +20,7 @@ from . import __version__
 from .capture.buffer import capture_commands, parse_ebur128_line, prune
 from .clock import Clock
 from .config import Settings, env
+from .detector.brain import apply_brain
 from .detector.spike import SpikeDetector
 from .gpu import snapshot as gpu_snapshot
 from .ingest import status as st
@@ -203,6 +204,23 @@ class LiveRunner:
                 log.warning("%s failed: %s", name, e)
             await asyncio.sleep(seconds)
 
+    def sync_brain(self):
+        """Apply Zo's Streamer Brain sliders and words (dashboard Settings) to each channel's detector.
+        Always starts from the channel's config values, so removing a brain row restores them."""
+        streamers = {r["id"]: r["slug"] for r in self.sb.select("streamers", select="id,slug")}
+        brains = {streamers.get(r["streamer_id"]): r for r in self.sb.select("streamer_brain", select="*")}
+        applied = {}
+        for c in self.s.channels:
+            b = brains.get(c.streamer)
+            params, reactions = apply_brain(c.detector, c.reaction_weights,
+                                            b and b.get("weights"), b and b.get("words"))
+            self.det[c.key].retune(params, reactions)
+            if b:
+                applied[c.key] = b.get("updated_at")
+        if applied != getattr(self, "_brain_seen", None):
+            log.info("streamer brain applied: %s", applied or "none (config values)")
+            self._brain_seen = applied
+
     def sync_awake(self):
         """Read the Wake Up switch. Asleep = stop captures and detection; jobs already
         rendering, in review or publishing keep going. Read errors keep the last value."""
@@ -248,6 +266,8 @@ class LiveRunner:
                  self.every(60, self.prune, "prune")]
         if self.publisher is not None:
             tasks.append(self.every(30, self.publisher.run_once, "publisher"))
+        if self.sb is not None:
+            tasks.append(self.every(60, self.sync_brain, "streamer brain"))
         tw = [c.login for c in self.s.channels if c.platform == "twitch"]
         if tw:
             tasks.append(run_twitch_chat(tw, self._on_chat, self.clock.now, self._on_gap))

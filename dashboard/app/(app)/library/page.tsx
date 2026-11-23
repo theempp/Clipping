@@ -19,7 +19,7 @@ export default function LibraryPage() {
 
 /** Every clip the PC has made, playing in place. Filter by streamer and state; save any approved one. */
 function Library() {
-  const { snap, mediaUrl } = useStore();
+  const { snap, mediaUrl, act } = useStore();
   const params = useSearchParams();
   const [st, setSt] = useState<ClipState | "all">("all");
   const [who, setWho] = useState("all");
@@ -68,7 +68,11 @@ function Library() {
               <figcaption>
                 <b>{c.title ?? c.job_id}</b>
                 <small>{s?.display_name ?? c.channel_key} · <span className={`st-${c.state}`}>{STATES.find(([k]) => k === c.state)?.[1] ?? c.state}</span></small>
+                {c.state === "revise" && c.revise_failed && (
+                  <p className="fixing bad" role="status">Revision {c.revise_failed.rev} failed QA: {c.revise_failed.reason}. The PC stopped retrying; deny it to clear it.</p>
+                )}
                 <div className="chips" style={{ marginTop: 8 }}>
+                  {c.state === "revise" && c.revise_failed && <button type="button" className="b ghost" onClick={() => act(c, "reject")}><Icon name="x" size={14} /> Deny</button>}
                   {c.state === "pending_review" && <Link className="b" href={`/review?clip=${c.id}`}>Review</Link>}
                   {c.state === "pending_review" && <Link className="b" href={`/editor?clip=${c.id}`}>Edit</Link>}
                   {ok && <button type="button" className="b" disabled={busy === c.id} onClick={() => void save(c)}><Icon name="download" size={14} /> {busy === c.id ? "…" : "Save"}</button>}

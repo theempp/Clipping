@@ -33,7 +33,11 @@ export type Clip = {
   source_path?: string | null;
   /** Set while the PC re-edits this clip to meet a learned rule; hidden from review meanwhile (D078). */
   fixing?: { rules: string[]; since: string } | null;
+  /** Set by the PC when a revision's re-render failed QA; the clip waits in "revise" for Zo. */
+  revise_failed?: { rev: number; reason: string; at: string; revisions: string[] } | null;
   qa: Record<string, unknown>;
+  /** Render manifest from the PC; `peaks` is the measured audio waveform (0-100). */
+  manifest?: Record<string, unknown>;
   judge: Record<string, unknown>;
   revision: number;
   reviewed_at: string | null;
@@ -178,6 +182,8 @@ export type EditPlan = {
   headline: string; caption_style: "words" | "line"; splits: number[];
   /** Words the captions highlight (worker `emphasis_words`). */
   emphasis_words: string[];
+  /** Start times of the pieces between splits that Zo dropped; the PC cuts them out. */
+  drop?: number[];
 };
 
 export type ReviewAction = "approve" | "revise" | "reject";

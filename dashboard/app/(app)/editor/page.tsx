@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ClipVideo } from "@/components/ClipCard";
 import { Icon } from "@/components/Icon";
-import { clampTrim, editNote, emphasisWords, mmss, rankQueue } from "@/lib/logic";
+import { clampTrim, droppedCuts, editNote, emphasisWords, mmss, pieces, rankQueue } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 import type { Clip, EditPlan } from "@/lib/types";
 
@@ -32,7 +32,7 @@ function Editor() {
   const total = Math.max(1, clip?.duration_s ?? 30);
   const fresh = useCallback((): EditPlan => ({
     trim_in: 0, trim_out: total, crop_x: 0.5, zoom: 1.12,
-    headline: clip?.title ?? "", caption_style: "words", splits: [],
+    headline: clip?.title ?? "", caption_style: "words", splits: [], drop: [],
     emphasis_words: emphasisWords((clip?.hook ?? clip?.title ?? "").split(/\s+/).slice(0, 3).join(" ")),
   }), [clip?.id, clip?.title, clip?.hook, total]); // eslint-disable-line react-hooks/exhaustive-deps
   const [plan, setPlan] = useState<EditPlan>(fresh);
@@ -164,12 +164,15 @@ function Editor() {
   };
 
   const wave = useMemo(() => {
+    const real = clip?.manifest?.peaks;  // measured by the PC at render time
+    if (Array.isArray(real) && real.length > 8 && real.every((v) => typeof v === "number")) return real as number[];
     let s = hashSeed(clip?.id ?? "x");
     return Array.from({ length: 90 }, () => { s = (s * 16807) % 2147483647; return 15 + (s / 2147483647) * 85; });
-  }, [clip?.id]);
+  }, [clip?.id, clip?.manifest]);
   const words = capText.split(/\s+/).filter(Boolean);
   const pct = (s: number) => `${(s / total) * 100}%`;
   const len = plan.trim_out - plan.trim_in;
+  const kept = len - droppedCuts(plan).reduce((s, [a, b]) => s + b - a, 0);
 
   if (!clip) {
     return (
@@ -258,7 +261,7 @@ function Editor() {
             {!editable ? `This clip is ${clip.state.replace("_", " ")}; only clips waiting for review can be re-edited.`
               : sent === "sent" ? "The PC re-renders it and it comes back to Review."
               : sent === "failed" ? "Did not send. See the error at the top."
-              : editNote(plan, total)}
+              : editNote(plan, fresh())}
           </p>
         </div>
 
@@ -268,9 +271,19 @@ function Editor() {
             <button type="button" className={tool === "split" ? "on" : ""} onClick={() => setTool("split")} title="Click the timeline to cut there"><Icon name="cut" size={14} />Split</button>
             <button type="button" className={tool === "cap" ? "on" : ""} onClick={() => setTool("cap")}><Icon name="type" size={14} />Caption</button>
             <button type="button" disabled={!hist.length} onClick={undo}><Icon name="undo" size={14} />Undo</button>
-            {plan.splits.length > 0 && <button type="button" onClick={() => change({ splits: [] })}>Clear {plan.splits.length} cut{plan.splits.length === 1 ? "" : "s"}</button>}
+            {plan.splits.length > 0 && <button type="button" onClick={() => change({ splits: [], drop: [] })}>Clear {plan.splits.length} split{plan.splits.length === 1 ? "" : "s"}</button>}
+            {plan.splits.length > 0 && pieces(plan).map(([a, b]) => {
+              const off = (plan.drop ?? []).includes(a);
+              return (
+                <button key={a} type="button" className={off ? "" : "on"} aria-pressed={!off}
+                  title={off ? "Dropped: the PC cuts this piece out" : "Kept"}
+                  onClick={() => change({ drop: off ? (plan.drop ?? []).filter((x) => x !== a) : [...(plan.drop ?? []), a] })}>
+                  {off ? "Drop" : "Keep"} {a.toFixed(1)}–{b.toFixed(1)}s
+                </button>
+              );
+            })}
             <span className="sp" />
-            <span className="mut" style={{ fontSize: 12 }}>Selected <b style={{ color: "var(--tx)" }} className="tnum">{len.toFixed(1)}s</b></span>
+            <span className="mut" style={{ fontSize: 12 }}>Selected <b style={{ color: "var(--tx)" }} className="tnum">{kept.toFixed(1)}s</b></span>
           </div>
           <div className="tl" ref={tl} onPointerDown={clickTl} role="group" aria-label="Timeline">
             <div className="ruler" />
@@ -282,7 +295,8 @@ function Editor() {
                 <button type="button" className="hdl r" aria-label={`Trim end ${plan.trim_out.toFixed(1)} seconds`} onPointerDown={drag("out")}
                   onKeyDown={(e) => { if (e.key === "ArrowLeft" || e.key === "ArrowRight") change({ trim_out: clampTrim(plan.trim_in, plan.trim_out + (e.key === "ArrowLeft" ? -0.5 : 0.5), total)[1] }); }} />
               </div>
-              {plan.splits.map((s) => <i key={s} className="splitm" style={{ left: pct(s) }} title={`cut at ${s.toFixed(1)}s`} />)}
+              {plan.splits.map((s) => <i key={s} className="splitm" style={{ left: pct(s) }} title={`split at ${s.toFixed(1)}s`} />)}
+              {droppedCuts(plan).map(([a, b]) => <i key={`d${a}`} className="dropm" style={{ left: pct(a), width: pct(b - a) }} aria-hidden="true" />)}
             </div>
             <div className="trk"><div className="wav">{wave.map((h, i) => <i key={i} style={{ height: `${h}%` }} />)}</div></div>
             <div className="trk ctk">
@@ -291,7 +305,7 @@ function Editor() {
             </div>
             <div className="ph" style={{ left: pct(t) }} onPointerDown={drag("ph")} />
           </div>
-          <p className="quiet" style={{ fontSize: 11, marginBottom: 0 }}>Space plays · drag the white handles to trim · <kbd>[</kbd> <kbd>]</kbd> set in/out at the playhead · Split, then click the timeline to cut · Ctrl+Z undo</p>
+          <p className="quiet" style={{ fontSize: 11, marginBottom: 0 }}>Space plays · drag the white handles to trim · <kbd>[</kbd> <kbd>]</kbd> set in/out at the playhead · Split, click the timeline, then Keep/Drop each piece · Ctrl+Z undo</p>
         </div>
       </div>
     </>

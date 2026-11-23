@@ -106,6 +106,14 @@ export default function Overview() {
       <div className="row2" style={{ marginTop: 40 }}>
         <div>
           <div className="sec first"><h2>Review</h2><Link href="/review" className="r">approve, revise or deny · open queue</Link></div>
+          {(() => {
+            const stuck = snap.clips.filter((c) => c.state === "revise" && c.revise_failed);
+            return stuck.length > 0 && (
+              <p className="fixing bad" role="alert" style={{ marginBottom: 12 }}>
+                {stuck.length === 1 ? "A revision" : `${stuck.length} revisions`} failed QA on the PC. <Link href={`/library?clip=${stuck[0].id}`}>See why</Link>
+              </p>
+            );
+          })()}
           <div className="qgrid">
             {queue.slice(0, 4).map((c) => (
               <ClipCard key={c.id} clip={c} streamer={c.streamer_id ? byId.get(c.streamer_id) : undefined} />

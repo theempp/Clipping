@@ -45,7 +45,7 @@ export function BrainWeights({ s, edit = false }: { s: Streamer; edit?: boolean 
             onClick={() => void setBrain(s.id, draft, wordText.split(",").map((w) => w.trim()).filter(Boolean).slice(0, 20))}>
             Save {s.display_name}’s brain
           </button>
-          <p className="quiet" style={{ fontSize: 11, marginBottom: 0 }}>Saved to the database. The PC detector does not read these weights yet, so clipping is unchanged until that is wired.</p>
+          <p className="quiet" style={{ fontSize: 11, marginBottom: 0 }}>The PC reads these within a minute. Chat spike, voice peak, chat words and your words change what it clips; viewer-made clips and approved-clip match are saved only, with no detector signal yet.</p>
         </>
       )}
     </div>
