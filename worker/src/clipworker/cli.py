@@ -62,7 +62,7 @@ def cmd_replay(a) -> int:
 
 
 def cmd_dryrun(a) -> int:
-    """Offline: no Supabase, no publisher. Judge = Grok if a key is set (spend!), else heuristic."""
+    """No publisher. Offline unless --review (then clips land in review). Judge = Grok if a key is set (spend!), else heuristic."""
     import httpx
 
     from .dryrun import run_dry
@@ -78,9 +78,14 @@ def cmd_dryrun(a) -> int:
         judge = GrokJudge(env("XAI_API_KEY"), env("GROK_MODEL", required=True), s.cache_dir,
                           httpx.Client(timeout=60), float(env("GROK_PRICE_IN_PER_MTOK", "0")),
                           float(env("GROK_PRICE_OUT_PER_MTOK", "0")), score_100=s.features.score_100)
+    sb = None
+    if a.review:  # upload QA-passed clips as pending_review; the publisher is not started
+        from .remote.supabase import Supabase
+        sb = Supabase(env("SUPABASE_URL", required=True), env("SUPABASE_SERVICE_ROLE_KEY", required=True))
     tr = CachedTranscriber(WhisperXTranscriber.auto(), s.cache_dir)
     out = run_dry(s, a.channel, Path(a.video), Path(a.chat), s.work_dir / "dryrun", tr, judge,
-                  max_moments=a.max, ffmpeg=env("FFMPEG_BIN", "ffmpeg"))
+                  max_moments=a.max, ffmpeg=env("FFMPEG_BIN", "ffmpeg"), supabase=sb,
+                  vod_started_at=a.vod_started_at, video_offset=a.video_offset)
     print((out / "report.md").read_text(encoding="utf-8"))
     print(f"report: {out / 'report.md'}")
     return 0
@@ -179,6 +184,11 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--chat", required=True, help="TwitchDownloaderCLI chat JSON")
     d.add_argument("--max", type=int, default=12, help="top N moments to cut")
     d.add_argument("--no-judge", action="store_true", help="heuristic cut, no Grok spend")
+    d.add_argument("--review", action="store_true",
+                   help="upload QA-passed clips to the dashboard review queue (never posts)")
+    d.add_argument("--vod-started-at", type=float, default=0.0, help="VOD start, unix seconds")
+    d.add_argument("--video-offset", type=float, default=0.0,
+                   help="VOD time (s) where the video file starts, e.g. 3600 for a section from 1:00:00")
     sub.add_parser("links", help="run pasted dashboard links until stopped (D115)")
     lk = sub.add_parser("link", help="queue one link (lands in Review like a dashboard paste)")
     lk.add_argument("url")
@@ -189,12 +199,17 @@ def main(argv: list[str] | None = None) -> int:
     lk.add_argument("--full-frame", action="store_true", help="IRL / full cam: face-tracked full frame")
     bl = sub.add_parser("brain-learn", help="labels -> new brain version (features.brain)")
     bl.add_argument("--channel", required=True)
+    sub.add_parser("face-model", help="download + hash-check the MediaPipe face model (D115 IRL reframe)")
     a = p.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
         if a.cmd == "replay":
             return cmd_replay(a)
+        if a.cmd == "face-model":
+            from .render.motion import detector_name, ensure_face_model
+            print(f"face model ok: {ensure_face_model()}; detector: {detector_name()}")
+            return 0
         if a.cmd == "check":
             s = load_settings(Path(a.config) if a.config else None)
             print(f"work dir {s.work_dir}; {len(s.channels)} channel(s), up to {s.max_channels} captured at once")

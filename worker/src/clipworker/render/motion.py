@@ -4,15 +4,19 @@ Zooms: placed at sentence ends from whisperX words (plus the detector peak), at
 least `min_gap_s` apart, as ffmpeg zoompan pulses. Gaming layout zooms only the
 facecam panel; full-frame (IRL) zooms the whole frame.
 
-Reframe (IRL / no facecam): ffmpeg scene detection splits the clip into shots;
-OpenCV finds the largest face in each shot and the 9:16 crop is centred on it,
-changing only on a cut so the jump hides inside the cut. OpenCV is optional:
-without it every shot is centre-cropped.
+Reframe (IRL / no facecam, D115): ffmpeg scene detection splits the clip into shots;
+faces are sampled at TRACK_FPS through the whole clip (MediaPipe BlazeFace when installed,
+OpenCV Haar as fallback, centre crop with neither). A smoothed camera path follows the face
+inside a shot (dead zone, capped pan speed, eased glides) and jumps only on a cut, so the
+jump hides inside the cut. The crop is always full height 9:16: it pans, never zooms (D112).
 """
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 import subprocess
+import urllib.request
 from pathlib import Path
 
 from ..config import ZoomParams
@@ -176,3 +180,190 @@ def track_crop_filter(centres: list[tuple[float, float, float]]) -> str:
             expr = f"if(lt(t,{a + GLIDE_S:.3f}),{x_of(pos)},{expr})"
         expr = f"if(lt(t,{a:.3f}),{x_of(f'{prev:.4f}')},{expr})"
     return f"crop=ih*9/16:ih:x='{expr}':y=0"
+
+
+# --- continuous face tracking (D115) ------------------------------------------------
+
+TRACK_FPS = 4            # face samples per second
+DEAD_ZONE = 0.05         # face drift under this (fraction of frame width) keeps the camera still
+MAX_PAN_PER_S = 0.22     # camera pan speed cap, fraction of frame width per second
+SIMPLIFY_TOL = 0.012     # path keys closer than this to a straight line are dropped
+MAX_KEYS = 60            # keeps the ffmpeg expression small
+
+# MediaPipe BlazeFace full range (Apache-2.0, Google). Pinned by hash (light audit 2026-11-23).
+FACE_MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/face_detector/"
+                  "blaze_face_full_range/float16/1/blaze_face_full_range.tflite")
+FACE_MODEL_SHA256 = "3698b18f063835bc609069ef052228fbe86d9c9a6dc8dcb7c7c2d69aed2b181b"
+FACE_MODEL_ENV = "CLIPP_FACE_MODEL"
+DEFAULT_FACE_MODEL = Path("C:/clip-work/models/blaze_face_full_range.tflite")
+
+_mp_detector = None
+_mp_failed = False
+
+
+def face_model_path() -> Path:
+    return Path(os.environ.get(FACE_MODEL_ENV) or DEFAULT_FACE_MODEL)
+
+
+def ensure_face_model(path: Path | None = None, urlopen=urllib.request.urlopen) -> Path:
+    """Download the pinned face model once and check its hash. A mismatch deletes the file and raises."""
+    path = Path(path or face_model_path())
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with urlopen(FACE_MODEL_URL, timeout=60) as r:
+            path.write_bytes(r.read())
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != FACE_MODEL_SHA256:
+        path.unlink(missing_ok=True)
+        raise RuntimeError(f"face model hash mismatch ({digest}); file deleted")
+    return path
+
+
+def _mediapipe():
+    """The MediaPipe face detector, or None when mediapipe or the model file is missing."""
+    global _mp_detector, _mp_failed
+    if _mp_detector is not None or _mp_failed:
+        return _mp_detector
+    model = face_model_path()
+    try:
+        import mediapipe as mp  # optional dependency: pip install clipworker[reframe]
+        from mediapipe.tasks import python as mpt
+        from mediapipe.tasks.python import vision
+        if not model.exists():
+            raise FileNotFoundError(model)
+        opts = vision.FaceDetectorOptions(base_options=mpt.BaseOptions(model_asset_path=str(model)),
+                                          min_detection_confidence=0.5)
+        _mp_detector = (mp, vision.FaceDetector.create_from_options(opts))
+    except Exception:  # noqa: BLE001 - any failure falls back to Haar, never breaks a render
+        _mp_failed = True
+        _mp_detector = None
+    return _mp_detector
+
+
+def detect_face(frame: Path) -> tuple[float, float] | None:
+    """(x_centre_fraction, face_area_fraction) of the main face: MediaPipe first, Haar fallback."""
+    md = _mediapipe()
+    if md is None:
+        return face_center_x(frame)
+    mp, det = md
+    img = mp.Image.create_from_file(str(frame))
+    faces = det.detect(img).detections
+    if not faces:
+        return None
+    w, h = img.width, img.height
+
+    def size(d):
+        b = d.bounding_box
+        return b.width * b.height * d.categories[0].score
+    b = max(faces, key=size).bounding_box
+    return (b.origin_x + b.width / 2) / w, (b.width * b.height) / (w * h)
+
+
+def detector_name() -> str:
+    return "mediapipe" if _mediapipe() is not None else "haar"
+
+
+def sample_faces(src: Path, t_in: float, t_out: float, work: Path, ffmpeg: str = "ffmpeg",
+                 run=subprocess.run, fps: int = TRACK_FPS) -> list[tuple[float, float | None]]:
+    """[(t, x_centre or None)] every 1/fps s through the window. One ffmpeg call for all frames."""
+    work.mkdir(parents=True, exist_ok=True)
+    for old in work.glob("f_*.jpg"):
+        old.unlink()
+    run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{t_in:.3f}", "-to", f"{t_out:.3f}",
+         "-i", str(src), "-vf", f"fps={fps},scale=640:-2", "-q:v", "4", str(work / "f_%05d.jpg")], check=False)
+    out = []
+    for i, f in enumerate(sorted(work.glob("f_*.jpg"))):
+        hit = detect_face(f)
+        out.append((round(i / fps, 3), round(hit[0], 4) if hit else None))
+    return out
+
+
+def _simplify(pts: list[tuple[float, float]], tol: float) -> list[tuple[float, float]]:
+    """Ramer-Douglas-Peucker on (t, x): keep the keys that bend the path."""
+    if len(pts) < 3:
+        return pts
+    (t0, x0), (t1, x1) = pts[0], pts[-1]
+    worst, idx = 0.0, 0
+    for i in range(1, len(pts) - 1):
+        t, x = pts[i]
+        line = x0 + (x1 - x0) * ((t - t0) / (t1 - t0) if t1 > t0 else 0)
+        if abs(x - line) > worst:
+            worst, idx = abs(x - line), i
+    if worst <= tol:
+        return [pts[0], pts[-1]]
+    return _simplify(pts[:idx + 1], tol)[:-1] + _simplify(pts[idx:], tol)
+
+
+def face_path(samples: list[tuple[float, float | None]], cuts: list[float], duration: float,
+              fps: int = TRACK_FPS) -> list[tuple[float, float, bool]]:
+    """Camera keys [(t, x_centre, jump)] for a 9:16 window. jump=True = hard move at a cut.
+    Inside a shot the camera holds while the face stays in the dead zone, then pans toward it
+    no faster than MAX_PAN_PER_S. Missing faces hold the last framing (shot start: shot median or 0.5)."""
+    keys: list[tuple[float, float, bool]] = []
+    dt = 1 / fps
+    for n, (a, b) in enumerate(shots(cuts, duration)):
+        xs = [(t, x) for t, x in samples if a <= t < b]
+        found = sorted(x for _, x in xs if x is not None)
+        cam = found[len(found) // 2] if found else 0.5
+        # median of 3 kills single-frame misdetections
+        raw = [x for _, x in xs]
+        filt = []
+        for i in range(len(raw)):
+            win = sorted(v for v in raw[max(0, i - 1):i + 2] if v is not None)
+            filt.append(win[len(win) // 2] if win else None)
+        first = next((x for x in filt if x is not None), cam)
+        cam = first
+        pts = [(a, cam)]
+        for (t, _), x in zip(xs, filt):
+            if x is not None and abs(x - cam) > DEAD_ZONE:
+                target = x - DEAD_ZONE if x > cam else x + DEAD_ZONE
+                step = max(-MAX_PAN_PER_S * dt, min(MAX_PAN_PER_S * dt, target - cam))
+                cam = cam + step
+            pts.append((t, cam))
+        pts.append((b, cam))
+        pts = _simplify(sorted(dict(pts).items()), SIMPLIFY_TOL)
+        keys += [(round(t, 3), round(min(1.0, max(0.0, x)), 4), i == 0 and n > 0) for i, (t, x) in enumerate(pts)]
+    tol = SIMPLIFY_TOL
+    while len(keys) > MAX_KEYS:  # very long or busy clips: coarsen until the expression stays small
+        tol *= 1.5
+        out, seg = [], []
+        for k in keys + [(None, None, True)]:
+            if k[2] and seg:
+                pts = _simplify([(t, x) for t, x, _ in seg], tol)
+                out += [(t, x, seg[0][2] if i == 0 else False) for i, (t, x) in enumerate(pts)]
+                seg = []
+            if k[0] is not None:
+                seg.append(k)
+        keys = out
+    return keys
+
+
+def path_crop_filter(keys: list[tuple[float, float, bool]]) -> str:
+    """9:16 full-height crop following the camera keys: eased glide between keys, hard jump on a cut."""
+    def x_of(c: str) -> str:
+        return f"max(0,min(iw-ow,{c}*iw-ow/2))"
+    if not keys:
+        return "crop=ih*9/16:ih"
+    expr = x_of(f"{keys[-1][1]:.4f}")
+    for i in range(len(keys) - 1, 0, -1):
+        (t0, x0, _), (t1, x1, jump) = keys[i - 1], keys[i]
+        if jump or x0 == x1 or t1 <= t0:
+            seg = x_of(f"{x0:.4f}")
+        else:
+            seg = x_of(f"({x0:.4f}+({x1 - x0:.4f})*{_ramp(f'(t-{t0:.3f})/{t1 - t0:.3f}', 'smooth')})")
+        expr = f"if(lt(t,{t1:.3f}),{seg},{expr})"
+    return f"crop=ih*9/16:ih:x='{expr}':y=0"
+
+
+def track(src: Path, t_in: float, t_out: float, work: Path, ffmpeg: str = "ffmpeg", run=subprocess.run,
+          cuts: list[float] | None = None) -> tuple[list[tuple[float, float, bool]], list[tuple[float, float, float]]]:
+    """(camera keys, per-shot centres for the manifest)."""
+    dur = t_out - t_in
+    cuts = detect_cuts(src, t_in, t_out, ffmpeg=ffmpeg, run=run) if cuts is None else cuts
+    samples = sample_faces(src, t_in, t_out, work, ffmpeg, run)
+    keys = face_path(samples, cuts, dur)
+    centres = []
+    for a, b in shots(cuts, dur):
+        xs = sorted(x for t, x in samples if a <= t < b and x is not None)
+        centres.append((round(a, 3), round(b, 3), xs[len(xs) // 2] if xs else 0.5))
+    return keys, centres

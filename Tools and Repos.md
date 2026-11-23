@@ -101,3 +101,14 @@ Also seen, not ranked: iamajmeena/neonclipping (736 stars, created 2026-11-19, t
 ## 2026-11-22: TwitchDownloaderCLI audit (light mode)
 - lay295/TwitchDownloader CLI release `1.56.5` (published 2026-07-20), MIT, repo since 2019-08-26, 4.1k stars. Asset `TwitchDownloaderCLI-1.56.5-Windows-x64.zip` sha256 `8b1b0695f2b1b6bf0d2535fab4b84032951cded8cf4078dfdf4d58e391c813a0` matches GitHub's published digest.
 - Verdict: **pass-with-limits**. Allowed: `chatdownload` of public VOD chat only, no credentials passed. Kept in `C:\clip-work\quarantine\TwitchDownloaderCLI-1.56.5\`. Re-audit on any version bump.
+
+## 2026-11-23: gta-components audit (strict mode)
+- echris6/gta-components at commit `81181fda29c98b53a0d14659d8d1dafd62d84060`. Code MIT, fonts OFL. Created 2026-11-21, 2 commits, 30 stars, one author: strict mode.
+- Read: every package.json (no install hooks; scripts only `npx --yes hyperframes@<pinned>`), setup.sh (copies fonts/kit only), the 3 stinger components' HTML and the shared kit. No eval/Function/atob/child_process, no reads of files, env or tokens in browser code. Glyph and kit JS is long-line data, readable. External loads: GSAP 3.14.2 and three 0.160.0 from jsDelivr, pinned versions but no SRI.
+- hyperframes 0.8.162 (npm, Apache-2.0, HeyGen, published by GitHub Actions trusted publisher, no install scripts). Deps use ^ ranges. Sends PostHog telemetry unless HYPERFRAMES_NO_TELEMETRY=1 / DO_NOT_TRACK=1.
+- Verdict: **pass-with-limits**. Allowed: bake shorts/09-wasted-stamp (0,1), shorts/10-mission-passed (0,1), shorts/08-wanted-level (0) with bg=none, inside Windows Sandbox only, telemetry off (`ops/stingers/bake-*.ps1`). Not allowed: running it on the host or in the worker, the zoom components, the showcase server. kit motion.js is licensed for in-project use only; do not redistribute it.
+
+## 2026-11-23: MediaPipe light audit
+- PyPI `mediapipe==1.2.3` (Google, Apache-2.0, 2026-11-11, win_amd64 wheel). Brings opencv-contrib-python 5.x (cv2 incl. Haar data); do not install opencv-python-headless next to it.
+- Model BlazeFace full range, storage.googleapis.com/mediapipe-models/face_detector/blaze_face_full_range/float16/1, sha256 `3698b18f063835bc609069ef052228fbe86d9c9a6dc8dcb7c7c2d69aed2b181b` (checked by `clipworker face-model`).
+- Verdict: **pass**. Used only for face detection in the IRL reframe (D115).
