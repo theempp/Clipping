@@ -138,3 +138,18 @@ def test_store_roundtrip(tmp_path):
 def test_recipe_json_roundtrip():
     r = mk(flashback=R.Flashback("why", "vod 1:00", approved=True))
     assert R.Recipe.from_json(r.to_json()) == r
+
+
+def test_moment_tags_from_judgment():
+    assert "punchline" in R.moment_tags({"category": "funny"})
+    assert R.moment_tags({"category": "other", "hook_type": "none"}) == set()
+    assert {"tense", "mock_serious"} <= R.moment_tags({"category": "drama"})
+    assert "compilation" in R.moment_tags({"compilation": True})
+
+
+def test_build_recipe_is_valid_and_deterministic_per_clip():
+    sw = R.StreamerWeights()
+    a = R.build_recipe("c9", "lacy", {"category": "funny"}, sw, random.Random("c9"), 16.0)
+    b = R.build_recipe("c9", "lacy", {"category": "funny"}, R.StreamerWeights(), random.Random("c9"), 16.0)
+    assert a == b and R.validate(a) == []
+    assert a.tools[:2] == ["hard_cut", "headline_box"]

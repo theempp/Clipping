@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import random
 import time
 import uuid
 from dataclasses import asdict, replace
@@ -26,6 +27,8 @@ from .qa import CampaignRules, check_clip
 from .remote.rights import RightsGate
 from .editplan import edit_overrides
 from .pods import fair_order, resolve_pod_ids
+from .render import recipe
+from .render import tools as tools_mod
 from .render.ffmpeg import render_clip
 from .store import Job, Store
 from .transcribe import Word, words_text
@@ -278,6 +281,9 @@ class Pipeline:
         # standing rules learned from Zo's notes (D078) sit under this clip's own overrides
         j = {**job.data["judgment"], **self.rule_settings(), **(overrides or {})}
         words = [Word(**w) for w in job.data["words"]]
+        rec = self._recipe_for(job, j)
+        if rec is not None:  # D114: the recipe sets caption style, SFX; zooms are off whatever it says
+            j = {**j, **recipe.to_judgment(rec), "recipe": rec.to_json()}
         layout, track = ch.layout, ch.layout is None
         if overrides and overrides.get("layout"):
             lay = overrides["layout"]
@@ -322,9 +328,43 @@ class Pipeline:
                                 zoom=zoom, track=track, sfx=sfx,
                                 **({"crop_x": float(crop_x)} if crop_x is not None else {}),
                                 **({"cuts": j["cuts"]} if j.get("cuts") else {}))
+        manifest = self._apply_recipe(j, manifest, peak_rel)
         self.store.advance(job.id, "rendered", {"manifest": manifest, "title": title,
                                                 "description": desc, "judgment": j})
         return True
+
+    def _recipe_for(self, job: Job, j: dict) -> "recipe.Recipe | None":
+        """D114: the clip's edit recipe. Reused on re-render, else picked from the streamer's weights.
+        Off (None) unless settings.extra["recipe_weights"] names the weights file."""
+        path = self.s.extra.get("recipe_weights")
+        if not path:
+            return None
+        if j.get("recipe"):
+            return recipe.Recipe.from_json(j["recipe"])
+        store = recipe.WeightStore(path)
+        sw = store.get(job.channel)
+        rec = recipe.build_recipe(job.id, job.channel, j, sw, random.Random(job.id),
+                                  float(j["trim_out"]) - float(j["trim_in"]))
+        recipe.record_pick(sw, rec.tools)
+        store.save()
+        return rec
+
+    def _apply_recipe(self, j: dict, manifest: dict, peak_rel: float) -> dict:
+        """Run the recipe's after-render effects on the finished clip and record the recipe in the manifest."""
+        if not j.get("recipe"):
+            return manifest
+        rec = recipe.Recipe.from_json(j["recipe"])
+        problems = recipe.validate(rec)
+        fx = []
+        if "slowmo_vignette" in rec.tools:
+            fx.append({"tool": "slowmo_vignette", "at": max(0.0, peak_rel - 0.3)})
+        if "music_cue" in rec.tools:
+            fx.append({"tool": "music_cue", "file": self.s.extra.get("music_cue_file"), "start": 0.0})
+        video = Path(manifest.get("video") or "")
+        if fx and not problems and video.exists():
+            manifest = {**manifest, "duration": round(tools_mod.apply_effects(
+                video, fx, float(manifest["duration"]), env("FFMPEG_BIN", "ffmpeg")), 3)}
+        return {**manifest, "recipe": j["recipe"], "recipe_problems": problems}
 
     def _qa_step(self, job: Job) -> bool:
         m = job.data["manifest"]

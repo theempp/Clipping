@@ -211,3 +211,33 @@ def apply_feedback(sw: StreamerWeights, tools: list[str], outcome: str,
         sw.strikes[bad_tool] = sw.strikes.get(bad_tool, 0) + 1
         if sw.strikes[bad_tool] >= 2:
             sw.banned.add(bad_tool)
+
+
+# ---- from judgment to recipe ----
+
+def moment_tags(j: dict) -> set[str]:
+    """Judge output -> the moment tags that decide which tools fit. Conservative: no tags, no extras."""
+    tags: set[str] = set()
+    cat, hook = j.get("category"), j.get("hook_type")
+    if cat in ("funny", "fail", "rage", "clutch"):
+        tags.add("punchline")
+    if cat in ("reaction", "wholesome", "funny") or hook == "reaction_peak":
+        tags.add("reaction_peak")
+    if hook == "play_peak" or cat in ("clutch", "fail"):
+        tags.add("game_punchline")
+    if cat == "drama":
+        tags |= {"tense", "mock_serious"}
+    if j.get("compilation"):
+        tags.add("compilation")
+    return tags
+
+
+def build_recipe(clip_id: str, streamer: str, j: dict, sw: StreamerWeights, rng: random.Random,
+                 length_s: float) -> Recipe:
+    tools, explored = pick_tools(sw, moment_tags(j), rng)
+    layout = "split"
+    if "swap_full_face" in tools and "swap_full_game" in tools:
+        tools.remove("swap_full_game")  # one layout swap per clip
+    style = "headline+words" if rng.random() < 0.5 else "headline"  # D073 A/B, tagged for learning
+    return Recipe(clip_id=clip_id, streamer=streamer, layout=layout, caption_style=style, tools=tools,
+                  length_s=round(length_s, 2), explore=explored)

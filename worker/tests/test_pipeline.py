@@ -222,3 +222,41 @@ def test_revision_note_fixes_clips_already_waiting(tmp_path, source_video):
     assert b["state"] == "pending_review" and b["revision"] == 1 and not b.get("fixing")
     assert b["manifest"]["motion"]["motion_version"] == 2
     assert sb.t["edit_rules"][0]["fixed_count"] == 1
+
+
+@needs_ffmpeg
+def test_recipe_is_chosen_once_recorded_and_never_zooms(tmp_path, source_video):
+    import dataclasses
+    import json as _json
+    pipe, sb, store = _env(tmp_path, source_video)
+    wpath = tmp_path / "weights.json"
+    pipe.s = dataclasses.replace(pipe.s, extra={"recipe_weights": str(wpath)})
+    job = pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    j = store.job(job)
+    assert j.stage == "uploaded", (j.stage, j.last_error)
+    m = j.data["manifest"]
+    rec = m["recipe"]
+    assert rec["streamer"] == "twitch:lacy" and m["zooms"] == [] and "zoom" not in rec["tools"]
+    assert rec["tools"][:2] == ["hard_cut", "headline_box"] and rec["caption_style"] in ("headline", "headline+words")
+    assert j.data["judgment"]["recipe"] == rec
+    saved = _json.loads(wpath.read_text())["twitch:lacy"]
+    assert saved["clips_made"] == 1 and saved["last_combo"] == rec["tools"]
+    # a revision re-renders with the SAME recipe and does not count as a new clip
+    clip = sb.t["clips"][0]
+    sb.human(clip["id"], "revise")
+    sb.insert("revisions", {"clip_id": clip["id"], "kind": "title", "note": "t",
+                            "payload": {"title": "New title"}, "resolved_at": None})
+    assert pipe.process_revisions() == 1
+    assert store.job(job).data["manifest"]["recipe"] == rec
+    assert _json.loads(wpath.read_text())["twitch:lacy"]["clips_made"] == 1
+
+
+@needs_ffmpeg
+def test_recipe_off_by_default(tmp_path, source_video):
+    pipe, sb, store = _env(tmp_path, source_video)
+    job = pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    assert "recipe" not in store.job(job).data["manifest"]
