@@ -9,6 +9,8 @@ export type Streamer = {
   twitch_login: string | null;
   kick_slug: string | null;
   avatar_url: string | null;
+  /** Pods migration (20261124000000): the pod this streamer clips for. */
+  pod_id?: string | null;
 };
 
 export type Clip = {
@@ -16,6 +18,8 @@ export type Clip = {
   job_id: string;
   streamer_id: string | null;
   channel_key: string;
+  /** Pod tag (pods migration). Null = untagged; only the admin reviews those (D102). */
+  pod_id?: string | null;
   state: ClipState;
   title: string | null;
   hook: string | null;
@@ -76,7 +80,7 @@ export type Heartbeat = {
 
 export type Control = { awake: boolean; updated_at: string };
 
-export type Candidate = { channel_key: string; moment_at: string; score: number; outcome: string };
+export type Candidate = { channel_key: string; moment_at: string; score: number; outcome: string; pod_id?: string | null };
 
 export type Spend = { kind: string; usd: number };
 
@@ -174,6 +178,8 @@ export type Snapshot = {
   publications: Publication[];
   campaigns: Campaign[];
   brains: BrainWeights[];
+  /** Pods (NEXT_PUBLIC_CLIPP_PODS=1). Empty while the flag is off. */
+  pods: Pod[];
 };
 
 /** Manual editor output (trim + crop + headline + captions), sent as a revision payload. */
@@ -187,3 +193,11 @@ export type EditPlan = {
 };
 
 export type ReviewAction = "approve" | "revise" | "reject";
+
+/** Pods (D091-D109, migration 20261124000000_pods). */
+export type PodRole = "owner" | "member";
+export type Pod = { id: string; slug: string; name: string; status: "trial" | "active" | "ended" };
+/** One row of my_access().pods: a pod the signed-in user belongs to. */
+export type PodAccess = { id: string; slug: string; name: string; role: PodRole };
+/** my_access(): admin sees every pod; pods = the user's own memberships. */
+export type Access = { admin: boolean; pods: PodAccess[] };

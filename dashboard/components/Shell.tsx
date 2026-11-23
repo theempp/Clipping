@@ -29,7 +29,7 @@ const PHONE = new Set(["/", "/review", "/streamers", "/editor"]);
 const isOn = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`));
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { snap, demo, error, ready, signOut, setAwake, pollLive } = useStore();
+  const { snap, demo, error, ready, signOut, setAwake, pollLive, podsOn, access } = useStore();
   const now = useNow(5000);
   const path = usePathname();
   const router = useRouter();
@@ -73,7 +73,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <main className="gate">
         <div className="gate-card glass">
           <h1>Not allowed</h1>
-          <p>This account is signed in but is not the owner. Clipp is private.</p>
+          <p>{podsOn ? "This account is signed in but is not in any pod. Clipp is invite-only." : "This account is signed in but is not the owner. Clipp is private."}</p>
           <button className="b ok lg" onClick={() => void signOut()}>Sign out</button>
         </div>
       </main>
@@ -130,7 +130,9 @@ export function Shell({ children }: { children: ReactNode }) {
 
       <div className="wrap">
         <header className="top">
-          <Link href="/" className="brand" aria-label="Clipp home">zwocl<b>i</b>ppe{demo && <small>demo</small>}</Link>
+          <Link href="/" className="brand" aria-label="Clipp home">zwocl<b>i</b>ppe{demo && <small>demo</small>}
+            {podsOn && access && !access.admin && access.pods[0] && <small>{access.pods[0].name}</small>}</Link>
+          {podsOn && <PodSwitcher />}
           <span className="sp" />
           <nav className="pillnav" aria-label="Main">
             {PAGES.filter((p) => p.main).map((p) => (
@@ -153,6 +155,22 @@ export function Shell({ children }: { children: ReactNode }) {
       {panel === "search" && <SearchPanel onClose={() => setPanel(null)} />}
       {panel === "alerts" && <AlertsPanel alerts={alerts} onClose={() => setPanel(null)} />}
       <UndoToast />
+    </div>
+  );
+}
+
+/** Admin pod switcher (Atlas pods §1): All, then one button per pod. Hidden for members and when there is one pod. */
+function PodSwitcher() {
+  const { access, pod, setPod, snap, ready } = useStore();
+  if (!access?.admin || snap.pods.length < 2) return null;
+  return (
+    <div className="seg" role="tablist" aria-label="Pod">
+      <button type="button" role="tab" aria-selected={pod === null} className={pod === null ? "on" : ""} disabled={!ready}
+        onClick={() => setPod(null)}>All</button>
+      {snap.pods.map((p) => (
+        <button key={p.id} type="button" role="tab" aria-selected={pod === p.id} className={pod === p.id ? "on" : ""} disabled={!ready}
+          onClick={() => setPod(p.id)}>{p.name}</button>
+      ))}
     </div>
   );
 }

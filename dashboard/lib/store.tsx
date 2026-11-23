@@ -1,10 +1,11 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { demoSnapshot } from "./demo";
-import { IS_DEMO } from "./env";
+import { demoAccess, demoSnapshot } from "./demo";
+import { IS_DEMO, PODS_ON } from "./env";
+import { canReview as podCanReview, hasAccess, parseAccess, podSnapshot, scopedPod } from "./pods";
 import { browserClient } from "./supabase/client";
-import type { Clip, EditPlan, LongformVideo, ReviewAction, Snapshot, TiktokStats } from "./types";
+import type { Access, Clip, EditPlan, LongformVideo, ReviewAction, Snapshot, TiktokStats } from "./types";
 import { editNote, editPayload } from "./logic";
 import type { LiveStat } from "./types";
 
@@ -23,7 +24,16 @@ type Store = {
   demo: boolean;
   ready: boolean;
   error: string | null;
+  /** Data for the pod in scope (everything when pods are off or the admin picked All). */
   snap: Snapshot;
+  /** Pods (NEXT_PUBLIC_CLIPP_PODS=1). podsOn false = single-owner dashboard, access/pod unused. */
+  podsOn: boolean;
+  access: Access | null;
+  /** Pod in scope: admin's pick (null = All) or the member's pinned pod. */
+  pod: string | null;
+  setPod: (id: string | null) => void;
+  /** Mirrors review_clip(): only the clip's pod owner, or the admin for untagged clips. The DB enforces it too. */
+  canReview: (clip: Clip) => boolean;
   pending: Pending | null;
   /** Approve / deny wait UNDO_MS before they reach the database, so a stray key press can be undone. */
   /** applyAll (revise only): the note's style asks also become standing rules for every clip (D078). */
@@ -49,10 +59,15 @@ type Store = {
 const EMPTY: Snapshot = {
   streamers: [], clips: [], submissions: [], heartbeat: null,
   control: { awake: false, updated_at: new Date(0).toISOString() }, candidates: [], spend: [], revisions: [], rules: [],
-  longform: [], results: [], live: [], history: [], publications: [], campaigns: [], brains: [],
+  longform: [], results: [], live: [], history: [], publications: [], campaigns: [], brains: [], pods: [],
 };
 
 const Ctx = createContext<Store | null>(null);
+
+const POD_KEY = "clipp.pod";
+function readPod(): string | null {
+  try { return localStorage.getItem(POD_KEY) || null; } catch { return null; }
+}
 
 const DEMO_KEY = "clipp.demo.awake";
 function readDemoAwake(): boolean {
@@ -94,12 +109,14 @@ async function loadLive(): Promise<Snapshot> {
   const since24h = new Date(Date.now() - 24 * 3600_000).toISOString();
   const month = new Date(); month.setUTCDate(1); month.setUTCHours(0, 0, 0, 0);
   const [st, cl, su, hb, co, ca, sp, rv, ru, lf, lr] = await Promise.all([
-    sb.from("streamers").select("id,slug,display_name,twitch_login,kick_slug,avatar_url").order("display_name"),
+    PODS_ON ? sb.from("streamers").select("id,slug,display_name,twitch_login,kick_slug,avatar_url,pod_id").order("display_name")
+      : sb.from("streamers").select("id,slug,display_name,twitch_login,kick_slug,avatar_url").order("display_name"),
     sb.from("clips").select("*").order("created_at", { ascending: false }).limit(300),
     sb.from("submissions_live").select("*").gte("created_at", since24h).order("deadline_at"),
     sb.from("worker_heartbeat").select("*").order("seen_at", { ascending: false }).limit(1),
     sb.from("control").select("awake,updated_at").limit(1),
-    sb.from("candidate_log").select("channel_key,moment_at,score,outcome").gte("moment_at", since6h)
+    (PODS_ON ? sb.from("candidate_log").select("channel_key,moment_at,score,outcome,pod_id")
+      : sb.from("candidate_log").select("channel_key,moment_at,score,outcome")).gte("moment_at", since6h)
       .order("moment_at").limit(3000),
     sb.from("spend_month").select("kind,usd").gte("month", month.toISOString()),
     sb.from("revisions").select("id,clip_id,kind,note,created_at,resolved_at")
@@ -123,6 +140,9 @@ async function loadLive(): Promise<Snapshot> {
       .order("created_at", { ascending: false }).limit(100),
     sb.from("streamer_brain").select("streamer_id,weights,words,updated_at"),
   ]);
+  // Admin reads every pod; a member reads only its own (RLS pod_read).
+  const pods = PODS_ON ? await sb.from("pods").select("id,slug,name,status").order("slug") : null;
+  if (pods?.error) throw new Error(pods.error.message);
   const ok = <T,>(r: { data: T[] | null; error: unknown }): T[] => (r.error ? [] : r.data ?? []);
   const dest = new Map(ok(de).map((d) => [d.id, d]));
   const opt = {
@@ -131,6 +151,7 @@ async function loadLive(): Promise<Snapshot> {
     publications: ok(pu).map((p) => ({ ...p, platform: dest.get(p.destination_id)?.platform ?? null, label: dest.get(p.destination_id)?.label ?? null })),
     campaigns: ok(cm).map((c) => ({ ...c, cpm_usd: c.cpm_usd == null ? null : Number(c.cpm_usd), cap_usd: c.cap_usd == null ? null : Number(c.cap_usd), score: c.score == null ? null : Number(c.score) })),
     brains: ok(br),
+    pods: pods?.data ?? [],
   };
   return {
     ...opt,
@@ -154,6 +175,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [access, setAccess] = useState<Access | null>(null);
+  const [picked, setPicked] = useState<string | null>(null);
+  const accessRef = useRef<Access | null>(null);
+  accessRef.current = access;
   const pendingRef = useRef<Pending | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const urls = useRef(new Map<string, { url: string; exp: number }>());
@@ -166,9 +191,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (IS_DEMO) return;
     try {
       const sb = browserClient();
-      const { data: owner, error: e } = await sb.rpc("is_owner");
-      if (e) throw new Error(e.message);
-      if (!owner) { setError("not-owner"); setReady(true); return; }
+      if (PODS_ON) {
+        const { data: raw, error: e } = await sb.rpc("my_access");
+        if (e) throw new Error(e.message);
+        const a = parseAccess(raw);
+        setAccess(a);
+        if (!hasAccess(a)) { setError("not-owner"); setReady(true); return; }
+      } else {
+        const { data: owner, error: e } = await sb.rpc("is_owner");
+        if (e) throw new Error(e.message);
+        if (!owner) { setError("not-owner"); setReady(true); return; }
+      }
       const next = await loadLive();
       const want = awakeWant.current;
       setSnap(want == null ? next : { ...next, control: { ...next.control, awake: want } });
@@ -182,7 +215,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Initial load, realtime refresh (debounced), and a 30 s safety poll.
   useEffect(() => {
+    if (PODS_ON) setPicked(readPod());
     if (IS_DEMO) {
+      if (PODS_ON) setAccess(demoAccess(window.location.search));
       // Demo keeps the switch across reloads; it starts asleep until Zo wakes it.
       const on = readDemoAwake();
       const d = demoSnapshot();
@@ -256,14 +291,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (p) void commit(p);
   }, [commit]);
 
+  const canReview = useCallback((clip: Clip) => !PODS_ON || podCanReview(clip, accessRef.current, snapRef.current.pods), []);
+
   const act = useCallback((clip: Clip, action: ReviewAction, note?: string, applyAll?: boolean) => {
+    if (!canReview(clip)) { setError("Only the owner of this clip's pod can review it."); return; }
     flush();
     if (action === "revise") { void commit({ clip, action, note, applyAll, until: Date.now() }); return; }
     const p = { clip, action, note, until: Date.now() + UNDO_MS };
     pendingRef.current = p;
     setPending(p);
     timer.current = setTimeout(flush, UNDO_MS);
-  }, [commit, flush]);
+  }, [commit, flush, canReview]);
 
   const undo = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -359,6 +397,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const sendEdit = useCallback(async (clip: Clip, plan: EditPlan, base: EditPlan) => {
     const note = editNote(plan, base);
+    if (!canReview(clip)) { setError("Only the owner of this clip's pod can review it."); return false; }
     if (IS_DEMO) {
       setSnap((s) => ({
         ...s,
@@ -373,7 +412,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (e) { setError(e.message); return false; }
     await refresh();
     return true;
-  }, [refresh]);
+  }, [refresh, canReview]);
 
   const setBrain = useCallback(async (streamerId: string, weights: Record<string, number>, words?: string[]) => {
     const at = new Date().toISOString();
@@ -413,11 +452,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     window.location.href = "/login";
   }, []);
 
+  const setPod = useCallback((id: string | null) => {
+    setPicked(id);
+    try { if (id) localStorage.setItem(POD_KEY, id); else localStorage.removeItem(POD_KEY); } catch { /* pick lasts this visit */ }
+  }, []);
+
+  // A stale pick (pod gone, or no longer admin) falls back to All.
+  const pod = PODS_ON ? scopedPod(access, picked && snap.pods.some((p) => p.id === picked) ? picked : null) : null;
+  const view = useMemo(() => (PODS_ON ? podSnapshot(snap, pod) : snap), [snap, pod]);
+
   const value = useMemo<Store>(() => ({
-    demo: IS_DEMO, ready, error, snap, pending, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl,
+    demo: IS_DEMO, ready, error, snap: view, podsOn: PODS_ON, access, pod, setPod, canReview, pending, act, undo,
+    setRuleActive, setAwake, markSubmitted, mediaUrl,
     markTiktokPosted, addTiktokStats, setNotice, sendEdit, setBrain, setTiktokChannel, pollLive, signOut,
-  }), [ready, error, snap, pending, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl, markTiktokPosted,
-    addTiktokStats, setNotice, sendEdit, setBrain, setTiktokChannel, pollLive, signOut]);
+  }), [ready, error, view, access, pod, setPod, canReview, pending, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl,
+    markTiktokPosted, addTiktokStats, setNotice, sendEdit, setBrain, setTiktokChannel, pollLive, signOut]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

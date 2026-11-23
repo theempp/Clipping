@@ -1,9 +1,24 @@
 // Sample day for demo mode (D057). Times are relative to page load so the
 // countdown and "live for" clocks move. Nothing here touches the network.
-import type { BrainWeights, Campaign, Candidate, Clip, LiveStat, LongformVideo, Publication, Snapshot, StatPoint, Streamer } from "./types.ts";
+import type { Access, BrainWeights, Campaign, Candidate, Clip, LiveStat, LongformVideo, Pod, Publication, Snapshot, StatPoint, Streamer } from "./types.ts";
+
+// Pods demo (D091): Pod 1 is Zo's roster; Pod 2 is a test pod with the two GTA-6-only streamers.
+export const DEMO_PODS: Pod[] = [
+  { id: "pod-1", slug: "pod-1", name: "Pod 1", status: "active" },
+  { id: "pod-2", slug: "pod-2", name: "Pod 2", status: "trial" },
+];
+const POD_OF: Record<string, string> = { kaicenat: "pod-2", ishowspeed: "pod-2" };
+/** Demo login: Zo (admin + Pod 1 owner), or `?as=pod-2` (Pod 2 owner) / `?as=pod-2&role=member` to preview a pod login. */
+export function demoAccess(search = ""): Access {
+  const q = new URLSearchParams(search);
+  const as = DEMO_PODS.find((p) => p.slug === q.get("as"));
+  if (as) return { admin: false, pods: [{ id: as.id, slug: as.slug, name: as.name, role: q.get("role") === "member" ? "member" : "owner" }] };
+  return { admin: true, pods: [{ id: "pod-1", slug: "pod-1", name: "Pod 1", role: "owner" }] };
+}
 
 const S = (id: string, slug: string, name: string, kick = false): Streamer => ({
   id, slug, display_name: name, twitch_login: kick ? null : slug, kick_slug: kick ? slug : null, avatar_url: null,
+  pod_id: POD_OF[slug] ?? "pod-1",
 });
 
 export function demoSnapshot(now = Date.now()): Snapshot {
@@ -21,7 +36,7 @@ export function demoSnapshot(now = Date.now()): Snapshot {
     const slug = p.streamer_id.slice(2);
     const media = ((n - 1) % 3) + 1;
     return {
-      id: `demo-${n}`, job_id: `${slug}-${String(n).padStart(3, "0")}`, channel_key: `twitch:${slug}`,
+      id: `demo-${n}`, job_id: `${slug}-${String(n).padStart(3, "0")}`, channel_key: `twitch:${slug}`, pod_id: POD_OF[slug] ?? "pod-1",
       state: "pending_review", hook: null, description: null, category: "gaming",
       confidence: 0.8, detector_score: 3.1, score_10: 7, hook_type: "reaction_peak",
       moment_at: iso(40 * min), duration_s: 34, storage_path: `/demo/clip${media}.mp4`,
@@ -61,7 +76,7 @@ export function demoSnapshot(now = Date.now()): Snapshot {
       duration_s: 52, hook_type: "play_peak", created_at: iso(140 * min),
       judge: { why: "Good read, slow build.", hook_window: "0:00-0:05" } }),
     clip({ streamer_id: "s-stableronaldo", title: "Storm rotate fail", score_10: 4, confidence: 0.58, duration_s: 22,
-      hook_type: "none", created_at: iso(55 * min), judge: { why: "Weak hook, no clear payoff." } }),
+      hook_type: "none", created_at: iso(55 * min), judge: { why: "Weak hook, no clear payoff." }, pod_id: null }),
     clip({ streamer_id: "s-stableronaldo", title: "Chat roasts the loadout", state: "approved", score_10: 8, confidence: 0.8,
       reviewed_at: iso(14 * min), created_at: iso(70 * min) }),
     clip({ streamer_id: "s-xqc", title: "xQc rage quits then requeues", state: "published", score_10: 8,
@@ -72,7 +87,7 @@ export function demoSnapshot(now = Date.now()): Snapshot {
     for (let i = 0; i < 72; i += 1) {
       const wave = Math.abs(Math.sin((i + seed) * 0.7) * 1.2 + Math.sin((i * seed) * 0.13));
       const spike = i === 66 || i === 41 || i === 18 ? 2.6 : 0;
-      candidates.push({ channel_key: key, moment_at: iso((72 - i) * 2.5 * min), score: +(0.6 + wave + spike).toFixed(2),
+      candidates.push({ channel_key: key, pod_id: POD_OF[key.split(":")[1]] ?? "pod-1", moment_at: iso((72 - i) * 2.5 * min), score: +(0.6 + wave + spike).toFixed(2),
         outcome: spike ? "kept" : "dropped" });
     }
   }
@@ -138,6 +153,7 @@ export function demoSnapshot(now = Date.now()): Snapshot {
     { streamer_id: "s-jynxzi", weights: { chat_spike: 64, voice_peak: 77, chat_words: 52, viewer_clips: 41, approved_match: 58 }, words: ["JYNXZI", "W"], updated_at: iso(2 * 86400_000) },
   ];
   return {
+    pods: DEMO_PODS,
     live, history, publications, campaigns, brains,
     streamers,
     clips,

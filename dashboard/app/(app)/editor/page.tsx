@@ -20,14 +20,15 @@ function hashSeed(s: string) { let h = 7; for (const c of s) h = (h * 31 + c.cha
 /** Manual editor, trim and captions first (D098): pick a clip, drag the trim handles, move the crop box,
  *  fix the headline and captions, then send it back to the PC as a revision. */
 function Editor() {
-  const { snap, mediaUrl, sendEdit } = useStore();
+  const { snap, mediaUrl, sendEdit, canReview } = useStore();
   const params = useSearchParams();
   const router = useRouter();
   const queue = useMemo(() => rankQueue(snap.clips), [snap.clips]);
   const [who, setWho] = useState<string | "all">("all");
   const bin = queue.filter((c) => who === "all" || c.streamer_id === who);
   const clip: Clip | null = snap.clips.find((c) => c.id === params.get("clip")) ?? queue[0] ?? null;
-  const editable = clip?.state === "pending_review";
+  const mine = !clip || canReview(clip);
+  const editable = clip?.state === "pending_review" && mine;
 
   const total = Math.max(1, clip?.duration_s ?? 30);
   const fresh = useCallback((): EditPlan => ({
@@ -258,7 +259,8 @@ function Editor() {
             {sent === "sending" ? "Sending…" : sent === "sent" ? "Sent to the PC" : "Send to review"}
           </button>
           <p className="quiet" style={{ fontSize: 11 }}>
-            {!editable ? `This clip is ${clip.state.replace("_", " ")}; only clips waiting for review can be re-edited.`
+            {!mine ? "Only this pod's owner can send edits for this clip."
+              : !editable ? `This clip is ${clip.state.replace("_", " ")}; only clips waiting for review can be re-edited.`
               : sent === "sent" ? "The PC re-renders it and it comes back to Review."
               : sent === "failed" ? "Did not send. See the error at the top."
               : editNote(plan, fresh())}

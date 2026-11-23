@@ -4,12 +4,14 @@ import { cleanNote } from "@/lib/logic";
 import { useStore } from "@/lib/store";
 import type { Clip } from "@/lib/types";
 import { Icon } from "./Icon";
+import { NOT_YOURS } from "./PodChip";
 
 const EXAMPLES = ["smoother zooms, only on big moments", "no zooms", "under 30 seconds", "no sound effects", "blue captions"];
 
 /** Deny / Revise / Approve, keys D / R / A. Revise opens the plain-English box in the flow, under the buttons. */
 export function ReviewDock({ clip, startOpen = false }: { clip: Clip | null; startOpen?: boolean }) {
-  const { act } = useStore();
+  const { act, canReview } = useStore();
+  const mine = !clip || canReview(clip);
   const [open, setOpen] = useState(startOpen);
   const [text, setText] = useState("");
   const [all, setAll] = useState(true);  // D078: the fix also applies to every upcoming clip
@@ -25,7 +27,7 @@ export function ReviewDock({ clip, startOpen = false }: { clip: Clip | null; sta
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
-      if (!clip || e.metaKey || e.ctrlKey || e.altKey || t.closest("input,textarea,select,[contenteditable]")) return;
+      if (!clip || !mine || e.metaKey || e.ctrlKey || e.altKey || t.closest("input,textarea,select,[contenteditable]")) return;
       const k = e.key.toLowerCase();
       if (k === "a") { e.preventDefault(); act(clip, "approve"); }
       else if (k === "d") { e.preventDefault(); act(clip, "reject"); }
@@ -33,7 +35,7 @@ export function ReviewDock({ clip, startOpen = false }: { clip: Clip | null; sta
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [clip, act]);
+  }, [clip, act, mine]);
 
   const note = cleanNote(text);
   const send = () => {
@@ -41,6 +43,8 @@ export function ReviewDock({ clip, startOpen = false }: { clip: Clip | null; sta
     act(clip, "revise", note, all);
     setOpen(false); setText("");
   };
+
+  if (!mine) return <p className="quiet">{NOT_YOURS}</p>;
 
   return (
     <div>
