@@ -141,7 +141,7 @@ export function emphasisWords(text: string): string[] {
   return text.split(/\s+/).map((w) => w.replace(/^[.,!?"']+|[.,!?"']+$/g, "").toLowerCase()).filter(Boolean).slice(0, 12);
 }
 
-/** The worker's `edit` payload (D091): only what Zo changed against `base`, so an untouched
+/** The worker's `edit` payload (D098): only what Zo changed against `base`, so an untouched
  *  slider never overrides the PC's own choice. Trim is clip-relative seconds. */
 export function editPayload(p: EditPlan, base: EditPlan): Record<string, unknown> {
   const out: Record<string, unknown> = {};

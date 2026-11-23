@@ -1,4 +1,4 @@
--- Broadcast dashboard (D092): live numbers, growth history, streamer brain weights.
+-- Broadcast dashboard (D099): live numbers, growth history, streamer brain weights.
 -- NOT applied to the live project yet: Zo applies it after review.
 --
 -- live_stats      one row per channel (streamers on Twitch/Kick, Zo's own YouTube/X/TikTok). Written only by the

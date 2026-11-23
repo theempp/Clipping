@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Sora } from "next/font/google";
 import "./globals.css";
 
-// Broadcast (concept C, D092): Sora for display numerals and headings, Inter for UI text.
+// Broadcast (concept C, D099): Sora for display numerals and headings, Inter for UI text.
 const sora = Sora({ subsets: ["latin"], weight: ["300", "400", "600", "700"], variable: "--f-display" });
 const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--f-body" });
 

@@ -17,7 +17,7 @@ const CROP_W = 0.316; // a 9:16 window is 31.6% of a 16:9 frame
 
 function hashSeed(s: string) { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h || 7; }
 
-/** Manual editor, trim and captions first (D091): pick a clip, drag the trim handles, move the crop box,
+/** Manual editor, trim and captions first (D098): pick a clip, drag the trim handles, move the crop box,
  *  fix the headline and captions, then send it back to the PC as a revision. */
 function Editor() {
   const { snap, mediaUrl, sendEdit } = useStore();

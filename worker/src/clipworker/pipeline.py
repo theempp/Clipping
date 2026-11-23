@@ -170,7 +170,7 @@ class Pipeline:
                 layout = Layout(Crop(**lay["facecam"]), Crop(**lay["gameplay"]),
                                 int(lay.get("facecam_height", 640)))
         crop_x = j.get("crop_x")  # kept in the judgment, so later re-renders keep Zo's crop
-        if crop_x is not None:  # editor crop (D091): Zo placed a full-frame 9:16 window by hand
+        if crop_x is not None:  # editor crop (D098): Zo placed a full-frame 9:16 window by hand
             layout, track = None, False
         if j.get("max_len_s"):  # hook-first, so shortening keeps the start and cuts the tail
             keep_s = max(float(j["max_len_s"]), float(job.data["rules"].get("min_s", 0)))  # campaign floor
@@ -178,7 +178,7 @@ class Pipeline:
         style = self.s.caption_style
         if j.get("caption_colour") and style is not None:
             style = replace(style, highlight_colour=ass_colour(j["caption_colour"]))
-        if j.get("words_per_line") and style is not None:  # editor caption mode (D091)
+        if j.get("words_per_line") and style is not None:  # editor caption mode (D098)
             style = replace(style, words_per_line=int(j["words_per_line"]))
         zoom = self.s.zoom
         if j.get("zoom") is False:
@@ -190,7 +190,7 @@ class Pipeline:
                            scale=min(zoom.scale, 1.15) if zoom.on else zoom.scale,
                            ramp_s=max(zoom.ramp_s, 0.6), hold_s=max(zoom.hold_s, 1.6),
                            min_gap_s=max(zoom.min_gap_s, 8.0), max_zooms=min(zoom.max_zooms, 2))
-        if zoom is not None and j.get("zoom_scale") is not None:  # editor slider (D091); 1.0 = off
+        if zoom is not None and j.get("zoom_scale") is not None:  # editor slider (D098); 1.0 = off
             zoom = replace(zoom, scale=max(1.0, min(1.3, float(j["zoom_scale"]))))
         sfx_on = j["sfx"] if isinstance(j.get("sfx"), bool) else self.s.sfx.enabled
         sfx = replace(self.s.sfx, enabled=sfx_on and job.data["rules"].get("allow_sfx", True))
@@ -392,7 +392,7 @@ class Pipeline:
             for r in revs:
                 p = r.get("payload") or {}
                 if r["kind"] == "trim" and isinstance(p.get("edit"), dict):
-                    # dashboard editor (D091): clip-relative plan -> window-relative overrides
+                    # dashboard editor (D098): clip-relative plan -> window-relative overrides
                     base = job.data.get("judgment") or {}
                     edit, head = edit_overrides(p["edit"], float(base.get("trim_in", 0.0)),
                                                 float(base.get("trim_out", clip.get("duration_s") or 0.0)),

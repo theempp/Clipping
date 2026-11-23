@@ -1,4 +1,4 @@
-"""Dashboard editor -> worker contract (D091). The dashboard sends review_clip with
+"""Dashboard editor -> worker contract (D098). The dashboard sends review_clip with
 kind "trim" and payload {"edit": {...changed fields...}}; trims are clip-relative."""
 from clipworker.editplan import LINE_WORDS, edit_overrides
 from clipworker.render.ffmpeg import audio_peaks, output_cuts, video_filter

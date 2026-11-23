@@ -153,7 +153,7 @@ do $$ begin
 end $$;
 reset role;
 
--- live_stats migration (D092/D093)
+-- live_stats migration (D099/D100)
 set role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000bb"}', false);
 do $$ begin
