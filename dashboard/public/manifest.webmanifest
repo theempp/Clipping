@@ -1,3 +1,3 @@
-{ "name": "Clipp", "short_name": "Clipp", "start_url": "/", "display": "standalone",
-  "background_color": "#000002", "theme_color": "#000002",
+{ "name": "Zwoclippe", "short_name": "Zwoclippe", "start_url": "/", "display": "standalone",
+  "background_color": "#04070c", "theme_color": "#04070c",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }] }

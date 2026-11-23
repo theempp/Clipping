@@ -54,7 +54,7 @@ export function streamerViews(snap: Snapshot, now: number): StreamerView[] {
   return snap.streamers
     .map((s): StreamerView => {
       const keys = streamerKeys(s);
-      // Platform API (Realtime) wins over the PC heartbeat: it works even when the PC is asleep.
+      // Platform API (Realtime) wins over the PC heartbeat: it works even when the PC is offline.
       const kApi = keys.find((x) => rows.get(x)?.is_live) ?? null;
       const k = kApi ?? keys.find((x) => live.has(x)) ?? null;
       const row = k ? rows.get(k) : rows.get(keys[0] ?? "");

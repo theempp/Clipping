@@ -39,34 +39,36 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="gate">
-      <form className="gate-card glass" onSubmit={sent ? verify : send}>
-        <h1 className="brand" style={{ fontSize: 30 }}>zwocl<b>i</b>ppe</h1>
-        {IS_DEMO ? (
-          <>
-            <p>Demo mode is on, so there is nothing to sign in to.</p>
-            <Link className="b ok lg" href="/">Open the demo</Link>
-          </>
-        ) : sent ? (
-          <>
-            <p>If that email belongs to the owner, a sign-in email is on its way. Open its link on this device, or type the code from it here.</p>
-            <label htmlFor="code" className="sr-only">Code</label>
-            <input id="code" inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code"
-              value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))} />
-            <button className="b ok lg" disabled={busy || code.length < 6}>{busy ? "Checking…" : "Sign in with code"}</button>
-            {err && <p className="err" role="alert">{err}</p>}
-          </>
-        ) : (
-          <>
-            <p>Private. Owner only.</p>
-            <label htmlFor="email" className="sr-only">Email</label>
-            <input id="email" type="email" autoComplete="email" required placeholder="you@email.com"
-              value={email} onChange={(e) => setEmail(e.target.value)} />
-            <button className="b ok lg" disabled={busy || !email}>{busy ? "Sending…" : "Email me a link"}</button>
-            {err && <p className="err" role="alert">{err}</p>}
-          </>
-        )}
-      </form>
-    </main>
+    <>
+      <div className="z-amb" aria-hidden="true" /><div className="z-grid" aria-hidden="true" />
+      <main className="z-gate">
+        <form className="z-popbx z-sm" onSubmit={sent ? verify : send} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div className="z-brand"><span className="z-mk">Z</span><div>Zwoclippe<small>Private · owner only</small></div></div>
+          {IS_DEMO ? (
+            <>
+              <p className="z-mut" style={{ margin: 0 }}>Demo mode is on, so there is nothing to sign in to.</p>
+              <Link className="z-btn z-w" href="/" style={{ justifyContent: "center" }}>Open the demo</Link>
+            </>
+          ) : sent ? (
+            <>
+              <p className="z-mut" style={{ margin: 0 }}>If that email belongs to the owner, a sign-in email is on its way. Open its link on this device, or type the code from it here.</p>
+              <label htmlFor="code" className="z-lbl">Code</label>
+              <input id="code" className="z-fld" inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code"
+                value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))} />
+              <button className="z-btn z-w" style={{ justifyContent: "center" }} disabled={busy || code.length < 6}>{busy ? "Checking…" : "Sign in with code"}</button>
+              {err && <p className="z-note z-bad" role="alert">{err}</p>}
+            </>
+          ) : (
+            <>
+              <label htmlFor="email" className="z-lbl">Email</label>
+              <input id="email" className="z-fld" type="email" autoComplete="email" required placeholder="you@email.com"
+                value={email} onChange={(e) => setEmail(e.target.value)} />
+              <button className="z-btn z-w" style={{ justifyContent: "center" }} disabled={busy || !email}>{busy ? "Sending…" : "Email me a link"}</button>
+              {err && <p className="z-note z-bad" role="alert">{err}</p>}
+            </>
+          )}
+        </form>
+      </main>
+    </>
   );
 }

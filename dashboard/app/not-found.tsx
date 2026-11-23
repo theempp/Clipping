@@ -1,6 +1,9 @@
 import Link from "next/link";
 export default function NotFound() {
   return (
-    <main className="gate"><div className="gate-card glass"><h1>Not here</h1><Link className="b ok lg" href="/">Back to overview</Link></div></main>
+    <>
+      <div className="z-amb" aria-hidden="true" />
+      <main className="z-gate"><div className="z-popbx z-sm"><h3>Not here</h3><div className="z-acts"><Link className="z-btn z-w" href="/">Back to Review</Link></div></div></main>
+    </>
   );
 }

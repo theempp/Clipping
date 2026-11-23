@@ -18,7 +18,7 @@ function driftLive(rows: LiveStat[]): LiveStat[] {
 
 export const UNDO_MS = 4000;
 
-type Pending = { clip: Clip; action: ReviewAction; note?: string; applyAll?: boolean; until: number };
+type Pending = { clip: Clip; action: ReviewAction; note?: string; applyAll?: boolean; platforms?: string[]; until: number };
 /** key lets a page hide the row while the action waits. */
 export type Deferred = { key: string; verb: string; label: string; until: number; run: () => Promise<void> };
 
@@ -49,9 +49,12 @@ type Store = {
   /** Approve / deny wait UNDO_MS before they reach the database, so a stray key press can be undone. */
   /** applyAll (revise only): the note's style asks also become standing rules for every clip (D078). */
   act: (clip: Clip, action: ReviewAction, note?: string, applyAll?: boolean) => void;
+  /** Post = approve with the platforms Zo picked, after the confirm dialog (D116). Waits UNDO_MS like approve. */
+  post: (clip: Clip, platforms: string[]) => void;
+  /** CLIP THAT: ask the PC for the last `seconds` of a live streamer (request_clip RPC). Error message or null. */
+  requestClip: (slug: string, seconds: number) => Promise<string | null>;
   undo: () => void;
   setRuleActive: (id: string, on: boolean) => Promise<void>;
-  setAwake: (on: boolean) => Promise<void>;
   markSubmitted: (id: string) => Promise<void>;
   mediaUrl: (path: string | null, download?: string) => Promise<string | null>;
   /** TikTok is uploaded by hand (D074); these record the post, its stats and any eligibility notice. */
@@ -68,8 +71,8 @@ type Store = {
 };
 
 const EMPTY: Snapshot = {
-  streamers: [], clips: [], submissions: [], heartbeat: null,
-  control: { awake: false, updated_at: new Date(0).toISOString() }, candidates: [], spend: [], revisions: [], rules: [],
+  streamers: [], clips: [], submissions: [], heartbeat: null, destinations: [], spendDays: [],
+  candidates: [], spend: [], revisions: [], rules: [],
   longform: [], results: [], live: [], history: [], publications: [], campaigns: [], brains: [], pods: [],
   podCampaigns: [], postStats: [], statements: [], ledger: [], ledgerEvents: [],
 };
@@ -79,24 +82,6 @@ const Ctx = createContext<Store | null>(null);
 const POD_KEY = "clipp.pod";
 function readPod(): string | null {
   try { return localStorage.getItem(POD_KEY) || null; } catch { return null; }
-}
-
-const DEMO_KEY = "clipp.demo.awake";
-function readDemoAwake(): boolean {
-  try { return localStorage.getItem(DEMO_KEY) === "1"; } catch { return false; }
-}
-function writeDemoAwake(on: boolean) {
-  try { localStorage.setItem(DEMO_KEY, on ? "1" : "0"); } catch { /* storage blocked: state lasts this visit only */ }
-}
-/** Demo snapshot with the PC told to sleep: switch off, heartbeat reports asleep, nobody watched. */
-function demoSleep(s: Snapshot): Snapshot {
-  const at = new Date().toISOString();
-  return {
-    ...s,
-    control: { awake: false, updated_at: at },
-    heartbeat: s.heartbeat && { ...s.heartbeat, seen_at: at,
-      status: { ...s.heartbeat.status, awake: false, live: [], gpu: { ...s.heartbeat.status.gpu, util: 4 } } },
-  };
 }
 
 export function useStore(): Store {
@@ -117,19 +102,20 @@ export function useNow(ms = 1000): number {
 
 async function loadLive(): Promise<Snapshot> {
   const sb = browserClient();
-  const since6h = new Date(Date.now() - 6 * 3600_000).toISOString();
+  // Candidates: the last 6 h, or since midnight when that is longer (today's pipeline funnel).
+  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  const since6h = new Date(Math.min(Date.now() - 6 * 3600_000, midnight.getTime())).toISOString();
   const since24h = new Date(Date.now() - 24 * 3600_000).toISOString();
   const month = new Date(); month.setUTCDate(1); month.setUTCHours(0, 0, 0, 0);
-  const [st, cl, su, hb, co, ca, sp, rv, ru, lf, lr] = await Promise.all([
+  const [st, cl, su, hb, ca, sp, rv, ru, lf, lr] = await Promise.all([
     PODS_ON ? sb.from("streamers").select("id,slug,display_name,twitch_login,kick_slug,avatar_url,pod_id").order("display_name")
       : sb.from("streamers").select("id,slug,display_name,twitch_login,kick_slug,avatar_url").order("display_name"),
     sb.from("clips").select("*").order("created_at", { ascending: false }).limit(300),
     sb.from("submissions_live").select("*").gte("created_at", since24h).order("deadline_at"),
     sb.from("worker_heartbeat").select("*").order("seen_at", { ascending: false }).limit(1),
-    sb.from("control").select("awake,updated_at").limit(1),
     (PODS_ON ? sb.from("candidate_log").select("channel_key,moment_at,score,outcome,pod_id")
       : sb.from("candidate_log").select("channel_key,moment_at,score,outcome")).gte("moment_at", since6h)
-      .order("moment_at").limit(3000),
+      .order("moment_at").limit(5000),
     sb.from("spend_month").select("kind,usd").gte("month", month.toISOString()),
     sb.from("revisions").select("id,clip_id,kind,note,created_at,resolved_at")
       .order("created_at", { ascending: false }).limit(200),
@@ -139,18 +125,20 @@ async function loadLive(): Promise<Snapshot> {
       .order("created_at", { ascending: false }).limit(200),
     sb.from("longform_results").select("*"),
   ]);
-  const err = [st, cl, su, hb, co, ca, sp, rv, ru, lf, lr].find((r) => r.error)?.error;
+  const err = [st, cl, su, hb, ca, sp, rv, ru, lf, lr].find((r) => r.error)?.error;
   if (err) throw new Error(err.message);
   // Newer tables (live numbers, brain, schedule) are optional: until their migration is applied they read as empty.
   const since30d = new Date(Date.now() - 30 * 86400_000).toISOString();
-  const [li, hi, pu, de, cm, br] = await Promise.all([
+  const since14d = new Date(Date.now() - 14 * 86400_000).toISOString();
+  const [li, hi, pu, de, cm, br, sd] = await Promise.all([
     sb.from("live_stats").select("*"),
     sb.from("stat_snapshots").select("key,metric,value,at").gte("at", since30d).order("at").limit(5000),
     sb.from("publications").select("id,clip_id,destination_id,status,url,posted_at,created_at").order("created_at", { ascending: false }).limit(200),
-    sb.from("destinations").select("id,platform,label"),
+    sb.from("destinations").select("id,platform,label,active,streamer_id"),
     sb.from("campaigns").select("id,title,status,source_url,streamer_slugs,platforms,cpm_usd,cap_usd,deadline,score,recommendation,created_at")
       .order("created_at", { ascending: false }).limit(100),
     sb.from("streamer_brain").select("streamer_id,weights,words,updated_at"),
+    sb.from("spend").select("amount_usd,at").gte("at", since14d).order("at").limit(5000),
   ]);
   // Admin reads every pod; a member reads only its own (RLS pod_read).
   const pods = PODS_ON ? await sb.from("pods").select("id,slug,name,status").order("slug") : null;
@@ -175,7 +163,11 @@ async function loadLive(): Promise<Snapshot> {
   const num = (v: unknown) => Number(v ?? 0);
   const ok = <T,>(r: { data: T[] | null; error: unknown }): T[] => (r.error ? [] : r.data ?? []);
   const dest = new Map(ok(de).map((d) => [d.id, d]));
+  const days = new Map<string, number>();
+  for (const r of ok(sd)) { const k = String(r.at).slice(0, 10); days.set(k, (days.get(k) ?? 0) + Number(r.amount_usd ?? 0)); }
   const opt = {
+    destinations: ok(de).map((d) => ({ id: d.id, platform: d.platform, label: d.label, active: d.active !== false, streamer_id: d.streamer_id ?? null })),
+    spendDays: [...days].map(([day, usd]) => ({ day, usd })),
     live: ok(li),
     history: ok(hi).map((p) => ({ ...p, value: Number(p.value) })),
     publications: ok(pu).map((p) => ({ ...p, platform: dest.get(p.destination_id)?.platform ?? null, label: dest.get(p.destination_id)?.label ?? null })),
@@ -201,7 +193,6 @@ async function loadLive(): Promise<Snapshot> {
     clips: cl.data ?? [],
     submissions: su.data ?? [],
     heartbeat: hb.data?.[0] ?? null,
-    control: co.data?.[0] ?? EMPTY.control,
     candidates: ca.data ?? [],
     spend: (sp.data ?? []).map((r) => ({ kind: r.kind, usd: Number(r.usd) })),
     revisions: rv.data ?? [],
@@ -227,8 +218,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const pendingRef = useRef<Pending | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const urls = useRef(new Map<string, { url: string; exp: number }>());
-  // While a Wake Up write is in flight, a refresh that started earlier must not flip the switch back.
-  const awakeWant = useRef<boolean | null>(null);
   const snapRef = useRef(snap);
   snapRef.current = snap;
 
@@ -247,9 +236,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (e) throw new Error(e.message);
         if (!owner) { setError("not-owner"); setReady(true); return; }
       }
-      const next = await loadLive();
-      const want = awakeWant.current;
-      setSnap(want == null ? next : { ...next, control: { ...next.control, awake: want } });
+      setSnap(await loadLive());
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -263,10 +250,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (PODS_ON) setPicked(readPod());
     if (IS_DEMO) {
       if (PODS_ON) setAccess(demoAccess(window.location.search));
-      // Demo keeps the switch across reloads; it starts asleep until Zo wakes it.
-      const on = readDemoAwake();
-      const d = demoSnapshot();
-      setSnap(on ? d : demoSleep(d));
+      setSnap(demoSnapshot());
       setReady(true);
       // The fake PC keeps reporting in, so demo never drifts to "offline".
       const beat = setInterval(() => setSnap((s) => (s.heartbeat
@@ -280,7 +264,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     let t: ReturnType<typeof setTimeout> | null = null;
     const bump = () => { if (t) clearTimeout(t); t = setTimeout(() => void refresh(), 400); };
     const ch = sb.channel("clipp-dashboard");
-    for (const table of ["clips", "worker_heartbeat", "submissions", "control", "edit_rules", "longform_videos", "streamer_brain", "publications"]) {
+    for (const table of ["clips", "worker_heartbeat", "submissions", "edit_rules", "longform_videos", "streamer_brain", "publications"]) {
       ch.on("postgres_changes", { event: "*", schema: "public", table }, bump);
     }
     // Live numbers are patched in place: no full reload for a viewer count.
@@ -301,9 +285,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const commit = useCallback(async (p: Pending) => {
     if (IS_DEMO) {
       const to = p.action === "approve" ? "approved" : p.action === "revise" ? "revise" : "rejected";
+      // Demo stand-in for the publisher: a confirmed post goes out a few seconds later.
+      if (p.action === "approve") {
+        setTimeout(() => setSnap((s) => ({
+          ...s,
+          clips: s.clips.map((c) => (c.id === p.clip.id && c.state === "approved" ? { ...c, state: "published" } : c)),
+          publications: [...(p.platforms ?? []).map((pl, i) => ({ id: `demo-pub-${Date.now()}-${i}`, clip_id: p.clip.id, status: "posted" as const,
+            url: null, posted_at: new Date().toISOString(), created_at: new Date().toISOString(), platform: pl, label: "demo" })), ...s.publications],
+        })), 3000);
+      }
       setSnap((s) => ({
         ...s,
-        clips: s.clips.map((c) => (c.id === p.clip.id ? { ...c, state: to, reviewed_at: new Date().toISOString() } : c)),
+        clips: s.clips.map((c) => (c.id === p.clip.id ? { ...c, state: to, reviewed_at: new Date().toISOString(),
+          post_platforms: p.platforms ?? c.post_platforms ?? null } : c)),
         revisions: p.action === "revise" && p.note
           ? [{ id: `demo-rev-${Date.now()}`, clip_id: p.clip.id, kind: "other", note: p.note,
                created_at: new Date().toISOString(), resolved_at: null }, ...s.revisions]
@@ -321,7 +315,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     // turned it off, keeps its style asks as standing rules for every later clip (D078).
     const { error: e } = await browserClient().rpc("review_clip", {
       p_clip: p.clip.id, p_action: p.action, p_note: p.note ?? null, p_kind: "other",
-      p_payload: p.action === "revise" ? { apply_all: p.applyAll !== false } : {},
+      p_payload: p.action === "revise" ? { apply_all: p.applyAll !== false } : p.platforms ? { platforms: p.platforms } : {},
     });
     if (e) setError(e.message);
     await refresh();
@@ -340,6 +334,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const act = useCallback((clip: Clip, action: ReviewAction, note?: string, applyAll?: boolean) => {
     if (!canReview(clip)) { setError("Only the owner of this clip's pod can review it."); return; }
+    // Approving is what makes the PC post, so it only happens through post() after the confirm dialog (D116).
+    if (action === "approve") { setError("Approve, then Post: posting always asks to confirm first."); return; }
     flush();
     if (action === "revise") { void commit({ clip, action, note, applyAll, until: Date.now() }); return; }
     const p = { clip, action, note, until: Date.now() + UNDO_MS };
@@ -347,6 +343,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setPending(p);
     timer.current = setTimeout(flush, UNDO_MS);
   }, [commit, flush, canReview]);
+
+  const post = useCallback((clip: Clip, platforms: string[]) => {
+    if (!canReview(clip)) { setError("Only the owner of this clip's pod can review it."); return; }
+    if (!platforms.length) { setError("Pick at least one platform before posting."); return; }
+    flush();
+    const p = { clip, action: "approve" as const, platforms, until: Date.now() + UNDO_MS };
+    pendingRef.current = p;
+    setPending(p);
+    timer.current = setTimeout(flush, UNDO_MS);
+  }, [flush, canReview]);
+
+  const requestClip = useCallback(async (slug: string, seconds: number) => {
+    if (IS_DEMO) return null;
+    const { error: e } = await browserClient().rpc("request_clip", { p_streamer: slug, p_seconds: Math.max(10, Math.min(90, Math.round(seconds))) });
+    return e ? e.message : null;
+  }, []);
 
   // Non-clip actions on the same undo pattern: run after UNDO_MS unless undone.
   const flushLater = useCallback(() => {
@@ -386,25 +398,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     window.addEventListener("pagehide", h);
     return () => window.removeEventListener("pagehide", h);
   }, [commit]);
-
-  const setAwake = useCallback(async (on: boolean) => {
-    if (IS_DEMO) {
-      writeDemoAwake(on);
-      setSnap((s) => (on ? { ...demoSnapshot(), clips: s.clips, submissions: s.submissions, revisions: s.revisions } : demoSleep(s)));
-      return;
-    }
-    const prev = snapRef.current.control.awake;
-    setSnap((s) => ({ ...s, control: { awake: on, updated_at: new Date().toISOString() } }));
-    awakeWant.current = on;
-    const { error: e } = await browserClient().rpc("set_awake", { p_on: on });
-    awakeWant.current = null;
-    if (e) {
-      setError(`Wake Up did not save: ${e.message}`);
-      setSnap((s) => ({ ...s, control: { ...s.control, awake: prev } }));
-      return;
-    }
-    await refresh();
-  }, [refresh]);
 
   const setRuleActive = useCallback(async (id: string, on: boolean) => {
     setSnap((s) => ({ ...s, rules: s.rules.map((r) => (r.id === id ? { ...r, active: on } : r)) }));
@@ -471,9 +464,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (IS_DEMO) {
       setSnap((s) => ({
         ...s,
-        clips: s.clips.map((c) => (c.id === clip.id ? { ...c, state: "revise", title: plan.headline || c.title } : c)),
+        clips: s.clips.map((c) => (c.id === clip.id ? { ...c, state: "revise" } : c)),
         revisions: [{ id: `demo-rev-${Date.now()}`, clip_id: clip.id, kind: "trim", note, created_at: new Date().toISOString(), resolved_at: null }, ...s.revisions],
       }));
+      // Demo stand-in for the PC re-render: the edited clip comes back to review a few seconds later.
+      setTimeout(() => setSnap((s) => ({
+        ...s,
+        clips: s.clips.map((c) => (c.id === clip.id && c.state === "revise"
+          ? { ...c, state: "pending_review", hook: plan.headline || c.hook, duration_s: +(plan.trim_out - plan.trim_in).toFixed(1), revision: c.revision + 1 } : c)),
+        revisions: s.revisions.map((r) => (r.clip_id === clip.id && !r.resolved_at ? { ...r, resolved_at: new Date().toISOString() } : r)),
+      })), 5000);
       return true;
     }
     const { error: e } = await browserClient().rpc("review_clip", {
@@ -618,10 +618,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const view = useMemo(() => (PODS_ON ? podSnapshot(snap, pod) : snap), [snap, pod]);
 
   const value = useMemo<Store>(() => ({
-    demo: IS_DEMO, ready, error, snap: view, podsOn: PODS_ON, access, pod, setPod, canReview, pending, later, setPodCampaign, ledgerAdd, ledgerStep, ledgerReverse, act, undo,
-    setRuleActive, setAwake, markSubmitted, mediaUrl,
+    demo: IS_DEMO, ready, error, snap: view, podsOn: PODS_ON, access, pod, setPod, canReview, pending, later, setPodCampaign, ledgerAdd, ledgerStep, ledgerReverse, act, post, requestClip, undo,
+    setRuleActive, markSubmitted, mediaUrl,
     markTiktokPosted, addTiktokStats, setNotice, sendEdit, setBrain, setTiktokChannel, pollLive, signOut,
-  }), [ready, error, view, access, pod, setPod, canReview, pending, later, setPodCampaign, ledgerAdd, ledgerStep, ledgerReverse, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl,
+  }), [ready, error, view, access, pod, setPod, canReview, pending, later, setPodCampaign, ledgerAdd, ledgerStep, ledgerReverse, act, post, requestClip, undo, setRuleActive, markSubmitted, mediaUrl,
     markTiktokPosted, addTiktokStats, setNotice, sendEdit, setBrain, setTiktokChannel, pollLive, signOut]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

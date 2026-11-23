@@ -46,14 +46,12 @@ test("week stats: 7 days, approve streak, approval rate, average score", () => {
 const hb = (secAgo: number, status: Heartbeat["status"]): Heartbeat =>
   ({ worker_id: "pc", seen_at: new Date(NOW - secAgo * 1000).toISOString(), status });
 
-test("pc state comes from the heartbeat, never from the switch alone", () => {
-  assert.equal(pcState(null, true, NOW), "offline");
-  assert.equal(pcState(hb(120, { awake: true, live: ["twitch:lacy"] }), true, NOW), "offline");
-  assert.equal(pcState(hb(5, { awake: false }), true, NOW), "waking");
-  assert.equal(pcState(hb(5, { awake: true, live: [] }), false, NOW), "sleeping");
-  assert.equal(pcState(hb(5, { awake: true, live: ["twitch:lacy"] }), true, NOW), "watching");
-  assert.equal(pcState(hb(5, { awake: true, live: [] }), true, NOW), "idle");
-  assert.equal(pcState(hb(5, { awake: false }), false, NOW), "asleep");
+test("pc state comes from the heartbeat only: always on, no sleep switch (D116)", () => {
+  assert.equal(pcState(null, NOW), "offline");
+  assert.equal(pcState(hb(120, { live: ["twitch:lacy"] }), NOW), "offline");
+  assert.equal(pcState(hb(5, { live: ["twitch:lacy"] }), NOW), "watching");
+  assert.equal(pcState(hb(5, { live: [] }), NOW), "idle");
+  assert.equal(pcState(hb(5, { awake: false, live: ["twitch:lacy"] }), NOW), "watching"); // an old worker's flag is ignored
 });
 
 test("30-minute countdown runs from the deadline and closes at zero", () => {
@@ -96,7 +94,7 @@ test("demo data has a live queue, an open countdown and a heartbeat", () => {
   const d = demoSnapshot(NOW);
   assert.ok(rankQueue(d.clips).length >= 5);
   assert.equal(openSubmissions(d.submissions, NOW).length, 1);
-  assert.equal(pcState(d.heartbeat, d.control.awake, NOW), "watching");
+  assert.equal(pcState(d.heartbeat, NOW), "watching");
 });
 
 test("editor note lists only what changed (untouched zoom and headline are left out)", () => {

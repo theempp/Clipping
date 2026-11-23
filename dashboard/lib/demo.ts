@@ -79,10 +79,13 @@ export function demoAccess(search = ""): Access {
   return { admin: true, pods: [{ id: "pod-1", slug: "pod-1", name: "Pod 1", role: "owner" }] };
 }
 
+const AV: Record<string, string> = { lacy: "/demo/halo/av_lacy.jpg", jynxzi: "/demo/halo/av_jynxzi.jpg", stableronaldo: "/demo/halo/av_stableronaldo.jpg" };
 const S = (id: string, slug: string, name: string, kick = false): Streamer => ({
-  id, slug, display_name: name, twitch_login: kick ? null : slug, kick_slug: kick ? slug : null, avatar_url: null,
+  id, slug, display_name: name, twitch_login: kick ? null : slug, kick_slug: kick ? slug : null, avatar_url: AV[slug] ?? null,
   pod_id: POD_OF[slug] ?? "pod-1",
 });
+
+const HALO = ["full", "clip2", "clip1", "clip3", "clip4"];
 
 export function demoSnapshot(now = Date.now()): Snapshot {
   const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
@@ -98,21 +101,26 @@ export function demoSnapshot(now = Date.now()): Snapshot {
     n += 1;
     const slug = p.streamer_id.slice(2);
     const media = ((n - 1) % 3) + 1;
+    // Sample footage from the Halo design folder for the clips waiting in review.
+    const halo = HALO[(n - 1) % HALO.length];
+    const score = (p.score_10 ?? 7) * 10 + ((n * 7) % 9) - 4;
+    const parts = { judged: { hook: Math.min(10, (score + 4) / 10), payoff: Math.min(10, (score - 2) / 10), standalone: 8, emotion: 7, share: 7 } };
     return {
       id: `demo-${n}`, job_id: `${slug}-${String(n).padStart(3, "0")}`, channel_key: `twitch:${slug}`, pod_id: POD_OF[slug] ?? "pod-1",
       state: "pending_review", hook: null, description: null, category: "gaming",
       confidence: 0.8, detector_score: 3.1, score_10: 7, hook_type: "reaction_peak",
-      moment_at: iso(40 * min), duration_s: 34, storage_path: `/demo/clip${media}.mp4`,
-      thumb_path: `/demo/thumb${media}.jpg`, source_path: `/demo/source${media}.mp4`, fixing: null, qa: { passed: true, captions: "whisperX", size_mb: 21.4 },
-      judge: {}, revision: 0, reviewed_at: null, created_at: iso(30 * min), ...p,
+      moment_at: iso(40 * min), duration_s: 34, storage_path: `/demo/halo/${halo}.mp4`,
+      thumb_path: `/demo/halo/${halo}.jpg`, source_path: `/demo/source${media}.mp4`, fixing: null, qa: { passed: true, captions: "whisperX", size_mb: 21.4 },
+      revision: 0, reviewed_at: null, created_at: iso(30 * min), ...p,
+      judge: { score, parts, ...p.judge },
     };
   };
   const clips: Clip[] = [
-    clip({ streamer_id: "s-lacy", title: "Lobby turns on him after the dub", score_10: 9, confidence: 0.88, detector_score: 4.1,
-      duration_s: 27, hook: "THE WHOLE LOBBY", hook_type: "reaction_peak", moment_at: iso(7 * min), created_at: iso(4 * min),
-      judge: { why: "Chat heat 0.62, two windows above threshold; the turn lands at 0:19.", hook_window: "0:00-0:02" } }),
-    clip({ streamer_id: "s-lacy", title: "Chat spams the car-flip callback", score_10: 8, confidence: 0.81, detector_score: 3.6,
-      duration_s: 19, hook: "NO WAY", hook_type: "play_peak", moment_at: iso(16 * min), created_at: iso(12 * min),
+    clip({ streamer_id: "s-lacy", title: "Lacy gets told \"you all die\" before the heist", score_10: 9, confidence: 0.88, detector_score: 4.1,
+      duration_s: 40, hook: "IF ANYTHING GOES WRONG WE ALL DIE", hook_type: "reaction_peak", moment_at: iso(7 * min), created_at: iso(4 * min),
+      judge: { why: "Chat spiked 4.1x in 6 s and the line lands without context.", hook_window: "0:00-0:02" } }),
+    clip({ streamer_id: "s-lacy", title: "Lacy is locking in for the vault run", score_10: 8, confidence: 0.81, detector_score: 3.6,
+      duration_s: 8, hook: "I'M LOCKING IN", hook_type: "play_peak", moment_at: iso(16 * min), created_at: iso(11 * min),
       judge: { why: "Callback the whole chat knows; short and clean.", hook_window: "0:00-0:03" } }),
     clip({ streamer_id: "s-lacy", title: "Reads the fan edit out loud", state: "published", score_10: 8, confidence: 0.79,
       duration_s: 22, reviewed_at: iso(5 * 3600_000), created_at: iso(6 * 3600_000) }),
@@ -249,7 +257,12 @@ export function demoSnapshot(now = Date.now()): Snapshot {
           "twitch:kaicenat": "Grand Theft Auto VI" },
         roster },
     },
-    control: { awake: true, updated_at: iso(134 * min) },
+    destinations: [
+      { id: "demo-yt", platform: "youtube", label: "Shorts: main", active: true, streamer_id: null },
+      { id: "demo-x", platform: "x", label: "X: main", active: true, streamer_id: null },
+    ],
+    spendDays: Array.from({ length: 14 }, (_, i) => ({ day: new Date(now - (13 - i) * 86400_000).toISOString().slice(0, 10),
+      usd: +(2.4 + 0.18 * i + 0.9 * Math.abs(Math.sin(i * 1.7))).toFixed(2) })),
     candidates,
     spend: [{ kind: "grok", usd: 31.2 }, { kind: "x_post", usd: 38.0 }, { kind: "storage", usd: 4.8 }],
     revisions: [{ id: "demo-rev-1", clip_id: "demo-4", kind: "other", note: "cut the first two seconds",

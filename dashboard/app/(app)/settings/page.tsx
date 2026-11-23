@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { BrainWeights } from "@/components/Brain";
 import { LearnedRules } from "@/components/LearnedRules";
-import { WakeToggle } from "@/components/WakeToggle";
 import { PC_NAME } from "@/lib/env";
 import { ago, pcState } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
@@ -25,7 +24,7 @@ export default function Settings() {
       setWriter(j.writer ?? null);
     }).catch(() => {});
   }, []);
-  const st = pcState(snap.heartbeat, snap.control.awake, now);
+  const st = pcState(snap.heartbeat, now);
   const gpu = snap.heartbeat?.status.gpu;
   const spend = monthSpend(snap);
   const lastLive = snap.live.reduce((m, r) => Math.max(m, Date.parse(r.updated_at)), 0);
@@ -37,7 +36,7 @@ export default function Settings() {
         <div className="stack">
           <section className="glass" aria-label="Machine">
             <div className="hd"><h3>{PC_NAME}</h3><span className="r">{st}</span></div>
-            <WakeToggle />
+            <div className="set-row"><div className="tx"><b>Always on</b><span>The PC watches and clips whenever it runs (D116). There is no sleep switch.</span></div><span className={`pill ${st === "offline" ? "warn" : "ok"}`}>{st === "offline" ? "not reporting" : st}</span></div>
             <div className="set-row"><div className="tx"><b>GPU</b><span>{gpu?.name ?? "unknown"}{gpu?.mem_used_gb != null ? ` · ${gpu.mem_used_gb}/${gpu.mem_total_gb} GB` : ""}</span></div><b className="tnum">{st === "offline" ? "—" : `${gpu?.util ?? 0}%`}</b></div>
             <div className="set-row"><div className="tx"><b>Last heartbeat</b><span>worker {snap.heartbeat?.worker_id ?? "—"} · v{snap.heartbeat?.status.version ?? "?"}</span></div><span className="mut">{snap.heartbeat ? ago(snap.heartbeat.seen_at, now) : "never"}</span></div>
             <div className="set-row"><div className="tx"><b>Spend this month</b><span>budget ceiling ${BUDGET_USD} (D012)</span></div><b className="tnum">${spend.total.toFixed(0)}</b></div>

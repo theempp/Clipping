@@ -1,257 +1,319 @@
 "use client";
+// Halo Pro shell (D116): the whole screen is the console. Page dots in the top bar, quick actions in the bottom dock,
+// "Always on" in place of Wake Up. Live / Pods & ledger / Stats keep their own content inside the same frame.
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PC_NAME } from "@/lib/env";
 import { openSubmissions, pcState, rankQueue } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
-import { isAdminView } from "@/lib/pods";
-import { BUDGET_USD, monthSpend, streamerViews } from "@/lib/view";
-import { Avatar } from "./Avatar";
-import { Ring } from "./Charts";
-import { Icon } from "./Icon";
-import { UndoToast } from "./UndoToast";
-import { SleepBanner } from "./WakeToggle";
+import { PLATFORM_LABEL, agoShort, upcomingPosts, type Platform } from "@/lib/halo";
+import { streamerViews } from "@/lib/view";
+import { LinkBox } from "./LinkBox";
+import { ReviewProvider, useReview } from "./halo/review";
+import { Ico, SvgDefs } from "./halo/ui";
 
-export const PAGES = [
-  { href: "/", label: "Overview", icon: "grid", main: true },
-  { href: "/review", label: "Review", icon: "review", main: true },
-  { href: "/analytics", label: "Analytics", icon: "chart", main: true },
-  { href: "/streamers", label: "Streamers", icon: "user", main: true },
-  { href: "/editor", label: "Editor", icon: "film", main: true },
-  { href: "/schedule", label: "Schedule", icon: "cal", main: false },
-  { href: "/campaigns", label: "Campaigns", icon: "flag", main: false },
-  { href: "/library", label: "Library", icon: "folder", main: false },
-  { href: "/settings", label: "Settings", icon: "gear", main: false },
-  // Pods (Phase 4). Icons reuse existing glyphs: Atlas GAP 4 (no money/ledger icon in the set yet).
-  { href: "/ledger", label: "Ledger", icon: "queue", main: false, pods: "admin" },
-  { href: "/statements", label: "Statements", icon: "text", main: false, pods: "all" },
-] as const;
-type Page = (typeof PAGES)[number];
-/** Pages this user sees: pod pages only with pods on; Ledger only for the admin. */
-function usePages(): readonly Page[] {
+type Page = { href: string; label: string; icon?: string; match: string[] };
+
+function usePages() {
   const { podsOn, access } = useStore();
-  return PAGES.filter((p) => !("pods" in p) || (podsOn && (p.pods === "all" || !!access?.admin)));
+  const money: Page = podsOn
+    ? { href: access?.admin ? "/ledger" : "/statements", label: "Pods & ledger", icon: "money", match: ["/ledger", "/statements"] }
+    : { href: "/campaigns", label: "Pods & ledger", icon: "money", match: ["/campaigns"] };
+  const dots: Page[] = [
+    { href: "/streamers", label: "Live", icon: "live", match: ["/streamers", "/live"] },
+    { href: "/", label: "Review", icon: "review", match: ["/", "/review", "/editor"] },
+    money,
+    { href: "/analytics", label: "Stats", icon: "stats", match: ["/analytics"] },
+  ];
+  const more: Page[] = [
+    { href: "/library", label: "Library", match: ["/library"] },
+    { href: "/schedule", label: "Schedule", match: ["/schedule"] },
+    ...(podsOn ? [{ href: "/campaigns", label: "Campaigns", match: ["/campaigns"] }] : []),
+    ...(podsOn && access?.admin ? [{ href: "/statements", label: "Statements", match: ["/statements"] }] : []),
+    { href: "/settings", label: "Settings", match: ["/settings"] },
+  ];
+  return { dots, more };
 }
-// On a phone the dock keeps four pages; the rest sit behind "More".
-const PHONE = new Set(["/", "/review", "/streamers", "/editor"]);
-
-const isOn = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(`${href}/`));
+const isOn = (path: string, p: Page) => p.match.some((m) => (m === "/" ? path === "/" : path === m || path.startsWith(`${m}/`)));
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { snap, demo, error, ready, signOut, setAwake, pollLive, podsOn, access } = useStore();
-  const now = useNow(5000);
+  const { error, ready, signOut, podsOn } = useStore();
+  if (error === "not-owner") {
+    return (
+      <>
+        <div className="z-amb" aria-hidden="true" />
+        <main className="z-gate"><div className="z-popbx z-sm"><h3>Not allowed</h3>
+          <p className="z-mut">{podsOn ? "This account is signed in but is not in any pod. Zwoclippe is invite-only." : "This account is signed in but is not the owner. Zwoclippe is private."}</p>
+          <div className="z-acts"><button type="button" className="z-btn z-w" onClick={() => void signOut()}>Sign out</button></div></div></main>
+      </>
+    );
+  }
+  return <ReviewProvider><Frame ready={ready}>{children}</Frame></ReviewProvider>;
+}
+
+function Frame({ ready, children }: { ready: boolean; children: ReactNode }) {
   const path = usePathname();
-  const router = useRouter();
-  const queue = rankQueue(snap.clips);
-  const awake = snap.control.awake;
-  const st = pcState(snap.heartbeat, awake, now);
-  const gpu = snap.heartbeat?.status.gpu;
-  const disk = snap.heartbeat?.status.disk;
-  const spend = monthSpend(snap);
-  const [menu, setMenu] = useState<null | "fab" | "more">(null);
-  const [panel, setPanel] = useState<null | "search" | "alerts">(null);
-
-  // Power-on / power-off sweep: only when the switch changes after load, never on first paint.
-  const [fx, setFx] = useState<"" | "fx-on" | "fx-off">("");
-  const lastAwake = useRef<boolean | null>(null);
+  const review = path === "/";
+  const ui = useReview();
+  // One light-up sweep on load (body.z-waking), nothing else: the dashboard is always on.
   useEffect(() => {
-    if (!ready) return;
-    const was = lastAwake.current;
-    lastAwake.current = awake;
-    if (was === null || was === awake) return;
-    setFx(awake ? "fx-on" : "fx-off");
-    const t = setTimeout(() => setFx(""), awake ? 2200 : 900);
-    return () => clearTimeout(t);
-  }, [awake, ready]);
+    document.body.classList.add("z-waking");
+    const t = setTimeout(() => document.body.classList.remove("z-waking"), 1800);
+    return () => { clearTimeout(t); document.body.classList.remove("z-waking"); };
+  }, []);
+  useEffect(() => { document.body.classList.toggle("z-editing", !!ui.edit && review); }, [ui.edit, review]);
+  return (
+    <>
+      <SvgDefs />
+      <div className="z-amb" aria-hidden="true" /><div className="z-grid" aria-hidden="true" /><div className="z-flash" aria-hidden="true" />
+      <div className="z-app">
+        <TopBar />
+        <main className="z-main">
+          {!ready ? <div className="z-loading">Loading…</div> : review ? children : <div className="legacy z-legacy">{children}</div>}
+        </main>
+        <BottomBar />
+      </div>
+      <ErrorLine />
+      {ui.importOpen && <ImportPopup onClose={() => ui.setImportOpen(false)} />}
+    </>
+  );
+}
 
-  useEffect(() => { setMenu(null); setPanel(null); }, [path]);
+function ErrorLine() {
+  const { error } = useStore();
+  const [hidden, setHidden] = useState<string | null>(null);
+  if (!error || error === "not-owner" || hidden === error) return null;
+  return <div className="z-err" role="alert"><span>{error}</span><button type="button" aria-label="Dismiss" onClick={() => setHidden(error)}>✕</button></div>;
+}
+
+function Clock() {
+  const now = useNow(15_000);
+  const [ok, setOk] = useState(false);
+  useEffect(() => setOk(true), []);
+  if (!ok) return <small>&nbsp;</small>;
+  const d = new Date(now);
+  return <small>{d.toLocaleDateString("en-US", { weekday: "long" })} · {d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}</small>;
+}
+
+function TopBar() {
+  const { snap, demo } = useStore();
+  const path = usePathname();
+  const now = useNow(5000);
+  const { dots } = usePages();
+  const queue = rankQueue(snap.clips).length;
+  const st = pcState(snap.heartbeat, now);
+  const agents = st === "offline" ? 0 : (snap.heartbeat?.status.capturing ?? snap.heartbeat?.status.live ?? []).length;
+  return (
+    <header className="z-top">
+      <Link href="/" className="z-brand" aria-label="Zwoclippe, Review"><span className="z-mk">Z</span><div>Zwoclippe{demo && <span className="z-mut" style={{ fontSize: 11, fontWeight: 700, marginLeft: 6 }}>demo</span>}<Clock /></div></Link>
+      <nav className="z-dots" aria-label="Pages">
+        {dots.map((p) => {
+          const on = isOn(path, p);
+          return (
+            <Link key={p.label} href={p.href} className={on ? "z-on" : ""} aria-current={on ? "page" : undefined}>
+              <Ico n={p.icon ?? "review"} />{p.label}{p.href === "/" && queue > 0 && <span className="z-ct">{queue}</span>}
+            </Link>
+          );
+        })}
+      </nav>
+      <div className="z-tr">
+        <span className={`z-onair${st === "offline" ? " z-down" : ""}`} title={st === "offline" ? `${PC_NAME} is not reporting` : `${PC_NAME} is always on (D116)`}>
+          <span className="z-pl"><i /></span>{st === "offline" ? "PC offline" : "Always on"} <small>· {agents} agent{agents === 1 ? "" : "s"}</small>
+        </span>
+        <Search />
+        <Alerts />
+        <Account />
+      </div>
+    </header>
+  );
+}
+
+function useOutside(open: boolean, close: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) close(); };
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("mousedown", h); document.addEventListener("keydown", k);
+    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("keydown", k); };
+  }, [open, close]);
+  return ref;
+}
+
+function Search() {
+  const { snap } = useStore();
+  const router = useRouter();
+  const ui = useReview();
+  const path = usePathname();
+  const { dots, more } = usePages();
+  const now = useNow(30_000);
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const ref = useOutside(open, () => setOpen(false));
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setMenu(null); setPanel(null); }
       const t = e.target as HTMLElement;
-      if (e.key === "/" && !t.closest("input,textarea,select,[contenteditable]")) { e.preventDefault(); setPanel("search"); }
+      if (e.key === "/" && !t.closest("input,textarea,select,[contenteditable]")) { e.preventDefault(); input.current?.focus(); setOpen(true); }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
-
-  const alerts = useAlerts();
-  const pages = usePages();
-
-  if (error === "not-owner") {
-    return (
-      <main className="gate">
-        <div className="gate-card glass">
-          <h1>Not allowed</h1>
-          <p>{podsOn ? "This account is signed in but is not in any pod. Clipp is invite-only." : "This account is signed in but is not the owner. Clipp is private."}</p>
-          <button className="b ok lg" onClick={() => void signOut()}>Sign out</button>
+  const t = q.trim().toLowerCase();
+  const views = useMemo(() => streamerViews(snap, now), [snap, now]);
+  const hits = useMemo(() => {
+    if (!t) return [];
+    const pages = [...dots, ...more].filter((p) => p.label.toLowerCase().includes(t)).map((p) => ({ k: `p${p.href}${p.label}`, label: p.label, meta: "page", go: () => router.push(p.href) }));
+    const ss = views.filter((v) => v.s.display_name.toLowerCase().includes(t)).map((v) => ({ k: v.s.id, label: v.s.display_name, meta: v.live ? "live" : "streamer", go: () => router.push(`/streamers/${v.s.slug}`) }));
+    const cs = snap.clips.filter((c) => (c.title ?? c.job_id).toLowerCase().includes(t)).slice(0, 8).map((c) => ({
+      k: c.id, label: c.title ?? c.job_id, meta: c.state.replace("_", " "),
+      go: () => { if (c.state === "pending_review") { if (path === "/") ui.openPop(c.id); else router.push(`/?clip=${c.id}`); } else router.push(`/library?clip=${c.id}`); },
+    }));
+    return [...ss, ...cs, ...pages].slice(0, 10);
+  }, [t, views, snap.clips, dots, more, router, path, ui]);
+  return (
+    <div className="z-srch-wrap z-rel" ref={ref}>
+      <label className="z-srch"><Ico n="search" size={15} />
+        <input ref={input} placeholder="Search clips" aria-label="Search clips, streamers and pages" value={q}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
+          onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) { hits[0].go(); setOpen(false); setQ(""); } }} />
+        <kbd>/</kbd></label>
+      {open && t && (
+        <div className="z-pop-menu z-menu-down" role="listbox" aria-label="Search results" style={{ left: 0, right: "auto", width: "min(360px, 80vw)" }}>
+          {hits.map((h) => <button key={h.k} type="button" role="option" aria-selected={false} onClick={() => { h.go(); setOpen(false); setQ(""); }}>{h.label}<small>{h.meta}</small></button>)}
+          {hits.length === 0 && <div className="z-empty">Nothing matches &ldquo;{q}&rdquo;.</div>}
         </div>
-      </main>
-    );
-  }
-
-  const dockLink = (p: Page) => {
-    const on = isOn(path, p.href);
-    return (
-      <Link key={p.href} href={p.href} className={`${on ? "on" : ""}${PHONE.has(p.href) ? "" : " extra"}`}
-        aria-label={p.label} aria-current={on ? "page" : undefined}>
-        <Icon name={p.icon} size={18} />
-        {p.href === "/review" && queue.length > 0 && <em>{queue.length}</em>}
-        <span className="tip">{p.label}</span>
-      </Link>
-    );
-  };
-
-  return (
-    <div className={`app ${!ready ? "booting" : awake ? "awake" : "asleep"}${fx ? ` ${fx}` : ""}`}>
-      <div className="aurora" aria-hidden="true" />
-      {fx === "fx-on" && <div className="ignite" aria-hidden="true"><i /></div>}
-
-      <nav className="dock" aria-label="Pages">
-        <button type="button" className="fab" aria-label="Quick actions" aria-expanded={menu === "fab"}
-          onClick={() => setMenu((m) => (m === "fab" ? null : "fab"))}><Icon name="plus" size={20} /></button>
-        {pages.map(dockLink)}
-        <button type="button" className="more-b" aria-label="More pages" aria-expanded={menu === "more"}
-          onClick={() => setMenu((m) => (m === "more" ? null : "more"))}><Icon name="more" size={20} /></button>
-        {menu && <button type="button" className="scrim" aria-label="Close menu" onClick={() => setMenu(null)} />}
-        {menu === "fab" && (
-          <div className="menu" role="menu">
-            <button role="menuitem" onClick={() => { setMenu(null); router.push(queue[0] ? `/editor?clip=${queue[0].id}` : "/editor"); }}>
-              <Icon name="film" /> Edit the top clip</button>
-            <button role="menuitem" onClick={() => { setMenu(null); router.push("/review"); }}><Icon name="review" /> Open review queue</button>
-            <button role="menuitem" onClick={() => { setMenu(null); void pollLive(true); }}><Icon name="refresh" /> Refresh live numbers</button>
-            {isAdminView(podsOn, access) && (
-              <button role="menuitem" onClick={() => { setMenu(null); void setAwake(!awake); }}><Icon name="power" /> {awake ? `Put ${PC_NAME} to sleep` : `Wake ${PC_NAME} up`}</button>
-            )}
-          </div>
-        )}
-        {menu === "more" && (
-          <div className="menu" role="menu">
-            {pages.filter((p) => !PHONE.has(p.href)).map((p) => (
-              <Link key={p.href} href={p.href} role="menuitem" className={isOn(path, p.href) ? "on" : ""}><Icon name={p.icon} /> {p.label}</Link>
-            ))}
-          </div>
-        )}
-      </nav>
-
-      <aside className="rdock" aria-label="Machine">
-        <div><Ring pct={st === "offline" ? 0 : gpu?.util ?? 0} label={`GPU ${gpu?.util ?? 0}%`} />GPU</div>
-        <div><Ring pct={disk?.used_pct ?? 0} color="var(--c2)" text={disk?.used_pct == null ? "—" : undefined} label={`Disk ${disk?.used_pct ?? "unknown"}%`} />Disk</div>
-        <div><Ring pct={(spend.total / BUDGET_USD) * 100} color="var(--c3)" label={`AI spend ${Math.round((spend.total / BUDGET_USD) * 100)}% of budget`} />AI $</div>
-      </aside>
-
-      <div className="wrap">
-        <header className="top">
-          <Link href="/" className="brand" aria-label="Clipp home">zwocl<b>i</b>ppe{demo && <small>demo</small>}
-            {podsOn && access && !access.admin && access.pods[0] && <small>{access.pods[0].name}</small>}</Link>
-          {podsOn && <PodSwitcher />}
-          <span className="sp" />
-          <nav className="pillnav" aria-label="Main">
-            {pages.filter((p) => p.main).map((p) => (
-              <Link key={p.href} href={p.href} className={isOn(path, p.href) ? "on" : ""} aria-current={isOn(path, p.href) ? "page" : undefined}>{p.label}</Link>
-            ))}
-          </nav>
-          <span className="sp" />
-          <button type="button" className="icb" aria-label="Search (press /)" onClick={() => setPanel("search")}><Icon name="search" size={18} /></button>
-          <button type="button" className="icb" aria-label={`Alerts (${alerts.length})`} onClick={() => setPanel("alerts")}>
-            <Icon name="bell" size={18} />{alerts.length > 0 && <em />}
-          </button>
-        </header>
-
-        {error && error !== "not-owner" && <div className="banner-line err" role="alert">{error}</div>}
-        {ready && !awake && <SleepBanner />}
-        {!ready ? <div className="loading">Loading…</div> : children}
-        {demo && <p className="foot">Demo data. Nothing here is saved or posted.</p>}
-      </div>
-
-      {panel === "search" && <SearchPanel onClose={() => setPanel(null)} />}
-      {panel === "alerts" && <AlertsPanel alerts={alerts} onClose={() => setPanel(null)} />}
-      <UndoToast />
+      )}
     </div>
   );
 }
 
-/** Admin pod switcher (Atlas pods §1): All, then one button per pod. Hidden for members and when there is one pod. */
-function PodSwitcher() {
-  const { access, pod, setPod, snap, ready } = useStore();
-  if (!access?.admin || snap.pods.length < 2) return null;
-  return (
-    <div className="seg pods" role="tablist" aria-label="Pod">
-      <button type="button" role="tab" aria-selected={pod === null} className={pod === null ? "on" : ""} disabled={!ready}
-        onClick={() => setPod(null)}>All</button>
-      {snap.pods.map((p) => (
-        <button key={p.id} type="button" role="tab" aria-selected={pod === p.id} className={pod === p.id ? "on" : ""} disabled={!ready}
-          onClick={() => setPod(p.id)}>{p.name}</button>
-      ))}
-    </div>
-  );
-}
-
-type Alert = { id: string; text: string; href: string; tone: "warn" | "run" | "ok" };
-
-function useAlerts(): Alert[] {
+function Alerts() {
   const { snap } = useStore();
   const now = useNow(5000);
-  const out: Alert[] = [];
-  for (const s of openSubmissions(snap.submissions, now)) {
-    out.push({ id: s.id, text: `Submit window open: ${Math.ceil((Date.parse(s.deadline_at) - now) / 60000)} min left`, href: "/", tone: "warn" });
-  }
+  const [open, setOpen] = useState(false);
+  const ref = useOutside(open, () => setOpen(false));
+  const items: { k: string; text: string; href: string }[] = [];
+  for (const s of openSubmissions(snap.submissions, now)) items.push({ k: s.id, text: `Submit window open: ${Math.ceil((Date.parse(s.deadline_at) - now) / 60000)} min left`, href: "/schedule" });
   const q = rankQueue(snap.clips).length;
-  if (q) out.push({ id: "q", text: `${q} clip${q === 1 ? "" : "s"} waiting on you`, href: "/review", tone: "run" });
-  const st = pcState(snap.heartbeat, snap.control.awake, now);
-  if (st === "offline" && snap.control.awake) out.push({ id: "pc", text: `${PC_NAME} is not reporting`, href: "/settings", tone: "warn" });
-  return out;
-}
-
-function Overlay({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  if (q) items.push({ k: "q", text: `${q} clip${q === 1 ? "" : "s"} waiting on you`, href: "/" });
+  const failed = snap.clips.filter((c) => c.state === "revise" && c.revise_failed).length;
+  if (failed) items.push({ k: "rf", text: `${failed} revision${failed === 1 ? "" : "s"} failed QA on the PC`, href: "/library" });
+  const fails = snap.clips.filter((c) => c.state === "failed").length;
+  if (fails) items.push({ k: "pf", text: `${fails} post${fails === 1 ? "" : "s"} failed`, href: "/library" });
+  if (pcState(snap.heartbeat, now) === "offline") items.push({ k: "pc", text: `${PC_NAME} is not reporting`, href: "/settings" });
   return (
-    <div className="search" role="dialog" aria-modal="true" aria-label={label} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="search-box">{children}</div>
+    <div className="z-rel" ref={ref}>
+      <button type="button" className={`z-bell${items.length ? "" : " z-quiet"}`} aria-label={`Notifications (${items.length})`} aria-expanded={open} onClick={() => setOpen((o) => !o)}><Ico n="bell" size={16} /></button>
+      {open && (
+        <div className="z-pop-menu z-menu-down" role="menu">
+          <h6>Notifications</h6>
+          {items.map((a) => <Link key={a.k} href={a.href} role="menuitem" onClick={() => setOpen(false)}>{a.text}</Link>)}
+          {items.length === 0 && <div className="z-empty">All clear.</div>}
+        </div>
+      )}
     </div>
   );
 }
 
-function AlertsPanel({ alerts, onClose }: { alerts: Alert[]; onClose: () => void }) {
+function Account() {
+  const { signOut, demo, access, pod, setPod, snap, podsOn } = useStore();
+  const [open, setOpen] = useState(false);
+  const ref = useOutside(open, () => setOpen(false));
   return (
-    <Overlay label="Alerts" onClose={onClose}>
-      <div className="hd" style={{ padding: "6px 8px 0" }}><h3>Alerts</h3><button className="b" onClick={onClose}>Close</button></div>
-      <ul>
-        {alerts.length === 0 && <li><div className="mut">All clear.</div></li>}
-        {alerts.map((a) => (
-          <li key={a.id}><Link href={a.href} onClick={onClose}><span className={`dotst ${a.tone}`} /><span>{a.text}</span></Link></li>
-        ))}
-      </ul>
-    </Overlay>
+    <div className="z-rel" ref={ref}>
+      <button type="button" className="z-me" aria-label="Account" aria-expanded={open} onClick={() => setOpen((o) => !o)}>Z</button>
+      {open && (
+        <div className="z-pop-menu z-menu-down" role="menu">
+          {podsOn && access?.admin && snap.pods.length > 1 && <>
+            <h6>Pod in view</h6>
+            <button type="button" role="menuitemradio" aria-checked={pod === null} className={pod === null ? "z-on" : ""} onClick={() => { setPod(null); setOpen(false); }}>All pods</button>
+            {snap.pods.map((p) => (
+              <button key={p.id} type="button" role="menuitemradio" aria-checked={pod === p.id} className={pod === p.id ? "z-on" : ""}
+                onClick={() => { setPod(p.id); setOpen(false); }}>{p.name}<small>{p.status}</small></button>
+            ))}
+            <h6>Account</h6>
+          </>}
+          {podsOn && access && !access.admin && access.pods[0] && <h6>{access.pods[0].name}</h6>}
+          <Link href="/settings" role="menuitem" onClick={() => setOpen(false)}>Settings</Link>
+          {!demo && <button type="button" role="menuitem" onClick={() => void signOut()}>Sign out</button>}
+          {demo && <div className="z-empty">Demo data. Nothing here is saved or posted.</div>}
+        </div>
+      )}
+    </div>
   );
 }
 
-function SearchPanel({ onClose }: { onClose: () => void }) {
-  const { snap } = useStore();
-  const all = usePages();
-  const now = useNow(30_000);
-  const [q, setQ] = useState("");
-  const views = useMemo(() => streamerViews(snap, now), [snap, now]);
-  const t = q.trim().toLowerCase();
-  const hits = useMemo(() => {
-    const found = all.filter((p) => p.label.toLowerCase().includes(t)).map((p) => ({ k: p.href, href: p.href, label: p.label, meta: "page", s: null }));
-    const ss = views.filter((v) => v.s.display_name.toLowerCase().includes(t))
-      .map((v) => ({ k: v.s.id, href: `/streamers/${v.s.slug}`, label: v.s.display_name, meta: v.live ? "live" : "streamer", s: v.s }));
-    const cs = snap.clips.filter((c) => (c.title ?? c.job_id).toLowerCase().includes(t)).slice(0, 8)
-      .map((c) => ({ k: c.id, href: c.state === "pending_review" ? `/review?clip=${c.id}` : `/library?clip=${c.id}`, label: c.title ?? c.job_id, meta: c.state.replace("_", " "), s: null }));
-    return t ? [...found, ...ss, ...cs] : [...ss.slice(0, 5), ...found];
-  }, [t, views, snap.clips, all]);
+function BottomBar() {
+  const { snap, pollLive, requestClip } = useStore();
+  const ui = useReview();
+  const router = useRouter();
+  const path = usePathname();
+  const now = useNow(1000);
+  const { more } = usePages();
+  const [menu, setMenu] = useState<null | "new" | "clip">(null);
+  const ref = useOutside(!!menu, () => setMenu(null));
+  const st = pcState(snap.heartbeat, now);
+  const queue = rankQueue(snap.clips).length;
+  const staged = [...ui.staged];
+  const live = streamerViews(snap, now).filter((v) => v.live);
+  const up = upcomingPosts(snap.clips, snap.publications);
+  const nextPl = (up[0]?.post_platforms?.length ? up[0].post_platforms : ui.postable).map((p) => PLATFORM_LABEL[p as Platform] ?? p).join(", ");
+  const clipNow = async (slug: string, name: string) => {
+    setMenu(null);
+    const err = await requestClip(slug, 60);
+    ui.toast(err ? `Clip request failed: ${err}` : `Asked the PC for the last 60 s of ${name}. It lands in the queue after render and QA.`);
+  };
+  const seen = snap.heartbeat ? Math.max(0, Math.round((now - Date.parse(snap.heartbeat.seen_at)) / 1000)) : null;
   return (
-    <Overlay label="Search" onClose={onClose}>
-      <input autoFocus placeholder="Search streamers, clips, pages" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" />
-      <ul>
-        {hits.map((h) => (
-          <li key={h.k}><Link href={h.href} onClick={onClose}>
-            {h.s ? <Avatar s={h.s} size={26} /> : <Icon name="arrow" />}<span>{h.label}</span><small>{h.meta}</small>
-          </Link></li>
-        ))}
-        {hits.length === 0 && <li><div className="mut">Nothing matches “{q}”.</div></li>}
-      </ul>
-    </Overlay>
+    <footer className="z-bot">
+      <div className="z-l"><span className={`z-dot${st === "offline" ? " z-warn" : ""}`} />
+        {st === "offline" ? `${PC_NAME} not reporting${snap.heartbeat ? ` · last seen ${agoShort(snap.heartbeat.seen_at, now)}` : ""}` : `All systems on · synced ${seen ?? 0} s ago`}</div>
+      <div className="z-dock z-rel" role="toolbar" aria-label="Quick actions" ref={ref}>
+        <button type="button" className="z-o" aria-label="More pages and actions" aria-expanded={menu === "new"} onClick={() => setMenu((m) => (m === "new" ? null : "new"))}>+</button>
+        <button type="button" className="z-hot" disabled={!live.length} title={live.length ? undefined : "No one is live right now"} aria-expanded={menu === "clip"}
+          onClick={() => (live.length === 1 ? void clipNow(live[0].s.slug, live[0].s.display_name) : setMenu((m) => (m === "clip" ? null : "clip")))}>
+          <span className="z-rec" />Clip last 60 s</button>
+        <button type="button" onClick={() => ui.setImportOpen(true)}><Ico n="download" />Import VOD</button>
+        <button type="button" onClick={() => {
+          if (path !== "/") { router.push("/"); return; }
+          const el = document.getElementById("queue");
+          el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          (el?.querySelector(".z-qi") as HTMLElement | null)?.focus();
+        }}><Ico n="list" />Open queue <em>{queue}</em></button>
+        <button type="button" disabled={!staged.length} title={staged.length ? undefined : "Approve clips first; Post batch posts every approved clip after one confirm"}
+          onClick={() => ui.askPost(staged)}><Ico n="send" />Post batch <em>{staged.length}</em></button>
+        {menu === "new" && (
+          <div className="z-pop-menu z-menu-up" role="menu">
+            <h6>Pages</h6>
+            {more.map((p) => <Link key={p.href} href={p.href} role="menuitem" onClick={() => setMenu(null)}>{p.label}</Link>)}
+            <h6>Actions</h6>
+            <button type="button" role="menuitem" onClick={() => { setMenu(null); ui.setImportOpen(true); }}>Paste a VOD or clip link</button>
+            <button type="button" role="menuitem" onClick={() => { setMenu(null); void pollLive(true); ui.toast("Asked the platforms for fresh numbers."); }}>Refresh live numbers</button>
+          </div>
+        )}
+        {menu === "clip" && (
+          <div className="z-pop-menu z-menu-up" role="menu" style={{ left: 50 }}>
+            <h6>Clip the last 60 s of</h6>
+            {live.map((v) => <button key={v.s.id} type="button" role="menuitem" onClick={() => void clipNow(v.s.slug, v.s.display_name)}>{v.s.display_name}<small>{v.game ?? "live"}</small></button>)}
+          </div>
+        )}
+      </div>
+      <div className="z-r">{up.length ? <>Next post <b>&nbsp;in line&nbsp;</b> · {nextPl || "no account"}</> : <>Next post <b>&nbsp;none queued</b></>}</div>
+    </footer>
+  );
+}
+
+function ImportPopup({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="z-pop z-on" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="z-popbx z-wide" role="dialog" aria-modal="true" aria-label="Import a VOD or clip link" style={{ display: "block" }}>
+        <button type="button" className="z-x" aria-label="Close" onClick={onClose}><Ico n="x" size={14} /></button>
+        <h3 style={{ margin: "0 0 4px" }}>Import VOD</h3>
+        <p className="z-mut z-sm" style={{ margin: "0 0 12px" }}>Paste a Twitch, Kick, YouTube or X link. The PC cuts clips from it and they land in the queue as pending. Nothing posts.</p>
+        <div className="legacy"><LinkBox /></div>
+      </div>
+    </div>
   );
 }

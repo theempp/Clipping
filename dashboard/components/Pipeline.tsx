@@ -8,7 +8,7 @@ type Agent = { k: string; label: string; sub: string; n: number; tone: "run" | "
 export function useAgents(): Agent[] {
   const { snap } = useStore();
   const now = useNow(5000);
-  const st = pcState(snap.heartbeat, snap.control.awake, now);
+  const st = pcState(snap.heartbeat, now);
   const up = st !== "offline";
   const q = up ? snap.heartbeat?.status.queue ?? {} : {};
   const live = up ? snap.heartbeat?.status.live ?? [] : [];
