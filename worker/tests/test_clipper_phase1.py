@@ -230,6 +230,60 @@ def test_run_dry_end_to_end_nothing_uploaded(tmp_path):
     assert "would reach review 1" in (out / "report.md").read_text(encoding="utf-8")
 
 
+def test_run_dry_review_mode_uploads_pending_review(tmp_path):
+    s = _settings(tmp_path, score_100=True)
+
+    class Tr:
+        def transcribe(self, wav):
+            return [Word(18 + i * 0.4, 18.3 + i * 0.4, w) for i, w in enumerate("no way he did that".split())]
+
+    class SB:
+        def __init__(self):
+            self.inserts, self.uploads = [], []
+
+        def upload(self, path, file, ct):
+            self.uploads.append(path)
+            return path
+
+        def insert(self, table, row, **k):
+            self.inserts.append((table, row))
+            return [row]
+
+        def select(self, table, **k):
+            return [{"id": "s1"}] if table == "streamers" else []
+
+        def log_candidate(self, row):
+            pass
+
+        def log_spend(self, *a, **k):
+            pass
+
+    def extract(_b, start, end, out_dir):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return {"video": str(out_dir / "w.mp4"), "audio": str(out_dir / "w.wav"), "start_ts": start,
+                "end_ts": end, "partial": False}
+
+    def render(job_id, video, job_dir, t_in, t_out, *a, **k):
+        job_dir.mkdir(parents=True, exist_ok=True)
+        (job_dir / "clip.mp4").write_bytes(b"x")
+        (job_dir / "t.jpg").write_bytes(b"x")
+        return {"video": str(job_dir / "clip.mp4"), "thumbnail": str(job_dir / "t.jpg"), "duration": t_out - t_in}
+
+    from clipworker.judge.heuristic import HeuristicJudge
+    sb = SB()
+    qa = lambda *a, **k: SimpleNamespace(passed=True, failures=[], metrics={"lufs": -14})
+    out = run_dry(s, "twitch:lacy", Path("vod.mp4"), _chat_file(tmp_path), tmp_path / "dry", Tr(),
+                  HeuristicJudge(), loudness=[], extract=extract, render=render, qa=qa,
+                  supabase=sb, vod_started_at=1_700_000_000)
+    rep = json.loads((out / "report.json").read_text(encoding="utf-8"))
+    assert not rep["flags"]["dry_run"]
+    clips = [r for t, r in sb.inserts if t == "clips"]
+    assert clips and all(c["state"] == "pending_review" for c in clips)
+    assert clips[0]["moment_at"].startswith("2023-")
+    assert rep["jobs"][0]["stage"] == "uploaded"
+    assert not any(t == "publications" for t, _ in sb.inserts)
+
+
 def test_render_report_lists_gated():
     md = render_report({"channel": "twitch:lacy", "vod": "v", "flags": {"dead_air_gate": True},
                         "candidates": 2, "judged": 0, "jobs": [],

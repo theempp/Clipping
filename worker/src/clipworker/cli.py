@@ -59,7 +59,7 @@ def cmd_replay(a) -> int:
 
 
 def cmd_dryrun(a) -> int:
-    """Offline: no Supabase, no publisher. Judge = Grok if a key is set (spend!), else heuristic."""
+    """No publisher. Offline unless --review (then clips land in review). Judge = Grok if a key is set (spend!), else heuristic."""
     import httpx
 
     from .dryrun import run_dry
@@ -75,9 +75,14 @@ def cmd_dryrun(a) -> int:
         judge = GrokJudge(env("XAI_API_KEY"), env("GROK_MODEL", required=True), s.cache_dir,
                           httpx.Client(timeout=60), float(env("GROK_PRICE_IN_PER_MTOK", "0")),
                           float(env("GROK_PRICE_OUT_PER_MTOK", "0")), score_100=s.features.score_100)
+    sb = None
+    if a.review:  # upload QA-passed clips as pending_review; the publisher is not started
+        from .remote.supabase import Supabase
+        sb = Supabase(env("SUPABASE_URL", required=True), env("SUPABASE_SERVICE_ROLE_KEY", required=True))
     tr = CachedTranscriber(WhisperXTranscriber.auto(), s.cache_dir)
     out = run_dry(s, a.channel, Path(a.video), Path(a.chat), s.work_dir / "dryrun", tr, judge,
-                  max_moments=a.max, ffmpeg=env("FFMPEG_BIN", "ffmpeg"))
+                  max_moments=a.max, ffmpeg=env("FFMPEG_BIN", "ffmpeg"), supabase=sb,
+                  vod_started_at=a.vod_started_at)
     print((out / "report.md").read_text(encoding="utf-8"))
     print(f"report: {out / 'report.md'}")
     return 0
@@ -167,6 +172,9 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--chat", required=True, help="TwitchDownloaderCLI chat JSON")
     d.add_argument("--max", type=int, default=12, help="top N moments to cut")
     d.add_argument("--no-judge", action="store_true", help="heuristic cut, no Grok spend")
+    d.add_argument("--review", action="store_true",
+                   help="upload QA-passed clips to the dashboard review queue (never posts)")
+    d.add_argument("--vod-started-at", type=float, default=0.0, help="VOD start, unix seconds")
     bl = sub.add_parser("brain-learn", help="labels -> new brain version (features.brain)")
     bl.add_argument("--channel", required=True)
     a = p.parse_args(argv)

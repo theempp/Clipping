@@ -47,8 +47,11 @@ def vod_loudness(vod: Path, ffmpeg: str = "ffmpeg", run=subprocess.run) -> list[
 
 def run_dry(s: Settings, channel_key: str, vod: Path, chat: Path, out_root: Path, transcriber, judge,
             max_moments: int = 12, ffmpeg: str = "ffmpeg", loudness=None, extract=None,
-            render=None, qa=None) -> Path:
-    s = replace(s, features=replace(s.features, dry_run=True))
+            render=None, qa=None, supabase=None, vod_started_at: float = 0.0) -> Path:
+    """supabase set = review mode: QA-passed clips upload as pending_review (the publisher
+    is never started here, and the DB refuses to publish anything a human has not approved).
+    vod_started_at (unix) turns VOD offsets into real moment times on the dashboard."""
+    s = replace(s, features=replace(s.features, dry_run=supabase is None))
     ch = next(c for c in s.channels if c.key == channel_key)
     params, lift = ch.detector, None
     if s.features.brain:
@@ -66,8 +69,9 @@ def run_dry(s: Settings, channel_key: str, vod: Path, chat: Path, out_root: Path
     store.add_messages((ch.key, t, u, txt) for t, u, txt in msgs)
     rights = RightsGate(lambda: [], roster={ch.streamer})
     kw = {k: v for k, v in (("render", render), ("qa", qa)) if v is not None}
-    pipe = Pipeline(s, store, rights, transcriber, judge, None, clock=lambda: float("inf"),
+    pipe = Pipeline(s, store, rights, transcriber, judge, supabase, clock=lambda: float("inf"),
                     extract=extract or vod_extractor(vod, ffmpeg), **kw)
+    pipe.ts_offset = vod_started_at
     top = sorted(moments, key=lambda m: -m.peak_score)[:max_moments]
     jobs = [j for j in (pipe.on_moment(m) for m in sorted(top, key=lambda m: m.start_ts)) if j]
     for _ in range(12):
@@ -88,7 +92,7 @@ def _hms(t) -> str:
 
 
 def render_report(rep: dict) -> str:
-    kept = [r for r in rep["jobs"] if r["stage"] == "qa_passed"]
+    kept = [r for r in rep["jobs"] if r["stage"] in ("qa_passed", "uploaded")]
     lines = [f"# Dry run: {rep['channel']} (nothing posted)",
              f"VOD: {rep['vod']}",
              "Flags on: " + (", ".join(k for k, v in rep["flags"].items() if v) or "none"),
@@ -96,7 +100,7 @@ def render_report(rep: dict) -> str:
              f"would reach review {len(kept)}", "",
              "| VOD time | stage | score | score_10 | title / reason |", "|---|---|---|---|---|"]
     for r in rep["jobs"]:
-        what = r["title"] if r["stage"] == "qa_passed" else (r.get("dead_air") or r.get("reason") or "")
+        what = r["title"] if r["stage"] in ("qa_passed", "uploaded") else (r.get("dead_air") or r.get("reason") or "")
         lines.append(f"| {_hms(r['trigger_ts'])} | {r['stage']} | {r['score'] if r['score'] is not None else '-'} | "
                      f"{r['score_10'] or '-'} | {str(what).replace('|', '/')[:120]} |")
     for g in rep["gated"]:
