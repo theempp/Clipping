@@ -1,0 +1,1 @@
+- [Pods design intel](project_pods_design_intel.md) — atlas-pods.md is the source, open GAPs, money-sign/$ mistakes
