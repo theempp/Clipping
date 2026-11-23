@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pods-demo",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d P:\\dashboard && set NEXT_PUBLIC_CLIPP_DEMO=1&& set NEXT_PUBLIC_CLIPP_PODS=1&& set NEXT_PUBLIC_CLIPP_POD_HOME=1&& npx next dev -p 3101"],
+      "port": 3101
+    }
+  ]
+}

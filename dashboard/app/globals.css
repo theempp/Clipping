@@ -267,6 +267,9 @@ textarea { resize: vertical; }
 .nextlist .mini { width: 34px; flex: none; }
 .nextlist.rows li { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 10px; border-radius: 16px; background: #ffffff08; min-width: 0; }
 .nextlist.rows .tx em { font-style: normal; }
+/* Action-row controls keep plain .b geometry (the .nextlist a/button rule above is for whole-row links). */
+.nextlist.rows li > .b { width: auto; flex: none; display: inline-flex; justify-content: center; padding: 7px 12px; border-radius: 99px; border-color: var(--edge); }
+.nextlist.rows li > .b.ok { border-color: #fff; }
 .clipv { padding: 12px; }
 .learned { margin-top: 16px; border-top: 1px solid var(--edge); padding-top: 14px; display: grid; gap: 10px; min-width: 0; }
 .learned ul, .learned li { min-width: 0; }
