@@ -309,6 +309,7 @@ class Pipeline:
                            min_gap_s=max(zoom.min_gap_s, 8.0), max_zooms=min(zoom.max_zooms, 2))
         if zoom is not None and j.get("zoom_scale") is not None:  # editor slider (D098); 1.0 = off
             zoom = replace(zoom, scale=max(1.0, min(1.3, float(j["zoom_scale"]))))
+        zoom = None  # D112 (Zo, 2026-11-23): no zooms on any clip, whatever the config, note or editor slider says
         sfx_on = j["sfx"] if isinstance(j.get("sfx"), bool) else self.s.sfx.enabled
         sfx = replace(self.s.sfx, enabled=sfx_on and job.data["rules"].get("allow_sfx", True))
         peak_rel = job.data["peak_ts"] - job.data["capture"]["start_ts"] - j["trim_in"]
