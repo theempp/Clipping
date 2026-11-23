@@ -1,0 +1,13 @@
+name: supabase-sql
+on:
+  pull_request:
+    paths: ["supabase/**"]
+  push:
+    paths: ["supabase/**", ".github/workflows/supabase-sql.yml"]
+jobs:
+  sql:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ls /usr/lib/postgresql/
+      - run: bash supabase/tests/run.sh
