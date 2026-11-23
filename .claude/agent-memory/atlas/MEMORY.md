@@ -1,0 +1,1 @@
+- [Pods design intel](pods-design-intel.md) — docs/design/atlas-pods.md, concept C locked (D099), open GAPS to resolve
