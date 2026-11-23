@@ -102,6 +102,8 @@ export function Hero({ clip, rank }: { clip: Clip | null; rank: number }) {
   const ui = useReview();
   const now = useNow(30_000);
   const src = useMedia(clip?.storage_path);
+  // Muted by default so autoplay works; the speaker button turns sound on (it stays on as the hero changes).
+  const [muted, setMuted] = useState(true);
   const poster = useMedia(clip?.thumb_path);
   if (!clip) {
     return (
@@ -128,7 +130,9 @@ export function Hero({ clip, rank }: { clip: Clip | null; rank: number }) {
       <div className="z-bgv" aria-hidden="true" style={css({ "--bgimg": poster ? `url("${poster}")` : "none" })} />
       <div className="z-vidcol">
         <div className="z-p9">
-          {src ? <video key={src} src={src} poster={poster ?? undefined} autoPlay muted loop playsInline /> : <span className="z-ph9">Loading clip…</span>}
+          {src ? <video key={src} src={src} poster={poster ?? undefined} autoPlay muted={muted} loop playsInline /> : <span className="z-ph9">Loading clip…</span>}
+          {src && <button type="button" className="z-vol" aria-pressed={!muted} aria-label={muted ? "Sound on" : "Sound off"}
+            title={muted ? "Sound on" : "Sound off"} onClick={() => setMuted((m) => !m)}>{muted ? "🔇" : "🔊"}</button>}
           <span className="z-tp">{rank === 0 && <span className="z-rk">#1 PICK</span>}{badges.includes("clip_that") ? <span>CLIP THAT</span> : clip.channel_key.includes(":") && <span>LIVE CLIP</span>}</span>
         </div>
         {heat ? (

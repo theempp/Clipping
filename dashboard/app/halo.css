@@ -434,3 +434,6 @@ body.z-editing .z-main>:not(.z-id-editor){visibility:hidden}
 }
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (max-width:640px){.z-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.z-p9 .z-vol{position:absolute;right:10px;bottom:10px;z-index:2;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:14px;background:rgba(0,0,0,.6);backdrop-filter:blur(6px);box-shadow:0 0 0 1px var(--line2)}
+.z-p9 .z-vol:hover{background:rgba(0,0,0,.8)}
+.z-p9 .z-vol[aria-pressed=true]{box-shadow:0 0 0 1px var(--halo),0 0 14px var(--glow)}
