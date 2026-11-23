@@ -1,4 +1,4 @@
-"""Streamer Brain sliders -> detector weights (D089/D092)."""
+"""Streamer Brain sliders -> detector weights (D089/D099)."""
 from clipworker.config import DetectorParams
 from clipworker.detector.brain import DEFAULTS, apply_brain
 from clipworker.detector.signals import compile_reactions, reaction_weight

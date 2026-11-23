@@ -99,7 +99,7 @@ def test_caption_style_hex_to_ass(tmp_path):
 def test_twitch_streams_detail():
     p = {"data": [{"user_login": "Lacy", "type": "live", "viewer_count": 18400,
                    "started_at": "2026-11-20T18:00:00Z"}, {"user_login": "x", "type": ""}]}
-    assert status.parse_twitch_streams(p) == {"lacy": {"viewers": 18400, "started_at": "2026-11-20T18:00:00Z", "game_id": None, "game": None}}
+    assert status.parse_twitch_streams(p) == {"lacy": {"viewers": 18400, "started_at": "2026-11-20T18:00:00Z", "game_id": None, "game": None, "user_id": None}}
 
 
 def test_kick_streams_detail():

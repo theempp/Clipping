@@ -8,9 +8,11 @@ import { Countdown } from "@/components/Countdown";
 import { OwnChannels } from "@/components/OwnChannels";
 import { AgentTicker } from "@/components/Pipeline";
 import { WakeToggle } from "@/components/WakeToggle";
+import { POD_HOME_ON } from "@/lib/env";
 import { compact, rankQueue } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
 import { fmtViewers, liveFor, series, streamerHue, streamerViews } from "@/lib/view";
+import { PodHome } from "./PodHome";
 
 const GOAL = 8; // clips a day per streamer (concept C)
 
@@ -21,6 +23,13 @@ function greet(now: number) {
 
 /** Overview: who is live, what is waiting on Zo, and the numbers moving right now. */
 export default function Overview() {
+  const { pod } = useStore();
+  // Pod home (Phase 3): members always, the admin once a pod is picked. Admin "All" keeps the full overview.
+  if (POD_HOME_ON && pod) return <PodHome podId={pod} />;
+  return <FullOverview />;
+}
+
+function FullOverview() {
   const { snap } = useStore();
   const now = useNow(1000);
   const views = streamerViews(snap, now).filter((v) => v.inRoster || !snap.heartbeat?.status.roster);

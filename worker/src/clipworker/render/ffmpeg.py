@@ -51,7 +51,7 @@ def video_filter(layout: Layout | None, captions_file: str | None, zooms: list[f
     if layout is None:  # full frame: face-tracked per shot when centres given, else centre crop
         if centres:
             crop = track_crop_filter(centres)
-        elif crop_x is not None:  # editor crop: centre of the 9:16 window, 0..1 of frame width (D091)
+        elif crop_x is not None:  # editor crop: centre of the 9:16 window, 0..1 of frame width (D098)
             cx = min(1.0, max(0.0, float(crop_x)))
             crop = f"crop=ih*9/16:ih:'max(0,min(iw-ih*9/16,iw*{cx:.4f}-ih*9/32))':0"
         else:
@@ -130,7 +130,7 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
     run(source_preview_command(Path(src).resolve(), source_prev.resolve(), t_in, t_out, ffmpeg),
         check=True, cwd=str(out_dir))
     drop = output_cuts(cuts, t_in, t_out)
-    if drop:  # editor splits (D091): Zo dropped segments; cut both copies so before/after stays in step
+    if drop:  # editor splits (D098): Zo dropped segments; cut both copies so before/after stays in step
         for f in (out, source_prev):
             tmp = f.with_name(f.stem + ".cut.mp4")
             run(cut_command(f.resolve(), tmp.resolve(), drop, dur, ffmpeg), check=True, cwd=str(out_dir))

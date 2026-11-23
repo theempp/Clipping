@@ -1,9 +1,87 @@
 // Sample day for demo mode (D057). Times are relative to page load so the
 // countdown and "live for" clocks move. Nothing here touches the network.
-import type { BrainWeights, Campaign, Candidate, Clip, LiveStat, LongformVideo, Publication, Snapshot, StatPoint, Streamer } from "./types.ts";
+import { entryMonth } from "./pods.ts";
+import type { Access, BrainWeights, Campaign, Candidate, Clip, LedgerEntry, LedgerEvent, LiveStat, LongformVideo, Pod, PodCampaign, PodStatement,
+  PostStat, Publication, Snapshot, StatPoint, Streamer } from "./types.ts";
+
+// ---- Demo stand-ins for the database (D057). Live mode never runs these: Postgres generates the cut and net
+// columns and the pod_statements view; the UI only displays them. ----
+const pgRound = (x: number) => Math.sign(x) * Math.round(Math.abs(x));
+type NewEntry = Pick<LedgerEntry, "id" | "pod_id" | "source_ref" | "campaign_id" | "gross_cents" | "created_at"> & Partial<LedgerEntry>;
+/** A ledger_entries row as the database would return it (generated columns filled in). */
+export function demoEntry(p: NewEntry): LedgerEntry {
+  const rate = p.agency_rate ?? 0.15;
+  const cut = pgRound(p.gross_cents * rate);
+  return { source: "campaign", status: "pending", note: null, reverses_id: null, cleared_at: null, approved_at: null,
+    paid_at: null, paid_ref: null, ...p, agency_rate: rate, agency_cut_cents: cut, pod_net_cents: p.gross_cents - cut };
+}
+let evSeq = 0;
+/** What the ledger_audit trigger would write for this row. */
+export function demoEvent(e: LedgerEntry, from: LedgerEntry["status"] | null, at: string): LedgerEvent {
+  evSeq += 1;
+  return { id: evSeq, entry_id: e.id, pod_id: e.pod_id,
+    op: from === null ? "insert" : "update", from_status: from, to_status: e.status, actor: "admin", actor_id: "demo-zo",
+    row_after: { ...e }, at };
+}
+/** pod_statements view over demo entries. */
+export function demoStatements(rows: LedgerEntry[]): PodStatement[] {
+  const by = new Map<string, PodStatement>();
+  for (const e of rows) {
+    const month = entryMonth(e);
+    const k = `${e.pod_id}|${month}`;
+    const s = by.get(k) ?? { pod_id: e.pod_id, month, entries: 0, gross_cents: 0, agency_cut_cents: 0, pod_net_cents: 0,
+      pending_net_cents: 0, owed_net_cents: 0, paid_net_cents: 0 };
+    s.entries += 1; s.gross_cents += e.gross_cents; s.agency_cut_cents += e.agency_cut_cents; s.pod_net_cents += e.pod_net_cents;
+    if (e.status === "pending") s.pending_net_cents += e.pod_net_cents;
+    else if (e.status === "paid") s.paid_net_cents += e.pod_net_cents;
+    else s.owed_net_cents += e.pod_net_cents;
+    by.set(k, s);
+  }
+  return [...by.values()].sort((a, b) => b.month.localeCompare(a.month));
+}
+
+function demoLedger(iso: (msAgo: number) => string): { ledger: LedgerEntry[]; ledgerEvents: LedgerEvent[] } {
+  const h = 3600_000;
+  const steps = (e: LedgerEntry, at: string[]): LedgerEvent[] => {
+    const order: LedgerEntry["status"][] = ["pending", "cleared", "approved", "paid"];
+    const n = order.indexOf(e.status);
+    return at.slice(0, n + 1).map((t, i) => demoEvent({ ...e, status: order[i] }, i === 0 ? null : order[i - 1], t));
+  };
+  const e1 = demoEntry({ id: "le-1", pod_id: "pod-1", source_ref: "CR-1042", campaign_id: "c1", gross_cents: 40000, status: "paid",
+    created_at: iso(30 * h), cleared_at: iso(28 * h), approved_at: iso(26 * h), paid_at: iso(20 * h), paid_ref: "T-881" });
+  const e2 = demoEntry({ id: "le-2", pod_id: "pod-1", source_ref: "CR-1077", campaign_id: "c1", gross_cents: 50000, status: "approved",
+    created_at: iso(12 * h), cleared_at: iso(10 * h), approved_at: iso(9 * h) });
+  const e3 = demoEntry({ id: "le-3", pod_id: "pod-1", source_ref: "WH-220", campaign_id: "c2", gross_cents: 30000, created_at: iso(3 * h) });
+  const e4 = demoEntry({ id: "le-4", pod_id: "pod-1", source_ref: "CR-0999", campaign_id: "c1", gross_cents: 10001, status: "cleared",
+    created_at: iso(40 * h), cleared_at: iso(38 * h) });
+  const e5 = demoEntry({ id: "le-5", pod_id: "pod-1", source: "reversal", source_ref: "rev:le-4", campaign_id: "c1", gross_cents: -10001,
+    reverses_id: "le-4", note: "Payout clawed back by Content Rewards", created_at: iso(6 * h) });
+  const e6 = demoEntry({ id: "le-6", pod_id: "pod-2", source_ref: "CR-1101", campaign_id: "c1", gross_cents: 20000, created_at: iso(5 * h) });
+  const ledger = [e3, e5, e6, e2, e1, e4];
+  const ledgerEvents = [
+    ...steps(e1, [e1.created_at, e1.cleared_at!, e1.approved_at!, e1.paid_at!]), ...steps(e2, [e2.created_at, e2.cleared_at!, e2.approved_at!]),
+    ...steps(e3, [e3.created_at]), ...steps(e4, [e4.created_at, e4.cleared_at!]), ...steps(e5, [e5.created_at]), ...steps(e6, [e6.created_at]),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  return { ledger, ledgerEvents };
+}
+
+// Pods demo (D091): Pod 1 is Zo's roster; Pod 2 is a test pod with the two GTA-6-only streamers.
+export const DEMO_PODS: Pod[] = [
+  { id: "pod-1", slug: "pod-1", name: "Pod 1", status: "active" },
+  { id: "pod-2", slug: "pod-2", name: "Pod 2", status: "trial" },
+];
+const POD_OF: Record<string, string> = { kaicenat: "pod-2", ishowspeed: "pod-2" };
+/** Demo login: Zo (admin + Pod 1 owner), or `?as=pod-2` (Pod 2 owner) / `?as=pod-2&role=member` to preview a pod login. */
+export function demoAccess(search = ""): Access {
+  const q = new URLSearchParams(search);
+  const as = DEMO_PODS.find((p) => p.slug === q.get("as"));
+  if (as) return { admin: false, pods: [{ id: as.id, slug: as.slug, name: as.name, role: q.get("role") === "member" ? "member" : "owner" }] };
+  return { admin: true, pods: [{ id: "pod-1", slug: "pod-1", name: "Pod 1", role: "owner" }] };
+}
 
 const S = (id: string, slug: string, name: string, kick = false): Streamer => ({
   id, slug, display_name: name, twitch_login: kick ? null : slug, kick_slug: kick ? slug : null, avatar_url: null,
+  pod_id: POD_OF[slug] ?? "pod-1",
 });
 
 export function demoSnapshot(now = Date.now()): Snapshot {
@@ -21,7 +99,7 @@ export function demoSnapshot(now = Date.now()): Snapshot {
     const slug = p.streamer_id.slice(2);
     const media = ((n - 1) % 3) + 1;
     return {
-      id: `demo-${n}`, job_id: `${slug}-${String(n).padStart(3, "0")}`, channel_key: `twitch:${slug}`,
+      id: `demo-${n}`, job_id: `${slug}-${String(n).padStart(3, "0")}`, channel_key: `twitch:${slug}`, pod_id: POD_OF[slug] ?? "pod-1",
       state: "pending_review", hook: null, description: null, category: "gaming",
       confidence: 0.8, detector_score: 3.1, score_10: 7, hook_type: "reaction_peak",
       moment_at: iso(40 * min), duration_s: 34, storage_path: `/demo/clip${media}.mp4`,
@@ -61,7 +139,7 @@ export function demoSnapshot(now = Date.now()): Snapshot {
       duration_s: 52, hook_type: "play_peak", created_at: iso(140 * min),
       judge: { why: "Good read, slow build.", hook_window: "0:00-0:05" } }),
     clip({ streamer_id: "s-stableronaldo", title: "Storm rotate fail", score_10: 4, confidence: 0.58, duration_s: 22,
-      hook_type: "none", created_at: iso(55 * min), judge: { why: "Weak hook, no clear payoff." } }),
+      hook_type: "none", created_at: iso(55 * min), judge: { why: "Weak hook, no clear payoff." }, pod_id: null }),
     clip({ streamer_id: "s-stableronaldo", title: "Chat roasts the loadout", state: "approved", score_10: 8, confidence: 0.8,
       reviewed_at: iso(14 * min), created_at: iso(70 * min) }),
     clip({ streamer_id: "s-xqc", title: "xQc rage quits then requeues", state: "published", score_10: 8,
@@ -72,7 +150,7 @@ export function demoSnapshot(now = Date.now()): Snapshot {
     for (let i = 0; i < 72; i += 1) {
       const wave = Math.abs(Math.sin((i + seed) * 0.7) * 1.2 + Math.sin((i * seed) * 0.13));
       const spike = i === 66 || i === 41 || i === 18 ? 2.6 : 0;
-      candidates.push({ channel_key: key, moment_at: iso((72 - i) * 2.5 * min), score: +(0.6 + wave + spike).toFixed(2),
+      candidates.push({ channel_key: key, pod_id: POD_OF[key.split(":")[1]] ?? "pod-1", moment_at: iso((72 - i) * 2.5 * min), score: +(0.6 + wave + spike).toFixed(2),
         outcome: spike ? "kept" : "dropped" });
     }
   }
@@ -137,7 +215,20 @@ export function demoSnapshot(now = Date.now()): Snapshot {
     { streamer_id: "s-lacy", weights: { chat_spike: 72, voice_peak: 58, chat_words: 81, viewer_clips: 34, approved_match: 66 }, words: ["CLIP", "NO WAY", "LACY"], updated_at: iso(86400_000) },
     { streamer_id: "s-jynxzi", weights: { chat_spike: 64, voice_peak: 77, chat_words: 52, viewer_clips: 41, approved_match: 58 }, words: ["JYNXZI", "W"], updated_at: iso(2 * 86400_000) },
   ];
+  // Pod home (Phase 3): one suggested campaign per pod, two posts stuck under 20 plays at ~1 h.
+  const podCampaigns: PodCampaign[] = [
+    { pod_id: "pod-1", campaign_id: "c1", status: "joined", scout: {}, decided_at: iso(2 * 86400_000), created_at: iso(3 * 86400_000) },
+    { pod_id: "pod-1", campaign_id: "c2", status: "suggested", scout: { reason: "Jynxzi is in this pod; $1.00 CPM clears the floor" }, decided_at: null, created_at: iso(5 * 3600_000) },
+    { pod_id: "pod-2", campaign_id: "c1", status: "suggested", scout: { reason: "Kai Cenat and IShowSpeed are named" }, decided_at: null, created_at: iso(3 * 3600_000) },
+  ];
+  const postStats: PostStat[] = [
+    { clip_id: "demo-3", platform: "youtube", read_at: iso(4 * 3600_000), hours_since_post: 1, plays: 1450 },
+    { clip_id: "demo-3", platform: "x", read_at: iso(4 * 3600_000), hours_since_post: 1, plays: 12 },
+    { clip_id: "demo-14", platform: "youtube", read_at: iso(20 * min), hours_since_post: 1.1, plays: 8 },
+  ];
+  const ledgerData = demoLedger(iso);
   return {
+    pods: DEMO_PODS, podCampaigns, postStats, ...ledgerData, statements: demoStatements(ledgerData.ledger),
     live, history, publications, campaigns, brains,
     streamers,
     clips,

@@ -8,6 +8,7 @@ import { Ring } from "@/components/Charts";
 import { ClipVideo } from "@/components/ClipCard";
 import { Icon } from "@/components/Icon";
 import { LearnedRules } from "@/components/LearnedRules";
+import { PodChip } from "@/components/PodChip";
 import { ReviewDock } from "@/components/ReviewDock";
 import { TikTokPanel, tagLine } from "@/components/TikTokPanel";
 import { WeekPulse } from "@/components/WeekPulse";
@@ -71,6 +72,7 @@ function Review() {
             <p className="mut" style={{ margin: "0 0 12px" }}>{clip ? why ?? "No judge note for this clip." : "New clips show up here the moment the PC finishes rendering and QA."}</p>
             {clip && (
               <div className="chips" style={{ marginBottom: 16 }}>
+                <PodChip clip={clip} />
                 {long && <span className="chip acc">TikTok · Zwoclipp</span>}
                 {long && tagLine(long).map((t) => <span key={t} className="chip">{t}</span>)}
                 {!long && clip.hook_type && <span className="chip">{HOOK[clip.hook_type] ?? clip.hook_type}</span>}
@@ -107,6 +109,7 @@ function Review() {
                     <button type="button" onClick={() => pick(c.id)}>
                       <span className="mini"><ClipVideo clip={c} sound={false} /></span>
                       <span className="tx"><b>{c.title ?? c.job_id}</b><span>{s?.display_name ?? c.channel_key}{c.duration_s ? ` · ${mmss(c.duration_s)}` : ""}</span></span>
+                      <PodChip clip={c} />
                       <span className="sc">{c.score_10 ?? "—"}</span>
                     </button>
                   </li>

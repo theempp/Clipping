@@ -178,3 +178,45 @@ def to_campaign_row(b: Brief, title: str, post_id: str | None, total: float, ver
             "streamer_slugs": b.streamers, "platforms": b.platforms, "cpm_usd": b.cpm_usd,
             "cap_usd": b.cap_usd, "rules": rules, "score": total,
             "recommendation": f"{verdict}: {why}"}
+
+
+KEEP_STATUSES = {"joined", "declined", "left"}   # Zo's call on a pod_campaigns row; never overwritten
+
+
+def score_for_pod(campaign: dict, pod_slugs: set[str]) -> dict:
+    """Active campaign vs one pod's streamers -> scout json (verdict, why, overlap). D072 floor."""
+    overlap = sorted(set(campaign.get("streamer_slugs") or []) & pod_slugs)
+    cpm, total = campaign.get("cpm_usd"), float(campaign.get("score") or 0)
+    if not overlap:
+        verdict, why = "avoid", "no streamer in this pod"
+    elif cpm is None:
+        verdict, why = "ask", "pay rate not stated; must be above $1 per 1K views to join"
+    elif float(cpm) <= CPM_FLOOR_USD:
+        verdict, why = "avoid", f"pays ${float(cpm):g} per 1K views; rule is more than $1"
+    else:
+        verdict = "pursue" if total >= 3.5 else "ask" if total >= 2.5 else "avoid"
+        why = f"CPM ${float(cpm):g}, {', '.join(overlap)}, score {total}"
+    return {"verdict": verdict, "why": why, "streamers": overlap, "cpm_usd": cpm, "score": total}
+
+
+def scout_pods(sb) -> int:
+    """[scout] per_pod: upsert pod_campaigns 'suggested' rows for each pod's worthwhile active
+    campaigns. Rows Zo already joined/declined/left are left alone. Returns rows written."""
+    streamers = sb.select("streamers", select="slug,pod_id")
+    campaigns = sb.active_campaigns()
+    n = 0
+    for pod in sb.select("pods", status="neq.ended", select="id,slug"):
+        slugs = {s["slug"] for s in streamers if s.get("pod_id") == pod["id"]}
+        have = {r["campaign_id"]: r["status"] for r in
+                sb.select("pod_campaigns", pod_id=f"eq.{pod['id']}", select="campaign_id,status")}
+        rows = []
+        for c in campaigns:
+            if have.get(c["id"]) in KEEP_STATUSES:
+                continue
+            sc = score_for_pod(c, slugs)
+            if sc["verdict"] != "avoid":
+                rows.append({"pod_id": pod["id"], "campaign_id": c["id"], "status": "suggested", "scout": sc})
+        if rows:
+            sb.insert("pod_campaigns", rows, on_conflict="pod_id,campaign_id")
+            n += len(rows)
+    return n

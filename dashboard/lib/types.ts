@@ -9,6 +9,8 @@ export type Streamer = {
   twitch_login: string | null;
   kick_slug: string | null;
   avatar_url: string | null;
+  /** Pods migration (20261124000000): the pod this streamer clips for. */
+  pod_id?: string | null;
 };
 
 export type Clip = {
@@ -16,6 +18,8 @@ export type Clip = {
   job_id: string;
   streamer_id: string | null;
   channel_key: string;
+  /** Pod tag (pods migration). Null = untagged; only the admin reviews those (D102). */
+  pod_id?: string | null;
   state: ClipState;
   title: string | null;
   hook: string | null;
@@ -76,7 +80,7 @@ export type Heartbeat = {
 
 export type Control = { awake: boolean; updated_at: string };
 
-export type Candidate = { channel_key: string; moment_at: string; score: number; outcome: string };
+export type Candidate = { channel_key: string; moment_at: string; score: number; outcome: string; pod_id?: string | null };
 
 export type Spend = { kind: string; usd: number };
 
@@ -174,6 +178,15 @@ export type Snapshot = {
   publications: Publication[];
   campaigns: Campaign[];
   brains: BrainWeights[];
+  /** Pods (NEXT_PUBLIC_CLIPP_PODS=1). Empty while the flag is off. */
+  pods: Pod[];
+  podCampaigns: PodCampaign[];
+  /** Early post_stats readings (<= 2.5 h), enough for the stuck-post flag. */
+  postStats: PostStat[];
+  statements: PodStatement[];
+  /** Ledger (Phase 4): itemized entries and their append-only audit rows. */
+  ledger: LedgerEntry[];
+  ledgerEvents: LedgerEvent[];
 };
 
 /** Manual editor output (trim + crop + headline + captions), sent as a revision payload. */
@@ -187,3 +200,37 @@ export type EditPlan = {
 };
 
 export type ReviewAction = "approve" | "revise" | "reject";
+
+/** Pods (D091-D109, migration 20261124000000_pods). */
+export type PodRole = "owner" | "member";
+export type Pod = { id: string; slug: string; name: string; status: "trial" | "active" | "ended" };
+/** One row of my_access().pods: a pod the signed-in user belongs to. */
+export type PodAccess = { id: string; slug: string; name: string; role: PodRole };
+/** my_access(): admin sees every pod; pods = the user's own memberships. */
+export type Access = { admin: boolean; pods: PodAccess[] };
+/** Campaign participation per pod; the per-pod scout writes `suggested` rows (D106: the pod owner decides). */
+export type PodCampaign = {
+  pod_id: string; campaign_id: string; status: "suggested" | "joined" | "declined" | "left";
+  scout: Record<string, unknown>; decided_at: string | null; created_at: string;
+};
+/** One stats reading of one post (migration 20261122230000). */
+export type PostStat = { clip_id: string; platform: "youtube" | "x" | "tiktok"; read_at: string; hours_since_post: number; plays: number | null };
+/** pod_statements view: one pod, one month. Money is cents, computed in the database. */
+export type PodStatement = {
+  pod_id: string; month: string; entries: number; gross_cents: number; agency_cut_cents: number; pod_net_cents: number;
+  pending_net_cents: number; owed_net_cents: number; paid_net_cents: number;
+};
+export type LedgerStatus = "pending" | "cleared" | "approved" | "paid";
+/** ledger_entries row. agency_cut_cents / pod_net_cents are generated columns: never computed in the UI. */
+export type LedgerEntry = {
+  id: string; pod_id: string; source: "campaign" | "reversal"; source_ref: string; campaign_id: string | null;
+  gross_cents: number; agency_rate: number; agency_cut_cents: number; pod_net_cents: number;
+  status: LedgerStatus; note: string | null; reverses_id: string | null;
+  cleared_at: string | null; approved_at: string | null; paid_at: string | null; paid_ref: string | null; created_at: string;
+};
+/** ledger_events row (trigger-written, append-only). */
+export type LedgerEvent = {
+  id: number; entry_id: string; pod_id: string; op: "insert" | "update";
+  from_status: LedgerStatus | null; to_status: LedgerStatus; actor: string; actor_id: string | null;
+  row_after: Record<string, unknown>; at: string;
+};

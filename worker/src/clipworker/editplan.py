@@ -1,4 +1,4 @@
-"""Dashboard editor plan -> render overrides (D091 editor round trip).
+"""Dashboard editor plan -> render overrides (D098 editor round trip).
 
 The editor works in seconds of the clip Zo watched (0 = first rendered frame). The
 renderer works in seconds of the captured window, so trims are shifted by the trim_in

@@ -87,7 +87,29 @@ Not used: liquid-glass pills and fintech cards appeared under Pinterest's "more 
 - **C Wildcard**: floating icon dock with glowing navy "+", gradient header band, ring gauges docked on the right edge, big-number glow charts; still charcoal + navy.
 All three: same 9 pages, no overlapping UI, phone layout included.
 
-## 8. Next steps
+## 8. Pods, treasury and payouts (draft, 2026-11-22)
+Status: structure agreed in chat with zo; terms, numbers and legal setup are open. Nothing built.
+
+**Pods.** Each pod = one owner + their own streamers, channels, review queue, sales and brain learning. Pod 1 = zo (the current three streamers, D069). Pod 2 = zo's friend, with his own streamers and channels. Future hires get their own pod. Shared layer = worker, pipeline, dashboard, brain. Pod owners cannot approve each other's clips (D085 applies per pod).
+
+**Treasury.** All agency revenue (Content Rewards, retainers, ad revenue) lands in one agency business account (Whop/Stripe/bank, TBD). The dashboard is the ledger only: it records, calculates splits and schedules payouts. It never moves money; zo sends every transfer and marks it paid. Flat agency % comes off every pod's payouts.
+
+**Rules to write down (open).**
+- The flat %, and whether it applies to gross or net of costs.
+- Definition of "money generated"; payout schedule; unpaid earnings if someone leaves.
+- Exit terms: who keeps channels, accounts, streamer relationships and tool access.
+- Trial: 60-90 days with the friend's first streamer only; vesting if equity is ever added.
+
+**Risks to resolve before he joins.**
+1. Campaign/platform payouts go to the registered payout account; channels or payout details must sit with the agency, or earnings are sent in manually. Check how Zo's campaigns handle payout details.
+2. Holding others' money: separate business account, contractor tax forms, per-payout records. v1: no outside professionals; keep the ledger records clean.
+3. Worker capacity: one GPU PC serves all pods. Test load first.
+4. Roster fit (D069 GTA-6-only) and D080 originality rule apply to every pod.
+5. zo owns the tech and holds the leverage; write down what happens to his pod if they split.
+
+**Dashboard build needed.** Multi-user logins with per-pod scoping (Supabase row-level security, replaces owner-only D054); ledger table (source, pod, amount, date, status); pod split rules; payout schedule with approve / mark-as-paid (record only); read-only earnings view and itemized statement per pod; audit log of who approved what.
+
+## 9. Next steps
 1. zo approves or edits this blueprint.
 2. Log decisions (next ID D091): blueprint adopted, accent value, page map, three-beat edit, case-study log.
 3. Build the three moodboards, then the chosen one in `dashboard/`.

@@ -153,7 +153,7 @@ do $$ begin
 end $$;
 reset role;
 
--- live_stats migration (D092/D093)
+-- live_stats migration (D099/D100)
 set role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000bb"}', false);
 do $$ begin
@@ -218,4 +218,35 @@ do $$ begin
   if not exists (select 1 from information_schema.columns where table_name = 'clips' and column_name = 'revise_failed') then
     raise exception 'FAIL: clips.revise_failed missing'; end if;
 end $$;
+-- clipper labels / post_stats / brain_versions (D089 Phase 0)
+insert into public.clip_labels(streamer, job_id, signal, weight) values ('lacy', 'j1', 'approved', 1.0);
+do $$ begin
+  begin
+    insert into public.clip_labels(streamer, job_id, signal, weight) values ('lacy', 'j1', 'approved', 1.0);
+    raise exception 'FAIL: duplicate label accepted';
+  exception when unique_violation then null; end;
+  begin
+    insert into public.clip_labels(streamer, signal, weight) values ('lacy', 'vibes', 1.0);
+    raise exception 'FAIL: unknown signal accepted';
+  exception when check_violation then null; end;
+end $$;
+insert into public.brain_versions(streamer, version, json) values ('lacy', 1, '{"weights":{}}');
+set role authenticated;
+select set_config('request.jwt.claims', '{"role":"authenticated","sub":"00000000-0000-0000-0000-0000000000aa"}', false);
+insert into public.post_stats(clip_id, platform, hours_since_post, plays, source)
+  values ((select id from public.clips where job_id = 'long-p1'), 'tiktok', 24, 900, 'manual');
+do $$ begin
+  begin
+    insert into public.post_stats(clip_id, platform, hours_since_post, plays, source)
+      values ((select id from public.clips where job_id = 'long-p1'), 'youtube', 2, 10, 'api');
+    raise exception 'FAIL: owner wrote an api stat row';
+  exception when insufficient_privilege then null; end;
+  if (select count(*) from public.clip_labels) <> 1 then raise exception 'FAIL: owner cannot read labels'; end if;
+end $$;
+select public.request_clip('lacy');
+do $$ begin
+  if (select count(*) from public.clip_requests where status = 'open' and seconds = 40) <> 1 then
+    raise exception 'FAIL: clip request not stored'; end if;
+end $$;
+reset role;
 select 'ALL SQL CHECKS PASSED';

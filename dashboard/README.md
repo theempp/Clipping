@@ -108,6 +108,9 @@ Open http://localhost:3000, enter your email, and click the link in the email on
 - Sign-in is by email link with sign-ups turned off, so nobody can create an account.
 - Clips stay in a private Storage bucket. The dashboard asks for a signed link that expires after 1 hour each time it plays or downloads a clip.
 
+**Pods (`NEXT_PUBLIC_CLIPP_PODS=1`, needs migration `20261124000000_pods.sql`).** The gate calls `my_access()` instead of `is_owner()`. The admin (Zo) sees every pod and picks one in the top bar (All by default); a pod login is pinned to its pod and RLS returns only that pod's rows. Approve, revise and deny show only to the owner of the clip's pod; untagged clips stay admin-only (D102, D103). `review_clip` refuses everyone else anyway. New member = add the user by hand in Supabase Auth plus a `pod_members` row (sign-ups stay off). Demo mode previews a pod login with `?as=pod-2` (owner) or `?as=pod-2&role=member`.
+`NEXT_PUBLIC_CLIPP_POD_HOME=1` turns Overview into the pod's action list (stuck posts, to approve, campaigns to join, earnings). Ledger (admin only) records payouts through `ledger_add` / `ledger_set_status` / `ledger_reverse`; the database computes the 15% cut and pod net and allows only pending -> cleared -> approved -> paid. Statements are read-only per pod. The dashboard never moves money (D092).
+
 ## Wake Up
 
 The switch records what you want in the `control` table. The worker on the PC reads it every 15 seconds:

@@ -17,7 +17,7 @@ from collections import deque
 from dataclasses import dataclass, field
 
 from ..config import DetectorParams
-from .signals import compile_reactions, reaction_weight, robust_z
+from .signals import compile_reactions, lift_weight, mood_hits, reaction_weight, robust_z
 
 Z_MIN, Z_MAX = -3.0, 10.0
 MAX_WINDOW_S = 90.0
@@ -49,20 +49,26 @@ class Tick:
     react: float
     audio: float
     rate: float
+    mood: float = 0.0
+    lift: float = 0.0
 
 
 class SpikeDetector:
-    def __init__(self, channel: str, params: DetectorParams, reaction_weights: dict[str, float]):
+    def __init__(self, channel: str, params: DetectorParams, reaction_weights: dict[str, float],
+                 lift: dict[str, float] | None = None):
         self.channel = channel
         self.p = params
         self.reactions = compile_reactions(reaction_weights)
-        self._msgs: deque[tuple[float, str, float]] = deque()   # ts, user, reaction weight
+        self.lift = {k.upper(): float(v) for k, v in (lift or {}).items()}  # brain chat-word lift
+        self._msgs: deque[tuple] = deque()   # ts, user, reaction weight, mood hits, lift
         self._loud: deque[tuple[float, float]] = deque()
         n = int(params.baseline_s)
         self._h_rate: deque[float] = deque(maxlen=n)
         self._h_uniq: deque[float] = deque(maxlen=n)
         self._h_react: deque[float] = deque(maxlen=n)
         self._h_audio: deque[float] = deque(maxlen=n)
+        self._h_mood: deque[float] = deque(maxlen=n)
+        self._h_lift: deque[float] = deque(maxlen=n)
         self._first_tick: float | None = None
         self._above_since: float | None = None
         self._open: Moment | None = None
@@ -70,6 +76,8 @@ class SpikeDetector:
         self.ticks: list[Tick] = []  # kept for tuning/replay; trim in live use
         self.keep_ticks = False
         self.boost = 1.0             # GTA 6 boost (D069), set by the live runner per status poll
+        self.gate = None             # DeadAirGate when features.dead_air_gate is on
+        self.rejected: list[tuple[Moment, str]] = []  # gated moments + reason (replay/tuning)
 
     def retune(self, params: DetectorParams, reaction_weights: dict[str, float]) -> None:
         """Swap weights live (Streamer Brain) without losing the rolling baseline."""
@@ -80,11 +88,14 @@ class SpikeDetector:
 
     # feed
     def add_message(self, ts: float, user: str, text: str) -> None:
-        self._msgs.append((ts, user.lower(), reaction_weight(text, self.reactions)))
+        self._msgs.append((ts, user.lower(), reaction_weight(text, self.reactions),
+                           mood_hits(text), lift_weight(text, self.lift)))
 
     def add_loudness(self, ts: float, lufs: float) -> None:
         if lufs > -70:  # ebur128 reports -inf / -120 on silence; treat as no sample
             self._loud.append((ts, lufs))
+        if self.gate is not None:
+            self.gate.add_loudness(ts, lufs)
 
     # core
     def _features(self, now: float):
@@ -99,10 +110,13 @@ class SpikeDetector:
         rate = sum(min(n, PER_USER_CAP) for n in per_user.values()) / self.p.burst_s
         uniq = float(len({m[1] for m in burst}))
         react = (sum(m[2] for m in burst) / len(burst)) if burst else 0.0
+        mood = (sum(1 for m in burst if m[3]) / len(burst)) if burst else 0.0
+        lift = (sum(m[4] for m in burst) / len(burst)) if burst else 0.0
         while self._loud and self._loud[0][0] < now - 3:
             self._loud.popleft()
         recent = [v for t, v in self._loud if t <= now]
         audio = recent[-1] if recent else None
+        self._mood_lift = (mood, lift)
         return rate, uniq, react, audio
 
     def tick(self, now: float) -> Moment | None:
@@ -113,6 +127,11 @@ class SpikeDetector:
         z_chat = _clamp(robust_z(rate, list(self._h_rate), self.p.rate_floor))
         z_uniq = _clamp(robust_z(uniq, list(self._h_uniq), 1.0))
         z_react = _clamp(robust_z(react, list(self._h_react), 0.15))
+        mood, lift = self._mood_lift
+        z_mood = _clamp(robust_z(mood, list(self._h_mood), 0.1))
+        z_lift = _clamp(robust_z(lift, list(self._h_lift), 0.5)) if self.lift else 0.0
+        self._h_mood.append(mood)
+        self._h_lift.append(lift)
         z_audio = 0.0
         if audio is not None:
             z_audio = _clamp(robust_z(audio, list(self._h_audio), 3.0))
@@ -121,11 +140,12 @@ class SpikeDetector:
         self._h_uniq.append(uniq)
         self._h_react.append(react)
         score = (self.p.w_chat * z_chat + self.p.w_unique * z_uniq
-                 + self.p.w_reaction * z_react + self.p.w_audio * z_audio)
+                 + self.p.w_reaction * z_react + self.p.w_audio * z_audio
+                 + self.p.w_mood * z_mood + self.p.w_lift * z_lift)
         if score > 0:
             score *= self.boost
         if self.keep_ticks:
-            self.ticks.append(Tick(now, score, z_chat, z_uniq, z_react, z_audio, rate))
+            self.ticks.append(Tick(now, score, z_chat, z_uniq, z_react, z_audio, rate, z_mood, z_lift))
 
         warm = now - self._first_tick >= self.p.warmup_s
         above = warm and score >= self.p.threshold
@@ -142,7 +162,8 @@ class SpikeDetector:
                                     features={"rate": rate, "uniq": uniq, "react": react,
                                               "audio_lufs": audio, "z_chat": z_chat,
                                               "z_uniq": z_uniq, "z_react": z_react,
-                                              "z_audio": z_audio, "boost": self.boost})
+                                              "z_audio": z_audio, "z_mood": z_mood,
+                                              "z_lift": z_lift, "boost": self.boost})
                 self._last_start = self._above_since
         else:
             self._above_since = None
@@ -156,6 +177,21 @@ class SpikeDetector:
         m.window_start = m.start_ts - self.p.pre_s
         m.window_end = max(m.start_ts + self.p.post_s, m.last_above_ts + 5.0)
         m.window_end = min(m.window_end, m.window_start + MAX_WINDOW_S)
+        return self._gate(m)
+
+    def _gate(self, m: Moment) -> Moment | None:
+        if self.gate is None:
+            return m
+        if not self.gate.started(m.start_ts):
+            self.rejected.append((m, "dead air: before show_start"))
+            return None
+        mult = self.gate.multiplier(m.peak_ts, shout=m.features.get("z_audio", 0.0) >= 2.0)
+        m.features["dead_air_mult"] = mult
+        if mult < 1.0:
+            m.peak_score *= mult
+            if m.peak_score < self.p.threshold:
+                self.rejected.append((m, "dead air: quiet around peak"))
+                return None
         return m
 
     def flush(self, now: float) -> Moment | None:

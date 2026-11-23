@@ -1,4 +1,4 @@
--- Polls /api/live every minute while no dashboard is open (D093 follow-up). Run once in the SQL editor,
+-- Polls /api/live every minute while no dashboard is open (D100 follow-up). Run once in the SQL editor,
 -- AFTER the dashboard is deployed and CRON_SECRET is set on Vercel. Not a migration: it holds a host name.
 --
 -- 1) Store the same CRON_SECRET in Vault yourself (Dashboard > Vault, name: clipp_cron_secret). Never paste

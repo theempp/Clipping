@@ -6,7 +6,7 @@ import { compact } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
 import { fmtViewers, liveFor, rosterSections, streamerHue, streamerViews, type StreamerView } from "@/lib/view";
 
-/** Every streamer on the roster, Lacy first (D091), then live, then A-Z. Live numbers update in place. */
+/** Every streamer on the roster, Lacy first (D098), then live, then A-Z. Live numbers update in place. */
 export default function Streamers() {
   const { snap } = useStore();
   const now = useNow(1000);

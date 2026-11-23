@@ -1,4 +1,4 @@
-"""Streamer Brain (D089/D092): Zo's per-streamer sliders and chat words from the dashboard.
+"""Streamer Brain (D089/D099): Zo's per-streamer sliders and chat words from the dashboard.
 
 Sliders are 0-100 with dashboard defaults. Each one scales a detector weight by value / default,
 so an untouched brain leaves the channel's tuned config exactly as it is.

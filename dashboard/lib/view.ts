@@ -41,7 +41,7 @@ export function heatStrip(cands: Candidate[], keys: string[], now: number, steps
 /** A platform row counts as current for this long; older rows fall back to the PC heartbeat. */
 export const LIVE_FRESH_S = 300;
 
-/** Lacy leads every streamer list (D091), then live first, then A-Z. */
+/** Lacy leads every streamer list (D098), then live first, then A-Z. */
 export const FIRST_SLUG = "lacy";
 
 export function streamerViews(snap: Snapshot, now: number): StreamerView[] {
