@@ -40,6 +40,13 @@ def _setup(tmp_path, state="approved", daily_cap=10):
     return sb
 
 
+def test_pick_destinations_follows_posted_platforms():
+    ds = [{"id": "yt", "platform": "youtube", "streamer_id": None}, {"id": "x", "platform": "x", "streamer_id": None}]
+    assert {d["id"] for d in pick_destinations({"post_platforms": ["x"]}, ds, [])} == {"x"}
+    assert pick_destinations({"post_platforms": []}, ds, []) == []
+    assert {d["id"] for d in pick_destinations({}, ds, [])} == {"yt", "x"}
+
+
 def test_pick_destinations_prefers_dedicated():
     ds = [{"id": "shared", "platform": "youtube", "streamer_id": None},
           {"id": "lacy", "platform": "youtube", "streamer_id": "s-lacy"},

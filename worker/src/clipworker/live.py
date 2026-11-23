@@ -106,8 +106,8 @@ class LiveRunner:
         self.clock = Clock()
         self.det = {c.key: self._detector(c) for c in settings.channels}
         self.live: set[str] = set()
-        # Wake Up (D055): with Supabase the dashboard switch decides; offline runs stay on.
-        self.awake: bool = supabase is None
+        # Always on (D116 supersedes D055's Wake Up switch): the worker watches whenever it runs.
+        self.awake: bool = True
         self.caps: dict[str, Capture] = {}
         self._gap: dict[str, int] = {}
         self._pending: list[tuple] = []
@@ -167,7 +167,7 @@ class LiveRunner:
                     self.det[key].boost = b
                 if pick.skipped:
                     log.info("capture cap %d reached; not capturing %s", self.s.max_channels, pick.skipped)
-                self.live = pick.capture if self.awake else set()
+                self.live = pick.capture
                 self._sync_captures()
             except Exception as e:  # noqa: BLE001
                 log.warning("status poll failed: %s", e)
@@ -284,26 +284,9 @@ class LiveRunner:
             log.info("streamer brain applied: %s", applied or "none (config values)")
             self._brain_seen = applied
 
-    def sync_awake(self):
-        """Read the Wake Up switch. Asleep = stop captures and detection; jobs already
-        rendering, in review or publishing keep going. Read errors keep the last value."""
-        try:
-            on = self.sb.awake()
-        except Exception as e:  # noqa: BLE001
-            log.warning("wake read failed: %s", e)
-            return
-        if on is None or on == self.awake:
-            return
-        self.awake = on
-        log.info("dashboard switched %s", "awake" if on else "asleep")
-        if not on:
-            self.live = set()
-            self._sync_captures()
-
     def heartbeat(self):
         if self.sb is None:
             return
-        self.sync_awake()
         depth = {s: n for s, n in self.store.db.execute(
             "SELECT stage, count(*) FROM jobs WHERE stage NOT IN ('uploaded','dropped') GROUP BY stage")}
         self.sb.heartbeat(WORKER_ID, {"version": __version__, "awake": self.awake, "live": sorted(self.live),
@@ -336,6 +319,7 @@ class LiveRunner:
         tasks = [self.poll_status(), self.tick_loop(),
                  self.every(2, self.pipe.run_once, "pipeline"),
                  self.every(30, self.pipe.process_revisions, "revisions"),
+                 self.every(60, self.pipe.learn_recipes, "recipe learning"),
                  self.every(15, self.heartbeat, "heartbeat"),
                  self.every(60, self.prune, "prune")]
         if self.publisher is not None and not self.s.features.dry_run:
@@ -344,6 +328,10 @@ class LiveRunner:
             tasks.append(self.every(60, self.sync_brain, "streamer brain"))
         if self.s.features.viewer_clips:
             tasks.append(self.poll_viewer_clips())
+        if self.s.features.links and self.sb is not None:  # paste-a-link jobs (D115), one at a time
+            from .links import build_runner
+            links = build_runner(self.s, self.sb, self.pipe.transcriber, self.pipe.judge)
+            tasks.append(self.every(15, links.run_once, "links"))
         if self.s.features.clip_that and self.sb is not None:
             tasks.append(self.every(5, lambda: self.pipe.take_clip_requests(self.clock.now(), self.live),
                                     "clip_that"))
@@ -360,6 +348,5 @@ class LiveRunner:
                                ignore_duplicates=True)
             except Exception as e:  # noqa: BLE001
                 log.warning("streamer sync failed: %s", e)
-            self.sync_awake()
         with keep_awake():
             await asyncio.gather(*tasks)

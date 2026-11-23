@@ -44,7 +44,8 @@ def output_fps(src: float) -> int:
 def video_filter(layout: Layout | None, captions_file: str | None, zooms: list[float] | None = None,
                  zoom: ZoomParams | None = None, fps: int = 30,
                  centres: list[tuple[float, float, float]] | None = None,
-                 duration: float | None = None, crop_x: float | None = None) -> str:
+                 duration: float | None = None, crop_x: float | None = None,
+                 swap: tuple[str, float, float] | None = None) -> str:
     moving = bool(zoom) and (bool(zooms) or (zoom.drift > 0 and zoom.on))
     zp = ((lambda w, h: "," + zoompan_filter(zooms or [], zoom, w, h, fps, duration))
           if moving else (lambda w, h: ""))
@@ -61,11 +62,19 @@ def video_filter(layout: Layout | None, captions_file: str | None, zooms: list[f
         fh = layout.facecam_height
         gh = H - fh
         f, p = layout.facecam, layout.gameplay
-        g = (f"[0:v]split=2[a][b];"
+        n_in = 3 if swap else 2
+        g = (f"[0:v]split={n_in}[a][b]" + ("[c]" if swap else "") + ";"
              f"[a]crop={f.w}:{f.h}:{f.x}:{f.y},scale={W}:{fh}:force_original_aspect_ratio=increase,"
              f"crop={W}:{fh},setsar=1{zp(W, fh)}[top];"
              f"[b]crop={p.w}:{p.h}:{p.x}:{p.y},scale={W}:{gh}:force_original_aspect_ratio=increase,"
              f"crop={W}:{gh},setsar=1[bot];[top][bot]vstack=inputs=2[v]")
+        if swap:  # D114 layout swap: full-frame face or game for a moment, picture cropped to cover, never zoomed
+            mode, at, length = swap
+            r = f if mode == "face" else p
+            g = (g[:-3] + "[vs];"
+                 f"[c]crop={r.w}:{r.h}:{r.x}:{r.y},scale={W}:{H}:force_original_aspect_ratio=increase,"
+                 f"crop={W}:{H},setsar=1[full];"
+                 f"[vs][full]overlay=0:0:enable='between(t,{at:.3f},{at + length:.3f})'[v]")
     if captions_file:
         g = g[:-3] + "[v0];[v0]ass=" + captions_file + "[v]"
     return g
@@ -76,12 +85,12 @@ def render_command(src: Path, out: Path, t_in: float, t_out: float, layout: Layo
                    zooms: list[float] | None = None, zoom: ZoomParams | None = None,
                    centres: list[tuple[float, float, float]] | None = None,
                    sfx: SfxParams | None = None, whoosh: Path | None = None,
-                   crop_x: float | None = None) -> list[str]:
+                   crop_x: float | None = None, swap: tuple[str, float, float] | None = None) -> list[str]:
     a_graph, needs_sfx = audio_filter(zooms or [], sfx if whoosh else None)
     extra_in = ["-i", str(whoosh)] if needs_sfx else []
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
             "-ss", f"{t_in:.3f}", "-to", f"{t_out:.3f}", "-i", str(src), *extra_in,
-            "-filter_complex", video_filter(layout, captions_file, zooms, zoom, fps, centres, t_out - t_in, crop_x)
+            "-filter_complex", video_filter(layout, captions_file, zooms, zoom, fps, centres, t_out - t_in, crop_x, swap)
             + ";" + a_graph,
             "-map", "[v]", "-map", "[a]",
             "-r", str(fps), "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p",
@@ -106,7 +115,8 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
                 manifest_extra: dict | None = None, ffmpeg: str = "ffmpeg",
                 ffprobe: str = "ffprobe", run=subprocess.run, zoom: ZoomParams | None = None,
                 track: bool = False, sfx: SfxParams | None = None,
-                crop_x: float | None = None, cuts: list | None = None) -> dict:
+                crop_x: float | None = None, cuts: list | None = None,
+                swap: tuple[str, float, float] | None = None) -> dict:
     if style is None:
         raise ValueError("caption_style missing: design values must come from references/ (D022); "
                          "ask Zo before rendering")
@@ -124,7 +134,7 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
     out = out_dir / "clip.mp4"
     # cwd=out_dir so the ass filter gets a bare filename (no Windows drive-colon escaping).
     run(render_command(Path(src).resolve(), out.resolve(), t_in, t_out, layout, "captions.ass", fps,
-                       ffmpeg, zooms, zoom, centres, sfx, whoosh, crop_x), check=True, cwd=str(out_dir))
+                       ffmpeg, zooms, zoom, centres, sfx, whoosh, crop_x, swap), check=True, cwd=str(out_dir))
     # Before/after on the dashboard: the same window of the untouched 16:9 stream, small and light.
     source_prev = out_dir / "source.mp4"
     run(source_preview_command(Path(src).resolve(), source_prev.resolve(), t_in, t_out, ffmpeg),
@@ -133,7 +143,7 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
     if drop:  # editor splits (D098): Zo dropped segments; cut both copies so before/after stays in step
         for f in (out, source_prev):
             tmp = f.with_name(f.stem + ".cut.mp4")
-            run(cut_command(f.resolve(), tmp.resolve(), drop, ffmpeg), check=True, cwd=str(out_dir))
+            run(cut_command(f.resolve(), tmp.resolve(), drop, dur, ffmpeg), check=True, cwd=str(out_dir))
             tmp.replace(f)
         dur -= sum(b - a for a, b in drop)
     thumb_t = min(max(0.0, hook_offset if hook_offset is not None else dur * 0.3), max(0.0, dur - 0.1))
@@ -142,7 +152,7 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
          "-frames:v", "1", "-q:v", "3", str(thumb)], check=True)
     manifest = {"clip_id": clip_id, "source": str(src), "window": [t_in, t_out], "fps": fps,
                 "layout": asdict(layout) if layout else None, "caption_version": CAPTION_VERSION,
-                "zooms": zooms, "shots": centres, "sfx": bool(whoosh), "source_preview": str(source_prev),
+                "zooms": zooms, "swap": list(swap) if swap else None, "shots": centres, "sfx": bool(whoosh), "source_preview": str(source_prev),
                 "motion": {"zoom_scale": zoom.scale if zoom else 1.0, "ease": zoom.ease if zoom else None,
                            "moments": zoom.moments if zoom else None, "drift": zoom.drift if zoom else 0.0,
                            "motion_version": MOTION_VERSION},
@@ -178,12 +188,25 @@ def output_cuts(cuts: list | None, t_in: float, t_out: float) -> list[tuple[floa
     return [(round(a, 3), round(b, 3)) for a, b in merged]
 
 
-def cut_command(src: Path, out: Path, drop: list[tuple[float, float]], ffmpeg: str = "ffmpeg") -> list[str]:
-    """Re-encode `src` without the `drop` ranges (frame-accurate select/aselect)."""
-    keep = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in drop)
+def cut_command(src: Path, out: Path, drop: list[tuple[float, float]], dur: float,
+                ffmpeg: str = "ffmpeg") -> list[str]:
+    """Re-encode `src` keeping everything except the `drop` ranges: trim each kept piece, then concat.
+    (trim/concat behaves the same on every ffmpeg build; select/aselect did not.)"""
+    keep, t = [], 0.0
+    for a, b in drop:
+        if a > t:
+            keep.append((t, a))
+        t = max(t, b)
+    if dur > t:
+        keep.append((t, dur))
+    parts, labels = [], ""
+    for i, (a, b) in enumerate(keep):
+        parts.append(f"[0:v]trim={a:.3f}:{b:.3f},setpts=PTS-STARTPTS[v{i}]")
+        parts.append(f"[0:a]atrim={a:.3f}:{b:.3f},asetpts=PTS-STARTPTS[a{i}]")
+        labels += f"[v{i}][a{i}]"
+    graph = ";".join(parts) + f";{labels}concat=n={len(keep)}:v=1:a=1[v][a]"
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
-            "-vf", f"select='not({keep})',setpts=N/FRAME_RATE/TB",
-            "-af", f"aselect='not({keep})',asetpts=N/SR/TB",
+            "-filter_complex", graph, "-map", "[v]", "-map", "[a]",
             "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "20",
             "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", str(out)]
 

@@ -15,3 +15,5 @@ psql -d clipp_test -f "$here/supabase_stub.sql"
 for f in "$here"/../migrations/*.sql; do psql -d clipp_test -f "$f"; done
 psql -d clipp_test -At -f "$here/core_test.sql"
 psql -d clipp_test -At -f "$here/pods_test.sql"
+# links_test reads the shared URL cases (docs/link_cases.json) as a psql variable
+psql -d clipp_test -At -v cases="$(cat "$here/../../docs/link_cases.json")" -f "$here/links_test.sql"

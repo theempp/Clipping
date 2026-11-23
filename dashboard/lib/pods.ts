@@ -17,7 +17,7 @@ export function hasAccess(a: Access | null): boolean {
   return !!a && (a.admin || a.pods.length > 0);
 }
 
-/** Wake Up controls are admin-only once pods are on (D108). Pods off = single-owner dashboard, always true. */
+/** Machine controls (brain tuning) are admin-only once pods are on (D108). Pods off = single-owner dashboard, always true. */
 export function isAdminView(podsOn: boolean, a: Access | null): boolean {
   return !podsOn || a?.admin === true;
 }

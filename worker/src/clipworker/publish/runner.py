@@ -24,10 +24,15 @@ MAX_ATTEMPTS = 3
 
 
 def pick_destinations(clip: dict, destinations: list[dict], campaign_platforms: list[str]) -> list[dict]:
-    """Dedicated account for the clip's streamer wins per platform; else shared."""
+    """Dedicated account for the clip's streamer wins per platform; else shared.
+    `post_platforms` is what Zo picked when confirming the post (D116); unset (older clips or
+    before the post-platforms migration) = every active destination, as before."""
     out = {}
+    picked = clip.get("post_platforms")
     for d in destinations:
         if not d.get("active", True):
+            continue
+        if picked is not None and d["platform"] not in picked:
             continue
         if campaign_platforms and d["platform"] not in campaign_platforms:
             continue

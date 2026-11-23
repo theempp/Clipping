@@ -108,3 +108,9 @@ def test_audio_peaks_survive_a_broken_ffmpeg(tmp_path):
     def boom(*a, **k):
         raise OSError("no ffmpeg")
     assert audio_peaks(tmp_path / "x.mp4", run=boom) is None
+
+
+def test_editor_toolbox_keys():
+    o, _ = edit_overrides({"remove_tools": ["sfx_hit", "zoom", "slowmo_vignette"], "flashback": "approve"}, 0, 20)
+    assert o["remove_tools"] == ["sfx_hit", "slowmo_vignette"] and o["flashback_decision"] == "approve"
+    assert "flashback_decision" not in edit_overrides({"flashback": "yes"}, 0, 20)[0]

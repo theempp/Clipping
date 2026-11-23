@@ -46,14 +46,12 @@ test("week stats: 7 days, approve streak, approval rate, average score", () => {
 const hb = (secAgo: number, status: Heartbeat["status"]): Heartbeat =>
   ({ worker_id: "pc", seen_at: new Date(NOW - secAgo * 1000).toISOString(), status });
 
-test("pc state comes from the heartbeat, never from the switch alone", () => {
-  assert.equal(pcState(null, true, NOW), "offline");
-  assert.equal(pcState(hb(120, { awake: true, live: ["twitch:lacy"] }), true, NOW), "offline");
-  assert.equal(pcState(hb(5, { awake: false }), true, NOW), "waking");
-  assert.equal(pcState(hb(5, { awake: true, live: [] }), false, NOW), "sleeping");
-  assert.equal(pcState(hb(5, { awake: true, live: ["twitch:lacy"] }), true, NOW), "watching");
-  assert.equal(pcState(hb(5, { awake: true, live: [] }), true, NOW), "idle");
-  assert.equal(pcState(hb(5, { awake: false }), false, NOW), "asleep");
+test("pc state comes from the heartbeat only: always on, no sleep switch (D116)", () => {
+  assert.equal(pcState(null, NOW), "offline");
+  assert.equal(pcState(hb(120, { live: ["twitch:lacy"] }), NOW), "offline");
+  assert.equal(pcState(hb(5, { live: ["twitch:lacy"] }), NOW), "watching");
+  assert.equal(pcState(hb(5, { live: [] }), NOW), "idle");
+  assert.equal(pcState(hb(5, { awake: false, live: ["twitch:lacy"] }), NOW), "watching"); // an old worker's flag is ignored
 });
 
 test("30-minute countdown runs from the deadline and closes at zero", () => {
@@ -96,7 +94,7 @@ test("demo data has a live queue, an open countdown and a heartbeat", () => {
   const d = demoSnapshot(NOW);
   assert.ok(rankQueue(d.clips).length >= 5);
   assert.equal(openSubmissions(d.submissions, NOW).length, 1);
-  assert.equal(pcState(d.heartbeat, d.control.awake, NOW), "watching");
+  assert.equal(pcState(d.heartbeat, NOW), "watching");
 });
 
 test("editor note lists only what changed (untouched zoom and headline are left out)", () => {
@@ -104,4 +102,20 @@ test("editor note lists only what changed (untouched zoom and headline are left 
   assert.equal(editNote(base, base), "Editor: no changes yet");
   assert.equal(editNote({ ...base, trim_in: 2 }, base), "Editor: trim 2.0s-30.0s");
   assert.equal(editNote({ ...base, zoom: 1.3, headline: "New one" }, base), 'Editor: zoom 130% · headline "New one"');
+});
+
+test("editor sends toolbox removals and the flashback decision (D113, D114)", async () => {
+  const { editPayload, clipRecipe } = await import("../lib/logic.ts");
+  const base: EditPlan = { trim_in: 0, trim_out: 30, crop_x: 0.5, zoom: 1, headline: "H", caption_style: "words", splits: [], emphasis_words: [] };
+  assert.deepEqual(editPayload(base, base), {});
+  const p = editPayload({ ...base, remove_tools: ["sfx_hit"], flashback: "approve" }, base);
+  assert.deepEqual(p, { remove_tools: ["sfx_hit"], flashback: "approve" });
+  assert.equal(editNote({ ...base, remove_tools: ["sfx_hit"], flashback: "drop" }, base), "Editor: remove sfx_hit · flashback dropped");
+  const c = clip({ manifest: { recipe: { tools: ["hard_cut", "headline_box", "slowmo_vignette"], caption_style: "headline", flashback: null },
+    flashback_proposal: { reason: "Same topic", source_moment: "job 1" } } });
+  const r = clipRecipe(c)!;
+  assert.deepEqual(r.tools, ["slowmo_vignette"]);
+  assert.equal(r.flashbackOn, false);
+  assert.equal(r.proposal?.reason, "Same topic");
+  assert.equal(clipRecipe(clip({})), null);
 });

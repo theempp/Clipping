@@ -7,6 +7,9 @@
   clipworker publish-once           one publisher pass (approved clips only)
   clipworker discord                campaign watcher bot
   clipworker longform-once          plan/script/voice/render/QA today's Zwoclipp long videos (D079-D082)
+  clipworker links                  run pasted dashboard links (link_jobs) until stopped (D115)
+  clipworker link URL [--streamer S] [--from 1:00:00 --to 1:30:00] [--max 6] [--full-frame]
+                                    queue one link from the command line (same review gate)
 """
 from __future__ import annotations
 
@@ -119,6 +122,15 @@ def _build(a, need_judge=True):
     return s, sb, store, pipe
 
 
+def _secs(v: str | None) -> int | None:
+    if not v:
+        return None
+    t = 0
+    for p in v.split(":"):
+        t = t * 60 + int(p)
+    return t
+
+
 def _publisher(sb, store, posting=None):
     import httpx
 
@@ -167,6 +179,14 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--chat", required=True, help="TwitchDownloaderCLI chat JSON")
     d.add_argument("--max", type=int, default=12, help="top N moments to cut")
     d.add_argument("--no-judge", action="store_true", help="heuristic cut, no Grok spend")
+    sub.add_parser("links", help="run pasted dashboard links until stopped (D115)")
+    lk = sub.add_parser("link", help="queue one link (lands in Review like a dashboard paste)")
+    lk.add_argument("url")
+    lk.add_argument("--streamer", help="roster slug; default: detected from the link")
+    lk.add_argument("--from", dest="start", help="start, h:mm:ss or seconds")
+    lk.add_argument("--to", dest="end", help="end, h:mm:ss or seconds")
+    lk.add_argument("--max", type=int, default=6, help="most clips to cut (Grok ~$0.0025 each)")
+    lk.add_argument("--full-frame", action="store_true", help="IRL / full cam: face-tracked full frame")
     bl = sub.add_parser("brain-learn", help="labels -> new brain version (features.brain)")
     bl.add_argument("--channel", required=True)
     a = p.parse_args(argv)
@@ -245,6 +265,23 @@ def main(argv: list[str] | None = None) -> int:
             for pl in r.plans():
                 print(f"{pl.id} {pl.tags.format}/{pl.tags.pacing}/{pl.tags.caption_style}/{pl.tags.voice}/"
                       f"{pl.tags.layout}: {pl.state}" + (f" ({pl.error})" if pl.error else ""))
+            return 0
+        if a.cmd == "links":
+            import time as _time
+            s, sb, store, pipe = _build(a)
+            from .links import build_runner
+            runner = build_runner(s, sb, pipe.transcriber, pipe.judge)
+            while True:
+                if not runner.run_once():
+                    _time.sleep(10)
+        if a.cmd == "link":
+            s, sb, _, _ = _build(a, need_judge=False)
+            r = sb.rpc("request_link_clips_worker", {"p_url": a.url, "p_streamer": a.streamer,
+                                                     "p_start": _secs(a.start), "p_end": _secs(a.end),
+                                                     "p_max": a.max, "p_full_frame": a.full_frame})
+            job = r["job"]
+            print(("already queued: " if r["duplicate"] else "queued: ") + f"{job['id']} ({job['status']}); "
+                  f"est. Grok ${float(job['est_usd']):.4f}. Runs in `clipworker live` (features.links) or `clipworker links`.")
             return 0
         if a.cmd == "dryrun-vod":
             return cmd_dryrun(a)
