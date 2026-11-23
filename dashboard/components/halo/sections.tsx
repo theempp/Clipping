@@ -1,7 +1,8 @@
 "use client";
 // Halo Pro review page sections (D116). Every widget reads real rows; missing data shows an empty state.
 import Link from "next/link";
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Scrubber, hookRange, playerKeys, useVideoCtl } from "./scrub";
 import { rankQueue, pcState } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
 import type { Clip } from "@/lib/types";
@@ -97,12 +98,53 @@ export function Pocket() {
 
 /* ---------------- hero ---------------- */
 
+/** The hero's 9:16 player and scrub timeline. Its own component so the 60 fps playhead only re-renders this. */
+function HeroPlayer({ clip, src, poster, rank, badges, hook, onStep }: {
+  clip: Clip; src: string | null; poster: string | null; rank: number; badges: string[]; hook: [number, number] | null; onStep: (d: 1 | -1) => void;
+}) {
+  const ui = useReview();
+  const vref = useRef<HTMLVideoElement>(null);
+  const ctl = useVideoCtl(vref, src);
+  const live = useRef({ ctl, onStep });
+  live.current = { ctl, onStep };
+  // Player keys work anywhere on the page while no dialog or editor is open. N / P step through the queue.
+  useEffect(() => {
+    if (ui.edit) return;
+    const h = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (e.ctrlKey || e.metaKey || e.altKey || el.closest("input,textarea,select,button,a,[role=slider],[contenteditable]") || document.querySelector(".z-pop")) return;
+      const k = e.key.toLowerCase();
+      if (k === "n" || k === "p") { e.preventDefault(); live.current.onStep(k === "n" ? 1 : -1); return; }
+      playerKeys(live.current.ctl, e);
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [ui.edit]);
+  return (
+    <>
+      <div className="z-p9">
+        {src ? <video ref={vref} key={src} src={src} poster={poster ?? undefined} autoPlay muted={ctl.muted} loop={ctl.loop} playsInline onClick={ctl.toggle} /> : <span className="z-ph9">Loading clip…</span>}
+        <span className="z-tp">{rank === 0 && <span className="z-rk">#1 PICK</span>}{badges.includes("clip_that") ? <span>CLIP THAT</span> : clip.channel_key.includes(":") && <span>LIVE CLIP</span>}</span>
+        {src && ctl.paused && <button type="button" className="z-bigplay" aria-label="Play" onClick={ctl.toggle}><Ico n="play" size={26} sw={2.2} /></button>}
+      </div>
+      {src ? <Scrubber ctl={ctl} hook={hook} /> : <div className="z-scrub z-ghost" aria-hidden="true" />}
+    </>
+  );
+}
+
 export function Hero({ clip, rank }: { clip: Clip | null; rank: number }) {
   const { snap, pending } = useStore();
   const ui = useReview();
+  const { queue } = useQueue();
   const now = useNow(30_000);
   const src = useMedia(clip?.storage_path);
   const poster = useMedia(clip?.thumb_path);
+  const pos = clip ? queue.findIndex((c) => c.id === clip.id) : -1;
+  const stepQueue = (d: 1 | -1) => {
+    if (queue.length < 2) return;
+    const next = queue[((pos < 0 ? 0 : pos) + d + queue.length) % queue.length];
+    ui.pinHero(next.id);
+  };
   if (!clip) {
     return (
       <section className="z-hero z-p" style={css({ "--i": 1 })} aria-label="Clip waiting for approval">
@@ -127,21 +169,26 @@ export function Hero({ clip, rank }: { clip: Clip | null; rank: number }) {
     <section className={`z-hero z-p${on ? " z-approved" : ""}`} style={css({ "--i": 1 })} aria-label="Clip waiting for approval">
       <div className="z-bgv" aria-hidden="true" style={css({ "--bgimg": poster ? `url("${poster}")` : "none" })} />
       <div className="z-vidcol">
-        <div className="z-p9">
-          {src ? <video key={src} src={src} poster={poster ?? undefined} autoPlay muted loop playsInline /> : <span className="z-ph9">Loading clip…</span>}
-          <span className="z-tp">{rank === 0 && <span className="z-rk">#1 PICK</span>}{badges.includes("clip_that") ? <span>CLIP THAT</span> : clip.channel_key.includes(":") && <span>LIVE CLIP</span>}</span>
-        </div>
+        <HeroPlayer clip={clip} src={src} poster={poster} rank={pos < 0 ? rank : pos} badges={badges} hook={hookRange(hookWin)} onStep={stepQueue} />
         {heat ? (
           <>
-            <div className="z-heat" aria-label={`Chat heat across the clip, ${heat.ratio}x spike`}>
+            <div className="z-heat" aria-label={`Chat heat in the 10 minutes around the moment, ${heat.ratio}x spike`}>
               {heat.h.map((h, i) => <i key={i} className={heat.spike[i] ? "z-s" : ""} style={{ height: `${Math.max(8, h * 100)}%` }} />)}
             </div>
-            <div className="z-heatl"><span>chat heat</span><span>{heat.ratio}x spike</span></div>
+            <div className="z-heatl"><span>chat heat · 10 min around it</span><span>{heat.ratio}x spike</span></div>
           </>
         ) : <><div className="z-heat z-none">no chat readings for this moment</div><div className="z-heatl"><span>chat heat</span><span>—</span></div></>}
       </div>
       <div className="z-hinfo">
-        <span className="z-lbl">{sourceLine(clip, who.name, now)}</span>
+        <div className="z-hnav">
+          <span className="z-lbl">{sourceLine(clip, who.name, now)}</span>
+          <span className="z-sp" />
+          {queue.length > 1 && <>
+            <span className="z-mut z-sm z-mono">{pos < 0 ? "—" : pos + 1} / {queue.length}</span>
+            <button type="button" className="z-ib" aria-label="Previous clip" title="Previous clip (P)" onClick={() => stepQueue(-1)}><Ico n="back" size={14} /></button>
+            <button type="button" className="z-ib z-flip" aria-label="Next clip" title="Next clip (N)" onClick={() => stepQueue(1)}><Ico n="back" size={14} /></button>
+          </>}
+        </div>
         <h1>{clip.title ?? clip.job_id}</h1>
         <div className="z-hst">
           {ui.edited.has(clip.id) && <span className="z-tag z-ed">Edited by you · saved</span>}
@@ -178,11 +225,19 @@ function QueueRow({ c, i }: { c: Clip; i: number }) {
   const thumb = useMedia(c.thumb_path);
   const [hover, setHover] = useState(false);
   const vid = useMedia(hover ? c.storage_path : null);
+  const { canReview, pending } = useStore();
   const who = nameOf(snap, c);
   const s = subScores(c);
   const on = ui.staged.has(c.id);
+  const can = canReview(c) && c.state === "pending_review" && pending?.clip.id !== c.id;
   return (
-    <li>
+    <li className="z-qli">
+      <span className="z-qact">
+        <button type="button" aria-label="Play in the main player" title="Play in the main player" onClick={() => ui.pinHero(c.id)}><Ico n="play" size={12} sw={2.4} /></button>
+        <button type="button" className={on ? "z-on" : ""} aria-pressed={on} disabled={!can} aria-label={on ? "Take approval back" : "Approve"} title={on ? "Approved · click to take back" : "Approve"}
+          onClick={() => { ui.stage(c.id, !on); ui.toast(on ? "Approval taken back." : "Approved. Post it from the queue header or the hero."); }}><Ico n="check" size={13} sw={2.6} /></button>
+        <button type="button" disabled={!can} aria-label="Edit clip" title="Edit clip" onClick={() => ui.openEditor(c.id)}><Ico n="edit" size={12} /></button>
+      </span>
       <button type="button" className={`z-qi${on ? " z-done" : ""}`} style={css({ "--d": `${i * 45}ms`, "--c": streamerColor(who.slug) })}
         onClick={() => ui.openPop(c.id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} aria-label={`Open ${c.title ?? c.job_id}`}>
         <span className="z-qth">{thumb ? <img src={thumb} alt="" /> : <span className="z-ph9" />}
@@ -200,16 +255,27 @@ function QueueRow({ c, i }: { c: Clip; i: number }) {
   );
 }
 
+const SORTS = [["best", "Best first"], ["new", "Newest"], ["old", "Oldest"], ["short", "Shortest"]] as const;
+type Sort = (typeof SORTS)[number][0];
+
 export function Queue({ queue, rest }: { queue: Clip[]; rest: Clip[] }) {
   const { snap } = useStore();
+  const ui = useReview();
   const now = useNow(30_000);
   const [who, setWho] = useState<string | null>(null);
+  const [sort, setSort] = useState<Sort>("best");
   const sum = queueSummary(queue, now);
   const names = snap.streamers.filter((s) => queue.some((c) => c.streamer_id === s.id));
-  const list = who ? rest.filter((c) => c.streamer_id === who) : rest;
+  const picked = who ? rest.filter((c) => c.streamer_id === who) : rest;
+  const list = sort === "best" ? picked : [...picked].sort((a, b) => sort === "new" ? b.created_at.localeCompare(a.created_at)
+    : sort === "old" ? a.created_at.localeCompare(b.created_at) : (a.duration_s ?? 1e9) - (b.duration_s ?? 1e9));
+  const staged = queue.filter((c) => ui.staged.has(c.id)).length;
+  const sortIdx = SORTS.findIndex(([k]) => k === sort);
   return (
     <section className="z-queue z-p" id="queue" style={css({ "--i": 2 })} aria-label="Queue">
-      <div className="z-qh"><h2>Queue</h2><span className="z-n">{queue.length}</span><span className="z-sp" /><span className="z-lbl">Best first</span></div>
+      <div className="z-qh"><h2>Queue</h2><span className="z-n">{queue.length}</span><span className="z-sp" />
+        {staged > 0 && <button type="button" className="z-qpost" onClick={() => ui.askPost(queue.filter((c) => ui.staged.has(c.id)).map((c) => c.id))}>Post {staged} approved</button>}
+        <button type="button" className="z-lbl z-qsort" title="Change the order" onClick={() => setSort(SORTS[(sortIdx + 1) % SORTS.length][0])}>{SORTS[sortIdx][1]} <Ico n="list" size={12} /></button></div>
       <div className="z-qsum"><div><b>{sum.waiting}</b><small>waiting</small></div><div><b>{sum.avg ?? "—"}</b><small>avg score</small></div><div><b>{sum.fresh}</b><small>new · 15 min</small></div></div>
       {names.length > 1 && (
         <div className="z-qf" role="group" aria-label="Filter by streamer">

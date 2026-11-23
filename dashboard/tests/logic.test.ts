@@ -119,3 +119,51 @@ test("editor sends toolbox removals and the flashback decision (D113, D114)", as
   assert.equal(r.proposal?.reason, "Same topic");
   assert.equal(clipRecipe(clip({})), null);
 });
+
+import { keptLength, pieces, removeSplit, retrim, splitAt, toggleDrop, droppedStarts } from "../lib/logic.ts";
+const plan0 = (): EditPlan => ({ trim_in: 0, trim_out: 20, crop_x: 0.5, zoom: 1, headline: "H", caption_style: "words", splits: [], emphasis_words: [], drop: [] });
+
+test("editor: split, drop, restore, never drop everything", () => {
+  let p = splitAt(plan0(), 5)!;
+  p = splitAt(p, 12)!;
+  assert.deepEqual(pieces(p), [[0, 5], [5, 12], [12, 20]]);
+  assert.equal(splitAt(p, 5.1), null, "too close to a split");
+  assert.equal(splitAt(p, 0.1), null, "too close to the edge");
+  p = toggleDrop(p, 5);
+  assert.deepEqual(droppedStarts(p), [5]);
+  assert.equal(keptLength(p), 13);
+  p = toggleDrop(toggleDrop(p, 0), 12);
+  assert.deepEqual(droppedStarts(p).sort(), [0, 5], "last kept piece stays");
+  p = toggleDrop(p, 0);
+  assert.deepEqual(droppedStarts(p), [5]);
+});
+
+test("editor: dropped state survives a split, a merge and a trim", () => {
+  let p = toggleDrop(splitAt(plan0(), 10)!, 10);
+  p = splitAt(p, 15)!; // splits the dropped piece: both halves stay dropped
+  assert.deepEqual(droppedStarts(p), [10, 15]);
+  p = removeSplit(p, 15);
+  assert.deepEqual(droppedStarts(p), [10]);
+  p = retrim(p, 2, 18, 20);
+  assert.deepEqual(pieces(p), [[2, 10], [10, 18]]);
+  assert.deepEqual(droppedStarts(p), [10]);
+  assert.match(editNote(p, plan0()), /drop 10\.0s-18\.0s/);
+});
+
+import { medianReviewMin, streamerTable, toCsv } from "../lib/logic.ts";
+import type { Streamer } from "../lib/types.ts";
+
+test("stats: per-streamer table, review speed, csv", () => {
+  const s = [{ id: "s1", display_name: "Lacy" }, { id: "s2", display_name: "Nobody" }] as Streamer[];
+  const cs = [
+    clip({ id: "a", streamer_id: "s1", state: "published", score_10: 8, duration_s: 20, reviewed_at: "2026-11-20T17:10:00Z" }),
+    clip({ id: "b", streamer_id: "s1", state: "rejected", score_10: 6, duration_s: 30, reviewed_at: "2026-11-20T17:30:00Z" }),
+    clip({ id: "c", streamer_id: "s1", state: "pending_review" }),
+  ];
+  const [r] = streamerTable(cs, s);
+  assert.equal(streamerTable(cs, s).length, 1, "streamers with no clips are left out");
+  assert.deepEqual([r.made, r.waiting, r.approved, r.posted, r.rejected, r.rate, r.avgScore, r.avgLen], [3, 1, 1, 1, 1, 0.5, 7, 25]);
+  assert.equal(medianReviewMin(cs), 30);
+  assert.equal(medianReviewMin([]), null);
+  assert.equal(toCsv([["a", 1, null], ['say "hi", ok', 2, 3]]), 'a,1,\n"say ""hi"", ok",2,3');
+});

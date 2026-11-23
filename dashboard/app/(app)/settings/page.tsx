@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { Avatar } from "@/components/Avatar";
 import { BrainWeights } from "@/components/Brain";
 import { LearnedRules } from "@/components/LearnedRules";
+import { RATES } from "@/components/halo/scrub";
 import { PC_NAME } from "@/lib/env";
+import { usePrefs } from "@/lib/prefs";
 import { ago, pcState } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
 import { BUDGET_USD, monthSpend, ownChannels, streamerViews } from "@/lib/view";
@@ -59,6 +61,7 @@ export default function Settings() {
           </section>
 
           <TikTokChannel />
+          <PlayerPrefs />
         </div>
 
         <div className="stack">
@@ -85,6 +88,41 @@ export default function Settings() {
         </div>
       </div>
     </>
+  );
+}
+
+const SHORTCUTS: [string, string, string][] = [
+  ["Review", "Space / K", "Play or pause the clip"], ["Review", "J L or ← →", "Back / forward 1 s (Shift: 5 s)"], ["Review", ", .", "One frame back / forward"],
+  ["Review", "M", "Sound on / off"], ["Review", "N / P", "Next / previous clip in the queue"], ["Review", "U or Ctrl+Z", "Undo a post or reject during the countdown"],
+  ["Editor", "I / O", "Start / end at the playhead"], ["Editor", "S", "Split at the playhead"], ["Editor", "Del", "Delete or restore the selected piece"],
+  ["Editor", "Ctrl+Z / Ctrl+Shift+Z", "Undo / redo"], ["Editor", "?", "Show the shortcut panel"],
+];
+
+/** Browser-only player preferences (lib/prefs.ts). */
+function PlayerPrefs() {
+  const [p, set] = usePrefs();
+  return (
+    <section className="glass" id="player" aria-label="Player">
+      <div className="hd"><h3>Player</h3><span className="r">this browser only</span></div>
+      <div className="set-row"><div className="tx"><b>Sound on by default</b><span>Review clips start with sound. If the browser blocks it, the clip starts muted; click once to unmute.</span></div>
+        <div className="seg" role="group" aria-label="Sound on by default">
+          <button type="button" className={!p.sound ? "on" : ""} aria-pressed={!p.sound} onClick={() => set({ sound: false })}>Muted</button>
+          <button type="button" className={p.sound ? "on" : ""} aria-pressed={p.sound} onClick={() => set({ sound: true })}>Sound on</button>
+        </div></div>
+      <div className="set-row"><div className="tx"><b>Playback speed</b><span>Starting speed for the review players and the editor.</span></div>
+        <div className="seg" role="group" aria-label="Playback speed">
+          {RATES.map((r) => <button key={r} type="button" className={p.rate === r ? "on" : ""} aria-pressed={p.rate === r} onClick={() => set({ rate: r })}>{r}x</button>)}
+        </div></div>
+      <div className="set-row"><div className="tx"><b>Loop clips</b><span>Review clips replay when they end. Off: they stop on the last frame.</span></div>
+        <div className="seg" role="group" aria-label="Loop clips">
+          <button type="button" className={p.loop ? "on" : ""} aria-pressed={p.loop} onClick={() => set({ loop: true })}>Loop</button>
+          <button type="button" className={!p.loop ? "on" : ""} aria-pressed={!p.loop} onClick={() => set({ loop: false })}>Play once</button>
+        </div></div>
+      <details className="kbd-list">
+        <summary>Keyboard shortcuts</summary>
+        <table className="tbl"><tbody>{SHORTCUTS.map(([w, k, d]) => <tr key={w + k}><td className="mut">{w}</td><td><kbd>{k}</kbd></td><td>{d}</td></tr>)}</tbody></table>
+      </details>
+    </section>
   );
 }
 
