@@ -73,7 +73,20 @@ NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon / publishable key>
 ```
 
-Only the anon (publishable) key goes here. The service-role key belongs to the worker's `.env` and must never be put in the dashboard. `.env.local` is git-ignored.
+Only the anon (publishable) key goes here. The service-role key belongs to the worker's `.env` and must never reach the browser. `.env.local` is git-ignored.
+
+**Live numbers (optional, server-only).** `POST /api/live` polls Twitch, Kick, YouTube and X and writes `live_stats`. It runs only on the server and needs these variables without a `NEXT_PUBLIC_` prefix (names are in `.env.example`; values never go in git, notes or screenshots):
+
+| Variable | Used for |
+| --- | --- |
+| `SUPABASE_SERVICE_ROLE_KEY` | server-side writes to `live_stats`, `stat_snapshots`, streamer avatars |
+| `CRON_SECRET` | lets a scheduler call `/api/live` with `Authorization: Bearer …` |
+| `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET` | Helix live status, viewers, avatars |
+| `KICK_CLIENT_ID`, `KICK_CLIENT_SECRET` | Kick live status, viewers, avatars |
+| `YOUTUBE_API_KEY`, `YOUTUBE_CHANNEL_ID` | own YouTube channel numbers |
+| `X_BEARER_TOKEN`, `X_USERNAME` | own X account numbers |
+
+A source with a missing variable is skipped and shows "key not set"; one failing source never blanks the others. The open dashboard polls about once a minute; nothing polls while it is closed unless a scheduler calls `/api/live`. TikTok stays manual until the API audit. Requires the `live_stats` migration.
 
 ```powershell
 npm run dev

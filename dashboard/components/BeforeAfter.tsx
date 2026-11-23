@@ -51,8 +51,8 @@ export function BeforeAfter({ clip, children }: { clip: Clip | null; children?: 
   return (
     <div className="ba">
       <div className="ba-bar">
-        <span className="lbl">Before → after</span>
-        <button type="button" className={`btn sm${synced ? " light" : ""}`} disabled={!src.after} onClick={playBoth}>
+        <span className="r">Before → after</span>
+        <button type="button" className={`b${synced ? " ok" : ""}`} disabled={!src.after} onClick={playBoth}>
           <Icon name="play" /> {synced ? "Playing in sync" : "Play both"}
         </button>
       </div>

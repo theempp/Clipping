@@ -71,6 +71,13 @@ class SpikeDetector:
         self.keep_ticks = False
         self.boost = 1.0             # GTA 6 boost (D069), set by the live runner per status poll
 
+    def retune(self, params: DetectorParams, reaction_weights: dict[str, float]) -> None:
+        """Swap weights live (Streamer Brain) without losing the rolling baseline."""
+        if params.baseline_s != self.p.baseline_s:
+            raise ValueError("baseline_s cannot change live")
+        self.p = params
+        self.reactions = compile_reactions(reaction_weights)
+
     # feed
     def add_message(self, ts: float, user: str, text: str) -> None:
         self._msgs.append((ts, user.lower(), reaction_weight(text, self.reactions)))

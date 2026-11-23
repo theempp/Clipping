@@ -162,6 +162,25 @@ def test_revision_rerenders_and_returns_to_review(tmp_path, source_video):
 
 
 @needs_ffmpeg
+def test_revision_failing_qa_is_flagged_not_retried(tmp_path, source_video):
+    pipe, sb, store = _env(tmp_path, source_video)
+    pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    clip = sb.t["clips"][0]
+    sb.human(clip["id"], "revise")
+    sb.insert("revisions", {"clip_id": clip["id"], "kind": "trim", "note": "way too short",
+                            "payload": {"trim_in": 4.0, "trim_out": 4.5}, "resolved_at": None})
+    assert pipe.process_revisions() == 0
+    clip = sb.t["clips"][0]
+    assert clip["state"] == "revise"
+    f = clip["revise_failed"]
+    assert f["rev"] == 1 and f["reason"] and f["revisions"] == [sb.t["revisions"][0]["id"]]
+    renders = pipe.process_revisions()  # same notes: not re-rendered again
+    assert renders == 0 and sb.t["clips"][0]["revise_failed"] == f
+
+
+@needs_ffmpeg
 def test_revision_box_plain_english(tmp_path, source_video):
     pipe, sb, store = _env(tmp_path, source_video)
     pipe.on_moment(_moment())

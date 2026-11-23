@@ -1,11 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Mono, Inter_Tight, Poppins } from "next/font/google";
+import { Inter, Sora } from "next/font/google";
 import "./globals.css";
 
-// Fonts and colors come from the Stage references (D049): Poppins UI, DM Mono labels, Inter Tight on Cinema.
-const poppins = Poppins({ subsets: ["latin"], weight: ["300", "400", "500", "600"], variable: "--f-ui" });
-const mono = DM_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--f-mono" });
-const inter = Inter_Tight({ subsets: ["latin"], weight: ["300", "400", "500", "600"], variable: "--f-cin" });
+// Broadcast (concept C, D092): Sora for display numerals and headings, Inter for UI text.
+const sora = Sora({ subsets: ["latin"], weight: ["300", "400", "600", "700"], variable: "--f-display" });
+const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--f-body" });
 
 export const metadata: Metadata = {
   title: "Clipp",
@@ -16,11 +15,11 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "Clipp", statusBarStyle: "black-translucent" },
 };
 
-export const viewport: Viewport = { themeColor: "#000002", width: "device-width", initialScale: 1, viewportFit: "cover" };
+export const viewport: Viewport = { themeColor: "#0d0e12", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${poppins.variable} ${mono.variable} ${inter.variable}`}>
+    <html lang="en" className={`${sora.variable} ${inter.variable}`}>
       <body>{children}</body>
     </html>
   );

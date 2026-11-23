@@ -8,14 +8,18 @@ import { Icon } from "./Icon";
 const EXAMPLES = ["smoother zooms, only on big moments", "no zooms", "under 30 seconds", "no sound effects", "blue captions"];
 
 /** Deny / Revise / Approve, keys D / R / A. Revise opens the plain-English box in the flow, under the buttons. */
-export function ReviewDock({ clip }: { clip: Clip | null }) {
+export function ReviewDock({ clip, startOpen = false }: { clip: Clip | null; startOpen?: boolean }) {
   const { act } = useStore();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   const [text, setText] = useState("");
   const [all, setAll] = useState(true);  // D078: the fix also applies to every upcoming clip
   const area = useRef<HTMLTextAreaElement>(null);
+  const first = useRef(true);
 
-  useEffect(() => { setOpen(false); setText(""); }, [clip?.id]);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    setOpen(false); setText("");
+  }, [clip?.id]);
   useEffect(() => { if (open) area.current?.focus(); }, [open]);
 
   useEffect(() => {
@@ -39,23 +43,23 @@ export function ReviewDock({ clip }: { clip: Clip | null }) {
   };
 
   return (
-    <div className="dock-wrap">
-      <div className="dock" aria-label="Review actions">
-        <button type="button" disabled={!clip} className="deny" onClick={() => clip && act(clip, "reject")}>
-          <Icon name="x" /> Deny <kbd>D</kbd>
+    <div>
+      <div className="rdock-act" aria-label="Review actions">
+        <button type="button" disabled={!clip} className="b" onClick={() => clip && act(clip, "reject")}>
+          <Icon name="x" size={14} /> Deny <kbd>D</kbd>
         </button>
-        <button type="button" disabled={!clip} className={`rev${open ? " sel" : ""}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-          <Icon name="pen" /> Revise <kbd>R</kbd>
+        <button type="button" disabled={!clip} className={`b${open ? " sel" : ""}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          <Icon name="pen" size={14} /> Revise <kbd>R</kbd>
         </button>
-        <button type="button" disabled={!clip} className="approve" onClick={() => clip && act(clip, "approve")}>
-          <Icon name="check" /> Approve <kbd>A</kbd>
+        <button type="button" disabled={!clip} className="b ok" onClick={() => clip && act(clip, "approve")}>
+          <Icon name="check" size={14} /> Approve <kbd>A</kbd>
         </button>
       </div>
       {open && clip && (
         <div className="revise" role="group" aria-label="Ask for a revision">
-          <div className="revise-h">
-            <b>What should change?</b>
-            <button type="button" className="x" aria-label="Close" onClick={() => setOpen(false)}><Icon name="x" /></button>
+          <div className="hd" style={{ margin: 0 }}>
+            <h3>What should change?</h3>
+            <button type="button" className="b" aria-label="Close" onClick={() => setOpen(false)}><Icon name="x" size={14} /></button>
           </div>
           <textarea ref={area} value={text} maxLength={500} rows={3}
             placeholder="Say it in plain English. The clipper re-renders and sends it back here."
@@ -64,20 +68,20 @@ export function ReviewDock({ clip }: { clip: Clip | null }) {
               if (e.key === "Escape") setOpen(false);
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
             }} />
-          <div className="chips">
+          <div className="ex">
             {EXAMPLES.map((x) => (
-              <button type="button" key={x} onClick={() => setText((t) => (t ? `${t.replace(/[.\s]+$/, "")}, ${x}` : x))}>{x}</button>
+              <button type="button" className="chip" key={x} onClick={() => setText((t) => (t ? `${t.replace(/[.\s]+$/, "")}, ${x}` : x))}>{x}</button>
             ))}
           </div>
-          <label className={`allfix${all ? " on" : ""}`}>
+          <label className="allfix">
             <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
-            <span className="sw" aria-hidden="true"><i /></span>
+            <span className={`sw sm${all ? " on" : ""}`} aria-hidden="true" />
             <span><b>Fix this on every clip</b> · style fixes (zooms, camera, sound, captions, length) carry over,
               and clips already waiting get re-edited before you see them</span>
           </label>
-          <div className="revise-f">
+          <div className="ft">
             <span>{text.length}/500 · Ctrl+Enter sends</span>
-            <button type="button" className="btn light sm" disabled={!note} onClick={send}>Send revision</button>
+            <button type="button" className="b ok" disabled={!note} onClick={send}>Send revision</button>
           </div>
         </div>
       )}

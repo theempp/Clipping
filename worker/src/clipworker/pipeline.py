@@ -21,6 +21,7 @@ from .detector.spike import Moment
 from .judge.grok import Judgment
 from .qa import CampaignRules, check_clip
 from .remote.rights import RightsGate
+from .editplan import edit_overrides
 from .render.ffmpeg import render_clip
 from .store import Job, Store
 from .transcribe import Word, words_text
@@ -168,12 +169,17 @@ class Pipeline:
             else:
                 layout = Layout(Crop(**lay["facecam"]), Crop(**lay["gameplay"]),
                                 int(lay.get("facecam_height", 640)))
+        crop_x = j.get("crop_x")  # kept in the judgment, so later re-renders keep Zo's crop
+        if crop_x is not None:  # editor crop (D091): Zo placed a full-frame 9:16 window by hand
+            layout, track = None, False
         if j.get("max_len_s"):  # hook-first, so shortening keeps the start and cuts the tail
             keep_s = max(float(j["max_len_s"]), float(job.data["rules"].get("min_s", 0)))  # campaign floor
             j["trim_out"] = min(j["trim_out"], j["trim_in"] + keep_s)
         style = self.s.caption_style
         if j.get("caption_colour") and style is not None:
             style = replace(style, highlight_colour=ass_colour(j["caption_colour"]))
+        if j.get("words_per_line") and style is not None:  # editor caption mode (D091)
+            style = replace(style, words_per_line=int(j["words_per_line"]))
         zoom = self.s.zoom
         if j.get("zoom") is False:
             zoom = None
@@ -184,6 +190,8 @@ class Pipeline:
                            scale=min(zoom.scale, 1.15) if zoom.on else zoom.scale,
                            ramp_s=max(zoom.ramp_s, 0.6), hold_s=max(zoom.hold_s, 1.6),
                            min_gap_s=max(zoom.min_gap_s, 8.0), max_zooms=min(zoom.max_zooms, 2))
+        if zoom is not None and j.get("zoom_scale") is not None:  # editor slider (D091); 1.0 = off
+            zoom = replace(zoom, scale=max(1.0, min(1.3, float(j["zoom_scale"]))))
         sfx_on = j["sfx"] if isinstance(j.get("sfx"), bool) else self.s.sfx.enabled
         sfx = replace(self.s.sfx, enabled=sfx_on and job.data["rules"].get("allow_sfx", True))
         peak_rel = job.data["peak_ts"] - job.data["capture"]["start_ts"] - j["trim_in"]
@@ -193,7 +201,9 @@ class Pipeline:
                                 j.get("emphasis_words"), hook_offset=peak_rel,
                                 manifest_extra={"tags": tags, "channel": job.channel,
                                                 "revision": job.data.get("revision", 0)},
-                                zoom=zoom, track=track, sfx=sfx)
+                                zoom=zoom, track=track, sfx=sfx,
+                                **({"crop_x": float(crop_x)} if crop_x is not None else {}),
+                                **({"cuts": j["cuts"]} if j.get("cuts") else {}))
         self.store.advance(job.id, "rendered", {"manifest": manifest, "title": title,
                                                 "description": desc, "judgment": j})
         return True
@@ -368,6 +378,9 @@ class Pipeline:
                                   order="created_at.asc", select="*")
             if not revs:
                 continue
+            failed = clip.get("revise_failed") or {}
+            if failed and set(failed.get("revisions") or []) == {r["id"] for r in revs}:
+                continue  # these notes already failed QA; shown on the dashboard, waiting for Zo
             try:
                 job = self.store.job(clip["job_id"])
             except KeyError:
@@ -378,7 +391,15 @@ class Pipeline:
             overrides, title = {}, None  # typed notes: trim | crop | caption | title
             for r in revs:
                 p = r.get("payload") or {}
-                if r["kind"] == "trim":
+                if r["kind"] == "trim" and isinstance(p.get("edit"), dict):
+                    # dashboard editor (D091): clip-relative plan -> window-relative overrides
+                    base = job.data.get("judgment") or {}
+                    edit, head = edit_overrides(p["edit"], float(base.get("trim_in", 0.0)),
+                                                float(base.get("trim_out", clip.get("duration_s") or 0.0)),
+                                                base.get("cuts"))
+                    overrides.update(edit)
+                    title = head or title
+                elif r["kind"] == "trim":
                     overrides.update({k: float(p[k]) for k in ("trim_in", "trim_out") if k in p})
                 elif r["kind"] == "crop" and "layout" in p:
                     overrides["layout"] = p["layout"]
@@ -394,7 +415,13 @@ class Pipeline:
                     overrides.update(edit)
             rev = int(clip.get("revision", 0)) + 1
             if self._rerender(clip, job, overrides, title, rev) is None:
+                qa = self.store.job(job.id).data.get("qa") or {}
+                self.sb.update("clips", {"id": clip["id"]}, {"revise_failed": {
+                    "rev": rev, "reason": "; ".join(qa.get("failures") or [])[:300] or "render failed", "at": iso(self.clock()),
+                    "revisions": [r["id"] for r in revs]}})
                 continue
+            if failed:
+                self.sb.update("clips", {"id": clip["id"]}, {"revise_failed": None})
             self.sb.transition(clip, "pending_review", f"revision {rev}",
                                {"revisions": [r["id"] for r in revs]})
             for r in revs:
