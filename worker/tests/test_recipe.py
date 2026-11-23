@@ -58,6 +58,19 @@ def test_pick_fits_moment_and_never_banned():
         assert "music_cue" not in tools and "black_spacer" not in tools  # not eligible for this moment
 
 
+def test_no_combo_repeats_within_the_last_six_clips():
+    sw = R.StreamerWeights()
+    tags = {"punchline", "reveal", "mock_serious", "layout_swap", "reaction_peak"}
+    rng = random.Random(3)
+    seen = []
+    for _ in range(60):
+        tools, _ = R.pick_tools(sw, tags, rng)
+        assert sorted(tools) not in [sorted(c) for c in seen[-R.RECENT_KEEP:]]
+        R.record_pick(sw, tools)
+        seen.append(tools)
+    assert len({tuple(sorted(c)) for c in seen}) > 12      # real variety, not two alternating combos
+
+
 def test_pick_never_repeats_last_combo():
     sw = R.StreamerWeights()
     tags = {"punchline", "reveal", "mock_serious", "layout_swap"}

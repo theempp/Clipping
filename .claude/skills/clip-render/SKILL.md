@@ -16,6 +16,7 @@ ffmpeg is the core (D018). The model only writes the recipe (D114); code renders
 9. Export: H.264 high, yuv420p, 30 or 60 fps matching source, AAC 48 kHz. Thumbnail at the hook frame.
 10. Output to `C:\clip-work\renders\<clip_id>\` with a manifest (source, window, template, recipe, caption style).
 11. Run clip-qa next, then review. Re-render only the changed step on a revise note.
-12. Learning: every approve, reject, revision note and manual editor change is passed to the `learn` skill, which updates that streamer's tool weights. See `Edit Playbook.md` (repo root).
+12. Layout swap (`swap_full_face` / `swap_full_game`): cropped, never zoomed, at the peak. SFX (hit, glitch, whoosh) are synthesized and mixed last at times remapped for slow-mo and flashback. Flashback renders only after Zo approves the proposal in the editor.
+13. Learning: every approve, reject, revision note and manual editor change is passed to the `learn` skill, which updates that streamer's tool weights. See `Edit Playbook.md` (repo root).
 
 If ffmpeg-skill passed repo-audit, its 9:16, caption, silence and loudness tools may replace steps 3-8; nothing else from it.

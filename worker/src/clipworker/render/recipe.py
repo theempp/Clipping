@@ -2,7 +2,7 @@
 
 A recipe is the per-clip edit plan: layout, caption style, 3-5 tools from the shared toolbox, length,
 and an optional flashback. Each streamer has weights and bans over the toolbox. The picker chooses tools
-to fit the moment, never repeats the previous combo, and explores a lower-weight combo one clip in four.
+to fit the moment, never repeats a combo from the last 6 clips, and explores a lower-weight combo one clip in four.
 Defaults (hard cut, headline box) are always on; extras are 0-3 tools that fit the moment.
 Pure code, no model, no ffmpeg: `validate` is the gate before render and `apply_feedback` is the learn hook.
 """
@@ -38,6 +38,7 @@ MIN_LEN_S, MAX_LEN_S = 12.0, 30.0
 MIN_FONT_PX = 60  # D093
 MAX_FLASHES_PER_S = 3.0  # D093
 EXPLORE_EVERY = 4  # one clip in four tries a lower-weight combo
+RECENT_KEEP = 6    # zo (2026-11-23): every clip must look different, so no combo repeats within the last 6
 
 
 @dataclass
@@ -115,6 +116,7 @@ class StreamerWeights:
     last_combo: list[str] = field(default_factory=list)
     clips_made: int = 0
     strikes: dict[str, int] = field(default_factory=dict)
+    recent: list[list[str]] = field(default_factory=list)  # last RECENT_KEEP combos, none may repeat
 
     def weight(self, tool: str) -> float:
         return self.weights.get(tool, 1.0)
@@ -131,14 +133,14 @@ class WeightStore:
             for name, d in raw.items():
                 self.data[name] = StreamerWeights(d.get("weights", {}), set(d.get("banned", [])),
                                                   d.get("last_combo", []), d.get("clips_made", 0),
-                                                  d.get("strikes", {}))
+                                                  d.get("strikes", {}), d.get("recent", []))
 
     def get(self, streamer: str) -> StreamerWeights:
         return self.data.setdefault(streamer, StreamerWeights())
 
     def save(self) -> None:
         out = {n: {"weights": w.weights, "banned": sorted(w.banned), "last_combo": w.last_combo,
-                   "clips_made": w.clips_made, "strikes": w.strikes} for n, w in self.data.items()}
+                   "clips_made": w.clips_made, "strikes": w.strikes, "recent": w.recent} for n, w in self.data.items()}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(out, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -167,7 +169,7 @@ def pick_tools(sw: StreamerWeights, moment_tags: set[str], rng: random.Random,
     base = [t for t in DEFAULT_TOOLS if t not in sw.banned]
     pool = [t for t in _eligible(sw, moment_tags) if t not in DEFAULT_TOOLS]
     weight_of = (lambda t: 1.0 / max(sw.weight(t), 0.01)) if explore else sw.weight
-    prev = sorted(sw.last_combo)
+    prev = [sorted(c) for c in (sw.recent or ([sw.last_combo] if sw.last_combo else []))]
     for _ in range(20):
         k = rng.randint(1, MAX_TOOLS - len(DEFAULT_TOOLS))
         picked = _sample(pool, weight_of, min(k, len(pool)), rng)
@@ -175,13 +177,14 @@ def pick_tools(sw: StreamerWeights, moment_tags: set[str], rng: random.Random,
         loud = [t for t in combo if TOOLBOX[t][0] in ("sfx", "transition")]
         while len(loud) > MAX_SFX_AND_TRANSITIONS:
             combo.remove(loud.pop())
-        if sorted(combo) != prev:
+        if sorted(combo) not in prev:
             return combo, explore
     return combo, explore  # a tiny pool (few fitting tools) can force a repeat
 
 
 def record_pick(sw: StreamerWeights, tools: list[str]) -> None:
     sw.last_combo = list(tools)
+    sw.recent = [*sw.recent, list(tools)][-RECENT_KEEP:]
     sw.clips_made += 1
 
 

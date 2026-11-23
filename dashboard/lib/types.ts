@@ -197,6 +197,10 @@ export type EditPlan = {
   emphasis_words: string[];
   /** Start times of the pieces between splits that Zo dropped; the PC cuts them out. */
   drop?: number[];
+  /** D114 toolbox: tools Zo took off this clip (worker `remove_tools`). */
+  remove_tools?: string[];
+  /** D113: only Zo approves or drops a proposed flashback (worker `flashback_decision`). */
+  flashback?: "approve" | "drop";
 };
 
 export type ReviewAction = "approve" | "revise" | "reject";
