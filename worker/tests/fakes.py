@@ -70,6 +70,13 @@ class FakeSupabase:
         self.uploads[path] = open(file, "rb").read()
         return path
 
+    def download(self, path, dest):
+        from pathlib import Path
+        dest = Path(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(self.uploads[path])
+        return dest
+
     def transition(self, clip, to, reason=None, detail=None):
         row = next(r for r in self.t["clips"] if r["id"] == clip["id"])
         check_clip(row["state"], to, "worker")
