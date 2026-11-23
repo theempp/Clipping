@@ -586,6 +586,9 @@ class Pipeline:
                 job = self.store.job(clip["job_id"])
             except KeyError:
                 continue  # footage gone: leave it for Zo
+            src = (job.data.get("capture") or {}).get("video")
+            if not src or not Path(src).exists():
+                continue  # capture cleaned up: re-render impossible, leave it for Zo
             if not clip.get("fixing"):
                 self.sb.update("clips", {"id": clip["id"]}, {"fixing": {"rules": bad, "since": iso(self.clock())}})
             todo.append((clip, job, bad))
@@ -650,10 +653,25 @@ class Pipeline:
                     edit.pop("best_part_only", None)
                     overrides.update(edit)
             rev = int(clip.get("revision", 0)) + 1
-            if self._rerender(clip, job, overrides, title, rev) is None:
+            src = (job.data.get("capture") or {}).get("video")
+            reason, done = None, None
+            if not src or not Path(src).exists():
+                # footage gone: resetting would loop forever (reset zeroes attempts every poll)
+                reason = "source footage is gone, can't re-render this clip"
+                log.warning("revise for %s: %s (%s)", clip["id"], reason, src)
+            else:
+                try:
+                    done = self._rerender(clip, job, overrides, title, rev)
+                except Exception as e:  # noqa: BLE001 - flag it once; never retry the same notes
+                    log.exception("revision %s of %s failed to render", rev, clip["id"])
+                    reason = f"render error: {type(e).__name__}: {e}"
+                    if self.store.job(job.id).stage == "judged":
+                        self.store.advance(job.id, "error", error=str(e)[:500])
+            if done is None:
                 qa = self.store.job(job.id).data.get("qa") or {}
                 self.sb.update("clips", {"id": clip["id"]}, {"revise_failed": {
-                    "rev": rev, "reason": "; ".join(qa.get("failures") or [])[:300] or "render failed", "at": iso(self.clock()),
+                    "rev": rev, "reason": (reason or "; ".join(qa.get("failures") or []) or "render failed")[:300],
+                    "at": iso(self.clock()),
                     "revisions": [r["id"] for r in revs]}})
                 continue
             if failed:

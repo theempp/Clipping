@@ -181,6 +181,43 @@ def test_revision_failing_qa_is_flagged_not_retried(tmp_path, source_video):
 
 
 @needs_ffmpeg
+def test_revision_with_footage_gone_is_flagged_once(tmp_path, source_video):
+    pipe, sb, store = _env(tmp_path, source_video)
+    job = pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    Path(store.job(job).data["capture"]["video"]).unlink()
+    clip = sb.t["clips"][0]
+    sb.human(clip["id"], "revise")
+    sb.insert("revisions", {"clip_id": clip["id"], "kind": "title", "note": "new title",
+                            "payload": {"title": "x"}, "resolved_at": None})
+    assert pipe.process_revisions() == 0
+    assert "footage is gone" in sb.t["clips"][0]["revise_failed"]["reason"]
+    assert store.job(job).stage == "uploaded"            # not reset, so run_once never loops on it
+    assert pipe.process_revisions() == 0 and pipe.run_once() == 0
+
+
+@needs_ffmpeg
+def test_revision_render_error_is_flagged_and_parked(tmp_path, source_video):
+    pipe, sb, store = _env(tmp_path, source_video)
+    job = pipe.on_moment(_moment())
+    for _ in range(8):
+        pipe.run_once()
+    clip = sb.t["clips"][0]
+    sb.human(clip["id"], "revise")
+    sb.insert("revisions", {"clip_id": clip["id"], "kind": "title", "note": "new title",
+                            "payload": {"title": "x"}, "resolved_at": None})
+
+    def boom(*a, **k):
+        raise RuntimeError("ffprobe died")
+    pipe._render = boom
+    assert pipe.process_revisions() == 0
+    assert "ffprobe died" in sb.t["clips"][0]["revise_failed"]["reason"]
+    assert store.job(job).stage == "error"
+    assert pipe.process_revisions() == 0
+
+
+@needs_ffmpeg
 def test_revision_box_plain_english(tmp_path, source_video):
     pipe, sb, store = _env(tmp_path, source_video)
     pipe.on_moment(_moment())

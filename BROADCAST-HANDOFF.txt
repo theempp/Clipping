@@ -1,0 +1,104 @@
+BROADCAST DASHBOARD — CONTINUATION HANDOFF
+Prepared November 22, 2026, America/New_York. This is an audit and transfer package, not a claim the dashboard is complete.
+
+1. OPEN THIS CHECKOUT
+C:\clip-work\Clipping
+Branch: claude/project-thread-6uxt6c
+HEAD: d22dc8c (merge of PR #6; locked Broadcast design).
+At capture: 42 dirty files: 26 tracked modifications and 16 untracked files. Git's content diff reports 25 changed tracked files; ClipPlayer.tsx also appears modified in status.
+The implementation is NOT committed or pushed. Opening the GitHub repo or a new clean worktree will not recover it.
+C:\Users\HOME!\Desktop\clipping is the separate planning/vault checkout. It is on an older main and has unrelated uncommitted notes. Do not merge, reset, clean, stash, or replace either checkout as a setup step.
+
+2. EXACT STOPPING POINT
+Original session local ID: d511bf0e-50e6-4fdf-9653-a92538a1a62f.
+Desktop/coordinator ID recorded in the session: session_01APdEwGScmPYYbJcBmzVmr3.
+Original session working directory was the Desktop vault worktree .claude\worktrees\goofy-haslett-d755ce, but its tools deliberately edited C:\clip-work\Clipping.
+Transcript remains at:
+C:\Users\HOME!\.claude\projects\C--Users-HOME--Desktop-clipping--claude-worktrees-goofy-haslett-d755ce\d511bf0e-50e6-4fdf-9653-a92538a1a62f.jsonl
+Do not bulk upload the raw transcript. It contains unrelated tool outputs; the extracted build brief and short status messages are in session-excerpt.txt.
+
+Last completed new page: dashboard/app/(app)/settings/page.tsx, written November 22 at 9:33:14 p.m. Eastern.
+Last TypeScript check in the old session: 9:33:43 p.m., reported no errors, exit 0.
+Then Claude polished login branding, appended login/thumbnail CSS, removed the unused login Icon import, and ran npm test plus a port check.
+Last tool result: November 22 at 9:33:53 p.m. Eastern (2026-11-23T02:33:53.938Z): 11 tests, 11 pass, 0 failures; ports 3000/3100/3200 reported free.
+Usage-limit message: 9:33:54 p.m.: "You've hit your 5-hour limit · resets 10:40pm (America/New_York)". This is a historical transcript message, not a live reset estimate.
+No production build, browser screenshots, deployment, new implementation commit, or live migration application appears in this implementation session. Live database state was not independently inspected by Codex.
+Some project notes say 2026-11-23; those are existing note dates. The session's UTC timestamps correspond to the evening of November 22 in New York.
+
+3. LOCKED PRODUCT / DESIGN REQUIREMENTS
+Use the ORIGINAL concept C Broadcast, D092. The C+A merged revision was rejected. Do not restart design selection.
+Primary design source:
+dashboard-concepts/zwoclippe-moodboards/concept-c.html
+Screenshots beside it: c-overview.png and c-editor.png.
+Read CLAUDE.md, Decision Log.md (especially D091/D092), Agency Blueprint.md, Dashboard Experience.md, and the original brief in session-excerpt.txt.
+The older Stage references and brain dashboard summary are historical. D092 supersedes Stage for this dashboard's appearance. Keep existing Stage functionality.
+Dark Broadcast shell with lighter navy accent rather than orange.
+Nine pages: Overview; Review; Analytics with Growth/Money/Pipeline tabs; Streamers with Lacy first; Editor; Schedule; Campaigns; Library; Settings. Streamer detail pages also exist.
+Carry over Wake Up with light-up animation and honest PC heartbeat; approve/deny/revise and 4-second undo; before/after review; TikTok panel; signed video play/download; live stream embeds; brain weights and learned rules.
+Review cards must play the actual clip in the card without requiring a click to open it.
+Real streamer avatars/status/viewers via Twitch Helix and Kick; own YouTube/X channel numbers; Supabase Realtime updates; TikTok statistics stay manual pending API audit.
+Editor: timeline, trim, crop, headline and captions, with a real worker revision round trip.
+Keep all human publishing approval gates. No automatic approval or TikTok publishing.
+No live Supabase migration, deployment, commit/push, or merge without Zo's explicit go-ahead, as specified in the original session brief. Finish and verify local work first.
+
+4. WHAT IS ALREADY WRITTEN (PRESENT, NOT FULLY VERIFIED)
+- Reworked globals.css, Shell, overview, fonts/layout, login/not-found, live page and shared components.
+- All nine page routes plus streamer details are present.
+- New components: Brain.tsx, Charts.tsx, ClipCard.tsx, OwnChannels.tsx.
+- Expanded types, selectors/view models, demo fixtures and store actions/subscriptions.
+- dashboard/lib/live/sources.ts: Twitch/Kick/YouTube/X polling and parsers.
+- dashboard/app/api/live/route.ts: owner/cron authorization, stats writes, avatar sync and history snapshots.
+- supabase/migrations/20261123000000_live_stats.sql: live_stats, stat_snapshots, streamer_brain, owner RPCs and Realtime setup.
+- Editor UI sends a revision via review_clip.
+Full file-by-file list and SHA-256 hashes: inventory.json in the backup folder.
+
+5. FRESH CODEX VERIFICATION
+Ran from C:\clip-work\Clipping\dashboard:
+node --test --experimental-strip-types "tests/*.test.ts"
+Result: 11 tests passed, zero failures. Node emits the existing MODULE_TYPELESS_PACKAGE_JSON warning.
+node node_modules/typescript/bin/tsc --noEmit --incremental false
+Result: exit 0, no diagnostics.
+These are existing queue/logic/roster tests. They do not establish correctness of the new pages, live adapters, editor, SQL, or responsive layouts.
+Codex did not run a production build, open a browser, exercise authenticated APIs, or modify application source.
+
+6. CONCRETE GAP: EDITOR PAYLOAD DOES NOT MATCH WORKER
+Read dashboard/lib/store.tsx around lines 360-375:
+review_clip receives p_kind: "trim", p_payload: { edit: plan, apply_all: false }.
+Read worker/src/clipworker/pipeline.py around lines 378-394:
+For a "trim" revision, worker reads top-level payload.trim_in / payload.trim_out. It does not read nested payload.edit.
+Therefore the new editor's edit object is ignored by this worker path. Correct and test the contract; do not call the editor complete because the UI or RPC succeeds.
+Also review caption text: capText is local UI state and is not sent as part of the EditPlan used by sendEdit. Confirm requested caption edits persist and actually affect the rendered result.
+Split, crop, zoom, headline, caption style and generated timeline/waveform behavior need end-to-end validation. The waveform currently uses a seeded generator, not analyzed audio.
+
+7. FINISH CHECKLIST, IN ORDER
+A. Confirm working directory, branch, dirty file inventory, and concept C. Preserve existing work.
+B. Run the production build and address actual failures. npm.cmd run build is available on Windows. Avoid replacing a running server's build artifacts. next.config.mjs supports NEXT_DIST_DIR if isolation is needed.
+C. Add focused tests for new logic and platform parsers; a comment says parsers are unit-tested, but no new parser test file was found.
+D. Repair and prove the editor-to-worker contract with a real local revision/rerender test. Preserve human approval after rendering.
+E. Compare every page with concept C in demo mode. Capture desktop, tablet and phone screenshots; verify no overlap, overflow, broken navigation, hydration errors or inaccessible controls. Check inline video autoplay/muting, review shortcuts/undo, before-after, signed downloads, empty states, Wake Up, Settings and all Analytics tabs.
+F. Verify live-source error handling, missing-key behavior, stale-data indicators, API permissions/rate limits and concurrent polling. Store polls on visible dashboards; persistent hosted scheduling is not configured by this code alone. SQL has only commented example scheduling.
+G. Document the new server-only env names in .env.example and README without copying values: SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET, TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET, KICK_CLIENT_ID, KICK_CLIENT_SECRET, YOUTUBE_API_KEY, YOUTUBE_CHANNEL_ID, X_BEARER_TOKEN, X_USERNAME. Check actual source for all configuration names.
+Existing secrets remain in the original checkout's env files. Do not rotate, move, publish, or copy them into this handoff. New Claude account does not mean changing dashboard owner email, Supabase auth, API accounts, or GitHub identity.
+H. Review new SQL locally and check any backend/brain feature dependencies. UI storage in streamer_brain does not prove detector weights are consumed. Identify what needs approval, then ask Zo about applying the migration and verifying live numbers.
+I. Rerun unit/type/build checks and document what works and what remains unverified. Present local dashboard for review before any deployment or publishing action.
+
+8. CONTINUE IN CLAUDE DESKTOP UNDER THE OTHER EMAIL
+1. Leave the old session stopped. Avoid archiving/deleting it during the transfer.
+2. Sign out of Claude Desktop from the app account menu and sign in with the other email. Complete authentication yourself.
+3. Open Code, select a LOCAL session and choose C:\clip-work\Clipping. Turn Worktree OFF to work directly in this folder. UI placement varies by Desktop version; current docs put Worktree beside the project folder control or in the saved environment.
+4. If Worktree cannot be disabled, add C:\clip-work\Clipping using + > Add folder in the session, then explicitly direct Claude to edit that folder itself. Verify the actual branch and dirty files before allowing edits.
+5. Paste the contents of CONTINUE-PROMPT.txt from this folder. A copy of this handoff is also at C:\clip-work\Clipping\BROADCAST-HANDOFF.txt.
+The handoff carries context even if the other email cannot see the old Desktop session. This is not an account-to-account chat migration. Git files, local env files, repository skills, and local notes stay on this PC.
+Do not clone a fresh repo over this folder. Do not copy Claude login credentials or tokens between accounts.
+
+Official documentation checked:
+https://code.claude.com/docs/en/desktop.md — local folder selection, Worktree toggle, and + > Add folder.
+https://code.claude.com/docs/en/sessions.md — sessions are saved locally; Desktop and CLI have separate session lists.
+https://code.claude.com/docs/en/authentication.md — authentication and separate CLI configuration directories (CLI alternative only).
+
+9. BACKUP / RECOVERY
+Backup folder:
+C:\Users\HOME!\Desktop\Broadcast handoff 2026-11-22
+broadcast-source-snapshot.zip contains all 42 original dirty source files under changed-files/, tracked-changes.patch, inventory.json, selected design/context files, this handoff, continuation prompt and short session excerpt.
+The ZIP is a partial source snapshot, not a complete runnable clone. Original repository, dependencies, env files, and git history remain in place.
+Do not extract over the working checkout unless recovering a verified loss; inspect inventory and compare first. tracked-changes.patch excludes untracked files; those are present individually under changed-files/ in the ZIP. It is unnecessary to apply the patch when continuing in the original checkout.
