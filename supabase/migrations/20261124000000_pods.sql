@@ -527,3 +527,6 @@ begin
 end $f$;
 drop trigger if exists owner_to_pod1 on public.owners;
 create trigger owner_to_pod1 after insert on public.owners for each row execute function public.owner_to_pod1();
+
+-- The ledger guard runs as the caller; the worker (service_role) must be able to evaluate it.
+grant execute on function public.is_admin(), public.is_pod_owner(uuid), public.my_pod_ids(), public.my_ledger_pod_ids() to service_role;
