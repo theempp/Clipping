@@ -80,6 +80,37 @@ def music_cue_command(src: Path, out: Path, music: Path, start: float = 0.0, mus
             "-ar", "48000", "-shortest", "-movflags", "+faststart", str(out)]
 
 
+def sfx_mix_command(src: Path, out: Path, hits: list[tuple[Path, float, float]],
+                    ffmpeg: str = "ffmpeg") -> list[str]:
+    """Mix short sounds into the clip's audio. hits: [(wav, at_seconds, volume_db)]. Video is copied.
+    The mix is loudnormed like the main render so the clip still passes loudness QA."""
+    ins, parts, mix = [], [], "[0:a]"
+    for i, (wav, at, db) in enumerate(hits, start=1):
+        ms = max(0, int(round(at * 1000)))
+        ins += ["-i", str(wav)]
+        parts.append(f"[{i}:a]volume={db}dB,adelay={ms}|{ms},aresample=48000[h{i}]")
+        mix += f"[h{i}]"
+    parts.append(f"{mix}amix=inputs={len(hits) + 1}:duration=first:normalize=0,"
+                 f"loudnorm=I=-14:TP=-1.5:LRA=11[a]")
+    return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), *ins,
+            "-filter_complex", ";".join(parts), "-map", "0:v", "-map", "[a]", "-c:v", "copy",
+            "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", str(out)]
+
+
+def shift_time(t: float, applied: list[tuple[str, float, float, float]]) -> float:
+    """Where a moment lands after time-changing effects. applied: [(tool, at, length, speed)] in the
+    order they ran: slowmo stretches [at, at+length], spacer/flashback insert `length` at `at`."""
+    for tool, at, length, speed in applied:
+        if tool == "slowmo_vignette":
+            if at <= t < at + length:
+                t = at + (t - at) / speed
+            elif t >= at + length:
+                t += length * (1 / speed - 1)
+        elif t >= at:
+            t += length
+    return t
+
+
 def apply_effects(clip: Path, effects: list[dict], dur: float, ffmpeg: str = "ffmpeg",
                   run=subprocess.run) -> float:
     """Run effects in order on `clip` in place. Each effect: {"tool": name, ...params}. Unknown tools and
@@ -94,6 +125,8 @@ def apply_effects(clip: Path, effects: list[dict], dur: float, ffmpeg: str = "ff
         elif tool == "black_spacer":
             cmd, dur = black_spacer_command(clip, tmp, dur, float(e["at"]), float(e.get("length", 0.3)),
                                             ffmpeg=ffmpeg)
+        elif tool == "sfx" and e.get("hits"):
+            cmd = sfx_mix_command(clip, tmp, [(Path(h[0]), float(h[1]), float(h[2])) for h in e["hits"]], ffmpeg)
         elif tool == "music_cue" and e.get("file") and Path(e["file"]).exists():
             cmd = music_cue_command(clip, tmp, Path(e["file"]), float(e.get("start", 0.0)),
                                     float(e.get("db", -16.0)), ffmpeg)

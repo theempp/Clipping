@@ -319,6 +319,11 @@ class Pipeline:
         sfx_on = j["sfx"] if isinstance(j.get("sfx"), bool) else self.s.sfx.enabled
         sfx = replace(self.s.sfx, enabled=sfx_on and job.data["rules"].get("allow_sfx", True))
         peak_rel = job.data["peak_ts"] - job.data["capture"]["start_ts"] - j["trim_in"]
+        swap = None  # D114 layout swap at the peak (split layouts only; the picture is cropped, never zoomed)
+        if rec is not None and layout is not None:
+            for tool, mode in (("swap_full_face", "face"), ("swap_full_game", "game")):
+                if tool in rec.tools:
+                    swap = (mode, max(0.0, peak_rel - 0.2), 1.6)
         title, desc, tags = self._metadata(job)
         manifest = self._render(job.id, Path(job.data["capture"]["video"]), self._job_dir(job),
                                 j["trim_in"], j["trim_out"], words, layout, style,
@@ -326,6 +331,7 @@ class Pipeline:
                                 manifest_extra={"tags": tags, "channel": job.channel,
                                                 "revision": job.data.get("revision", 0)},
                                 zoom=zoom, track=track, sfx=sfx,
+                                **({"swap": swap} if swap else {}),
                                 **({"crop_x": float(crop_x)} if crop_x is not None else {}),
                                 **({"cuts": j["cuts"]} if j.get("cuts") else {}))
         manifest = self._apply_recipe(j, manifest, peak_rel)
