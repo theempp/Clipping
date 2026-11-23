@@ -8,7 +8,7 @@ Project brain for Clipp. Read the [[Decision Log]] first; it is the source of tr
 
 ## Notes
 - [[Vision and Requirements]] · [[Interview Record]] · [[Agent Workflow]] · [[Learning and Memory]]
-- [[Streamer Roster]] · [[Channel Strategy]] · [[Research Agenda]]
+- [[Streamer Roster]] · [[Channel Strategy]] · [[Research Agenda]] · Clipper review pack: `docs/clipper-review/` (D084-D089)
 - [[Campaign Intelligence]] · [[Campaign Ranking 2026-11-21]]
 - [[TikTok Monetization Plan]] · [[TikTok Long-Form Build Spec]] · [[Reference Clip Style]]
 - [[Dashboard Experience]] · [[Install and Detector Plan]] · [[Clipper Video Upgrade Plan]] · [[Tools and Repos]]

@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clipper and Kenji: study and upgrade plan</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#4a5363"/></marker>
+  <marker id="ahp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#7449c9"/></marker>
+</defs></svg>
+
+<!-- 1 COVER -->
+<section class="page cover">
+  <div>
+    <div class="kicker">Study and upgrade plan · 2026-11-22</div>
+    <h1 style="margin-top:10mm;font-size:54pt">Clipper &amp; Kenji</h1>
+    <p class="lead">What two clipping systems do well, what Clipp is missing, and a plan for three streamer-specific agents that get better with every clip. Review only: nothing has been wired in.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:14mm;align-items:end">
+    <div class="meta">
+      <span style="color:#fff">Contents</span><br>
+      2 Verdict · 3 Free vs Pro · 4 How Clipper finds and scores moments<br>
+      5 Pro-only features · 6 Kenji: the CEO loop · 7 Kenji: the edit<br>
+      8 Kenji: learning and guardrails · 9 Gap analysis<br>
+      10 The three streamers · 11 Three agents · 12 Upgrades and decisions
+    </div>
+    <div class="meta">
+      Sources: Money Mastery Hub video (6:17) + free Clipper zip,<br>Nate Herk video (12:28) + his 22-page guide, Clipp code and vault.<br>
+      Tags: <span style="color:#7fd8a4">SEEN</span> in a video · <span style="color:#8db7f5">READ</span> in free code · <span style="color:#c4a9f5">PROPOSAL</span> · <span style="color:#f59a90">UNVERIFIED</span>
+    </div>
+  </div>
+  <div class="foot"><span>Clipper &amp; Kenji · review pack</span><span>1 / 12</span></div>
+</section>
+
+<!-- 2 VERDICT -->
+<section class="page">
+  <div class="hd"><div class="kicker">1 · Verdict</div><h2>Do not buy Clipper Pro. Rebuild its best ideas, and take Kenji's discipline.</h2>
+  <p class="lead">Clipp already has the hard plumbing: live capture, a chat-and-loudness detector, ffmpeg render, code QA and a database-enforced review gate. What it lacks is what makes the two studied systems improve over time.</p></div>
+  <div class="body g3" style="grid-template-rows:auto 1fr;grid-template-columns:1.15fr 1fr 1fr">
+    <div class="rule"><h3>Five things worth taking</h3>
+      <ol class="sm9">
+        <li><b>A per-streamer brain.</b> Each streamer gets their own learned weights, chat words and labels from approvals and viewer clips. <span class="tag ok">seen</span> <span class="tag ran">read</span></li>
+        <li><b>Dead-air gating.</b> Chat can be hyped while the screen shows a map, an ad or a loading card. <span class="tag ok">seen</span></li>
+        <li><b>Viewer clips as votes.</b> A Twitch viewer clip marks a moment that mattered; cut it if we missed it. <span class="tag ok">seen</span></li>
+        <li><b>A 0–100 score with reasons,</b> half measured, half judged, so ranking is explainable. <span class="tag ran">read</span></li>
+        <li><b>Kenji's loop:</b> verify, dedupe, QA, then measure share rate, run one-variable experiments, report bad news. <span class="tag ok">seen</span></li>
+      </ol></div>
+    <div class="rule"><h3>What we will not copy</h3>
+      <ul class="sm9">
+        <li><b>Autopilot after 3 posts.</b> Our approval gate is locked (D003, D042) and stronger.</li>
+        <li><b>Code.</b> The free licence forbids re-uploading the skill; we reimplement ideas only.</li>
+        <li><b>Whole-frame zoom, flash and whoosh by default.</b> Zo found robotic zooms (D077); SFX is off (D052).</li>
+        <li><b>The 2-hour polling loop.</b> Our system is event-driven and starts when a streamer goes live.</li>
+        <li><b>Third-party code on the PC.</b> Read as text only; repo-audit rule holds.</li>
+      </ul></div>
+    <div class="rule"><h3>Honest results so far</h3>
+      <div class="stats" style="grid-template-columns:1fr 1fr;gap:3mm">
+        <div class="stat">2,309<small>plays on Kenji's first 6 posts (12 platform posts)</small></div>
+        <div class="stat">0<small>shares and comments across all 12. Kenji's own words: the shared problem</small></div>
+      </div>
+      <p class="sm9" style="margin-top:3mm">Both sources are day-one demos. Kenji's guide shows no proven revenue yet; Clipper Pro shows no viewer or earnings numbers. Treat both as method, not proof. <span class="tag unv">unverified</span></p>
+      <p class="sm9"><b>Cost:</b> Pro is $29 launch / $49 after, one-time, Mac and Windows, 1 year of updates (video 5:08).</p></div>
+    <div style="grid-column: 1 / -1;align-self:start" class="g3b" id="srcrow">
+      <div class="note"><b>Source 1 · Clipper Free and Pro.</b> Money Mastery Hub video (6:17, 2026-11-21, 20k views). The free zip was downloaded and read as text only: SKILL.md, the clip-file reference and the detector and scoring code. Pro itself is known only from the video.</div>
+      <div class="note"><b>Source 2 · Kenji.</b> Nate Herk video (12:28, 43k views) plus his 22-page guide (Zo's PDF): the persona, the 12-step loop, edit rules, experiments, anti-stuck rules, guardrails, 17 logged mistakes.</div>
+      <div class="note prop"><b>Source 3 · Clipp today.</b> Worker code, Supabase migrations, dashboard, config and 83 logged decisions, plus last-30-day streamer stats. This pack is review-only: nothing is installed. Frames are credited in footers and used for private study.</div>
+    </div>
+    <div style="grid-column: 1 / -1;align-self:start" class="rule">
+      <h3>Suggested path from here</h3>
+      <div class="g3b sm9" style="margin-top:1.5mm">
+        <div><b>1 · Review.</b> Read pages 3–8 for how the two systems work, 9–11 for what we change. The draft skill and agents are in <code>docs/clipper-review/</code>.</div>
+        <div><b>2 · Decide.</b> All five calls are settled; page 12 records them.</div>
+        <div><b>3 · Approve a build.</b> Phase 0 and Lacy in dry-run first (nothing posts), then Jynxzi and Stable Ronaldo, then the analytics loop.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Clipper &amp; Kenji · review pack</span><span>2 / 12</span></div>
+</section>
+
+<!-- 3 FREE VS PRO -->
+<section class="page">
+  <div class="hd"><div class="kicker">2 · Clipper Free vs Clipper Pro</div><h2>Free is a smart VOD clipper. Pro adds the live loop and the learning.</h2></div>
+  <div class="body" style="grid-template-columns:1.25fr 1fr;grid-template-rows:1fr">
+    <div>
+      <table class="tight">
+        <tr><th>Capability</th><th>Free</th><th>Pro</th><th>Evidence</th></tr>
+        <tr><td>Finds moments by sound: laughing, shouting, cheering, plus loudness</td><td>yes</td><td>yes</td><td><span class="tag ran">read</span> shared <code>detect.py</code></td></tr>
+        <tr><td>Reads facecam motion and how fast the game changes</td><td>yes</td><td>yes</td><td><span class="tag ran">read</span> <span class="tag ok">seen 1:30</span></td></tr>
+        <tr><td>Claude checks every candidate: transcript plus frames</td><td>yes</td><td>yes</td><td><span class="tag ran">read</span> <span class="tag ok">seen 1:35</span></td></tr>
+        <tr><td>Stack layout, 3-word captions, hook card, loudness, score /100</td><td>yes</td><td>yes</td><td><span class="tag ran">read</span></td></tr>
+        <tr><td>Clips a finished VOD or the saved part of a live Twitch stream</td><td>yes</td><td>yes</td><td><span class="tag ran">read</span></td></tr>
+        <tr><td>Live mode: records as it happens, own window, 0 Claude usage</td><td>no</td><td>yes</td><td><span class="tag ok">seen 3:40</span></td></tr>
+        <tr><td>Live chat as a signal, hype meter, render ETA</td><td>no</td><td>yes</td><td><span class="tag ok">seen 3:50</span></td></tr>
+        <tr><td>Skips starting-soon screens, ad breaks, map-staring</td><td>basic</td><td>yes</td><td><span class="tag ran">read</span> <span class="tag ok">seen 4:02</span></td></tr>
+        <tr><td>Real viewer data: Twitch viewer clips, YouTube most replayed</td><td>no</td><td>yes</td><td><span class="tag ok">seen 4:13</span></td></tr>
+        <tr><td>Streamer Brain: learns each streamer, thumbs up/down</td><td>stub</td><td>yes</td><td><span class="tag ok">seen 4:27</span> <span class="tag ran">read</span></td></tr>
+        <tr><td>CLIP THAT: grab the last 40 seconds</td><td>no</td><td>yes</td><td><span class="tag ok">seen 4:45</span></td></tr>
+        <tr><td>Price</td><td>$0</td><td>$29 / $49</td><td><span class="tag ok">seen 5:07</span></td></tr>
+      </table>
+      <p class="sm9" style="margin-top:2.5mm"><b>One detail from the free code:</b> the learning hooks already exist (a logistic model over 12 features, a trust blend, a vote loader) but the vote loader returns an empty list. Pro fills it. <span class="tag ran">read</span> Pro's internals themselves were not seen. <span class="tag unv">unverified</span></p>
+    </div>
+    <div class="col">
+      <figure class="fr"><img class="shot" src="assets/p-11-own-window.jpg"><figcaption><b>Pro's own window</b> (3:46): the stream, chat and a hype meter, run outside Claude ("0 Claude usage", 3:40). Source: Money Mastery Hub, "I Used Claude to Clip GTA 6 Streams LIVE".</figcaption></figure>
+      <figure class="fr"><img class="shot" src="assets/p-12-finished-clip.jpg"><figcaption><b>Finished clips land in the same window</b> with a live-clip name, thumbs up/down and a render countdown ("next clip, rendering 1:40 left", 4:01).</figcaption></figure>
+    </div>
+  </div>
+  <div class="foot"><span>Clipper &amp; Kenji · review pack</span><span>3 / 12</span></div>
+</section>
+
+<!-- 4 HOW CLIPPER FINDS AND SCORES -->
+<section class="page">
+  <div class="hd"><div class="kicker">3 · How Clipper finds and scores a moment</div><h2>Shortlist with cheap signals, then let the model judge only the shortlist.</h2></div>
+  <div class="body" style="grid-template-columns:1fr 1.15fr 1fr;grid-template-rows:1fr auto">
+    <div class="col">
+      <figure class="fr"><img class="shot" src="assets/p-02-checks.jpg"><figcaption><b>Claude checks every moment</b> (1:35): reads what was said, looks at frames. A loading screen and a $5 donation card are rejected, three real action frames pass.</figcaption></figure>
+      <figure class="fr"><img class="shot" src="assets/p-03-score-split.jpg"><figcaption><b>Score 81 / 100</b> (2:23) for a car launched into the sky; the app shows the score with the reasons behind it.</figcaption></figure>
+    </div>
+    <div>
+      <h3>Signals per second <span class="tag ran">read</span></h3>
+      <p class="sm9">Sound events (laugh, shout, cheer, speech, music via a small audio tagger), loudness, facecam motion, game change rate, hard scene cuts, chat volume and mood (laugh, hype, shock) and the words this streamer's chat uses. Each is scored against that stream's own normal, capped, smoothed.</p>
+      <table class="tight" style="margin-top:2mm">
+        <tr><th>Starting weights</th><th>Value</th></tr>
+        <tr><td>chat · laugh · loudness</td><td>1.0 · 1.1 · 0.9</td></tr>
+        <tr><td>chat laugh · hype · shock</td><td>0.8 · 0.6 · 0.4</td></tr>
+        <tr><td>facecam · scream · cheer</td><td>0.5 · 0.6 · 0.4</td></tr>
+        <tr><td>chat words · game · cut · bias</td><td>0.5 · 0.25 · 0.15 · −4</td></tr>
+      </table>
+      <p class="sm9" style="margin-top:2mm"><b>Brain blend:</b> final score = (1−α) × fixed mix + α × learned model, with α rising from 0.6 to 0.9 as it collects about 150 positive labels.</p>
+      <p class="sm9"><b>Gates:</b> the first 30 s window with 8+ s of speech marks the real start (before it is a waiting screen). No speech, laugh or shout near a second multiplies its score by 0.3.</p>
+      <p class="sm9"><b>Clip edges:</b> start 5–22 s before the peak, end 2.5–14 s after, snapped to sentence pauses; 12–50 s long.</p>
+    </div>
+    <div>
+      <h3>The 0–100 score <span class="tag ran">read</span></h3>
+      <div class="bar" style="margin:2mm 0 0.5mm"><div class="a" style="width:50%">Measured from the stream · 50</div><div class="b" style="width:50%">Judged by the model · 50</div></div>
+      <table class="tight" style="margin-top:2mm">
+        <tr><th>Measured (50)</th><th>Pts</th></tr>
+        <tr><td>Peak intensity vs this stream</td><td>15</td></tr>
+        <tr><td>Hook speed (action or hype word soon)</td><td>15</td></tr>
+        <tr><td>Length fit</td><td>10</td></tr>
+        <tr><td>Reaction and talk density</td><td>10</td></tr>
+      </table>
+      <table class="tight" style="margin-top:2mm">
+        <tr><th>Judged, 0–10 each</th><th>Ask</th></tr>
+        <tr><td>hook</td><td>Stops a stranger in 1 s?</td></tr>
+        <tr><td>payoff</td><td>Clear climax or punchline?</td></tr>
+        <tr><td>standalone</td><td>Makes sense cold?</td></tr>
+        <tr><td>emotion</td><td>Shock, laugh, rage, hype?</td></tr>
+        <tr><td>share</td><td>Would someone send it?</td></tr>
+      </table>
+      <div class="note" style="margin-top:2mm"><b>Strict scale:</b> most good clips land 60–80; under 50 means recut or drop. The score is a ranking aid, never a views promise.</div>
+    </div>
+    <div style="grid-column: 1 / -1" class="rule">
+      <h3>How the free skill chooses where a clip starts and ends <span class="tag ran">read</span></h3>
+      <div class="g4b sm9" style="margin-top:1.5mm">
+        <div><b>1 · Start a beat before the cause.</b> The viewer must see what is about to go wrong. 1–4 s of setup, never 20.</div>
+        <div><b>2 · First 1.5 s already interesting.</b> If setup is slow, start later and let the hook line carry the context.</div>
+        <div><b>3 · End right after the payoff.</b> The reaction or "bro…", before the streamer reads chat.</div>
+        <div><b>4 · One idea, self-contained.</b> 15–45 s sweet spot. Two great moments a minute apart are two clips; vary chases, fails, lines, wins.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>Frames: Money Mastery Hub · weights and rules from the free Clipper zip, read as text, not run</span><span>4 / 12</span></div>
+</section>
+
+<!-- 5 PRO-ONLY -->
+<section class="page">
+  <div class="hd"><div class="kicker">4 · What Pro adds</div><h2>Four ideas worth rebuilding: dead-air filter, viewer clips, a brain per streamer, a panic button.</h2></div>
+  <div class="body" style="grid-template-columns:repeat(4,1fr);grid-template-rows:auto 1fr;gap:4mm">
+    <figure class="fr"><img class="shot" src="assets/p-06-hype-vs-map.jpg"><figcaption><b>Hyped chat is not a moment.</b> Hype meter 100 while the screen shows only a map. Pro knows the difference (4:10).</figcaption></figure>
+    <figure class="fr"><img class="shot" src="assets/p-07-viewers-clip.jpg"><figcaption><b>Viewers clip it, Pro sees it.</b> "A viewer clipped 0:42:10". If Pro already caught it: badge. If not: cut it (4:21).</figcaption></figure>
+    <figure class="fr"><img class="shot" src="assets/p-08-brain.jpg"><figcaption><b>Streamer Brain</b> (4:43): what normal looks like, words chat spams, which moments viewers clip, thumbs up/down, streams watched.</figcaption></figure>
+    <figure class="fr"><img class="shot" src="assets/p-09-clipthat.jpg"><figcaption><b>CLIP THAT</b> (4:52): "cuts the last 40 seconds right now", saved instantly.</figcaption></figure>
+    <div class="rule"><h3>Our version</h3><ul class="sm9">
+      <li>Gate: speech or laugh near the second, a live-start detector, frame rejects on the shortlist only.</li>
+      <li>Rule: chat needs one non-chat signal beside it.</li>
+      <li>Dashboard: render ETA tile.</li></ul><span class="tag prop">proposal</span></div>
+    <div class="rule"><h3>Our version</h3><ul class="sm9">
+      <li>Helix "Get Clips" for the live window, matched to our candidates by time (±20 s).</li>
+      <li>Keep only the timestamp as a vote; never reuse a viewer's clip file.</li>
+      <li>Weight 0.6 as a training label.</li></ul><span class="tag prop">proposal</span></div>
+    <div class="rule"><h3>Our version</h3><ul class="sm9">
+      <li>One <code>brain.json</code> per streamer, isolated: weights, baseline, chat-word lift.</li>
+      <li>Labels: approve, reject, viewer clip, 24 h platform ratio, missed moment.</li>
+      <li>Weekly refit, ±25% cap per step, versioned for rollback.</li></ul><span class="tag prop">proposal</span></div>
+    <div class="rule"><h3>Our version</h3><ul class="sm9">
+      <li>Dashboard button and a Discord command call the existing 10-minute buffer for the last 40 s.</li>
+      <li>Result is labelled "missed moment" and trains the brain 1.5×.</li>
+      <li>Goes through review like any clip.</li></ul><span class="tag prop">proposal</span></div>
+  </div>
+  <div class="foot"><span>Frames: Money Mastery Hub, "I Used Claude to Clip GTA 6 Streams LIVE" · private study use</span><span>5 / 12</span></div>
+</section>
+
+<!-- 6 KENJI LOOP -->
+<section class="page">
+  <div class="hd"><div class="kicker">5 · Kenji: the CEO loop</div><h2>An agent that owns outcomes, runs 12 steps every two hours, and reports bad news.</h2></div>
+  <div class="body" style="grid-template-columns:1.55fr 1fr;grid-template-rows:1fr">
+    <div class="col">
+      <figure class="fr"><img class="shot dark" src="assets/k-07-diagram-full-crop.jpg"><figcaption><b>Nate Herk's system map</b> (9:40): sources on the left, the clip loop on top, learn-and-report loop underneath, publishing on the right, human, box computer and guardrails below. Source: Nate Herk, "I Turned Grok Bot Into a 24/7 GTA 6 Clipping Machine".</figcaption></figure>
+    </div>
+    <div>
+      <h3>The 12 steps <span class="tag ok">seen</span></h3>
+      <ol class="sm9" style="columns:2;column-gap:5mm">
+        <li><b>Analyze</b> stats into the scoreboard</li><li><b>Health check</b> stuck posts</li>
+        <li><b>Learn</b> one research question</li><li><b>Scout</b> top clips, last 3–24 h</li>
+        <li><b>Verify</b> fresh and really the game</li><li><b>Cut</b> from one JSON spec</li>
+        <li><b>QA</b> frames, sync, audio</li><li><b>Schedule</b> dry-run first</li>
+        <li><b>Strategize</b> keep / kill / start tests</li><li><b>Dashboard</b> rebuild</li>
+        <li><b>Clean up</b> disk</li><li><b>Update Nate</b> short, plain</li>
+      </ol>
+      <h3 style="margin-top:2.5mm">The persona</h3>
+      <p class="sm9">"You're the CEO of this business": owns outcomes, learns each cycle, proposes before touching money, messages, accounts or rules, reports bad news ("0 shares on all 12 posts"), pushes back (it offered a faster fix when a pause lasted a full day). Overnight stays quiet; one 7 AM recap. If nothing passes QA, it cuts nothing.</p>
+      <h3 style="margin-top:2.5mm">Day-one result <span class="tag ok">seen</span></h3>
+      <p class="sm9">After about 12 hours: 6 posts live, 9 queued, about 30 followers, 2,300 views on Instagram and TikTok. Setup took about 2 hours by his count.</p>
+      <div class="note prop"><b>For Clipp:</b> keep the idea of an outcome-owning operator, but run it per streamer and on events (went live, decision made, stats due), not on a clock.</div>
+    </div>
+  </div>
+  <div class="foot"><span>Frame: Nate Herk · loop details also from his 22-page guide (Zo's PDF)</span><span>6 / 12</span></div>
+</section>
+
+<!-- 7 KENJI EDIT -->
+<section class="page">
+  <div class="hd"><div class="kicker">6 · Kenji: the edit is the product</div><h2>Payoff-first hook, one comedic edit, context-adding text, a reaction to end on.</h2></div>
+  <div class="body" style="grid-template-columns:1.5fr 1fr;grid-template-rows:auto 1fr;gap:4mm 6mm">
+    <div>
+      <h3>Clip timeline, 12–20 s <span class="tag ok">guide</span></h3>
+      <div class="bar" style="margin-top:2mm">
+        <div class="a" style="width:15%">TEASER<br>2–4 s</div><div class="c" style="width:7%">FLASH<br>+ whoosh</div><div class="d" style="width:18%">SETUP<br>3–6 s</div><div class="d" style="width:22%">ESCALATION</div><div class="b" style="width:16%">PAYOFF<br>slow-mo / freeze</div><div class="e" style="width:12%">REACTION<br>0.5–1.5 s</div><div class="f" style="width:10%">HARD CUT<br>loops</div>
+      </div>
+      <div class="scale"><span>0 s</span><span>payoff at 70–85% of runtime</span><span>12–20 s</span></div>
+      <table class="tight" style="margin-top:2.5mm">
+        <tr><th>Rule</th><th>Kenji</th><th>Clipp today</th></tr>
+        <tr><td>Hook text</td><td>Adds context, never describes. "STREAMER DOES X" banned. Keyword in frame 1.</td><td>Headline formula from Zo's 7 reference clips; keep, add the keyword rule</td></tr>
+        <tr><td>Teaser</td><td>2–4 s of the funniest moment; let the action finish; tease the end, not the middle</td><td>None. Test as an A/B arm</td></tr>
+        <tr><td>Flash and whoosh</td><td>White flash + whoosh at teaser cut</td><td>SFX off by default (D052); opt-in only</td></tr>
+        <tr><td>Comedic edit</td><td>Slow-mo 0.35–0.5× or freeze on the funniest frame; once, twice max; no whole-frame zoom on stacks</td><td>Eased zoom, max 2 (D077); add one freeze option</td></tr>
+        <tr><td>Reaction</td><td>Hold on facecam, real laugh audible, no music over it</td><td>Add as end rule</td></tr>
+        <tr><td>Layout</td><td>Facecam top, gameplay below; credit on screen and in caption</td><td>Same stack; credit per campaign rules</td></tr>
+        <tr><td>Captions</td><td>Hand-timed, never guess a word; read in-game captions first</td><td>whisperX word timing; A/B headline vs word captions (D073)</td></tr>
+      </table>
+    </div>
+    <div class="col" style="grid-row: 1 / span 2; grid-column: 2">
+      <figure class="fr"><img class="shot dark" src="assets/k-02-tiktok-clip.jpg"><figcaption><b>A shipped Kenji clip</b> (0:40): facecam top, gameplay below, context headline "LUCIA'S FIRST DRIVE WENT GREAT". Best TikTok of the first six.</figcaption></figure>
+      <figure class="fr"><img class="shot dark" src="assets/k-01-dashboard-views.jpg"><figcaption><b>Kenji's live views chart</b> (0:20): both platforms flatten within about 3 hours, so the 2-hour read is nearly the verdict.</figcaption></figure>
+      <div class="note"><b>Mistakes he logged:</b> trailer cuts are not content · GTA V streamed under the GTA 6 tag, so require a proof frame · a 1.5 s teaser looks like a glitch · Whisper failed on most Twitch audio · an NPC's line almost got subtitled as the streamer.</div>
+    </div>
+  </div>
+  <div class="foot"><span>Frames: Nate Herk · rules from his guide · "Clipp today" from the vault and config</span><span>7 / 12</span></div>
+</section>
+
+<!-- 8 LEARNING AND GUARDRAILS -->
+<section class="page">
+  <div class="hd"><div class="kicker">7 · Kenji: learning loop and guardrails</div><h2>Judge ratios not views, test one variable, and stop the system when it looks broken.</h2></div>
+  <div class="body" style="grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr">
+    <div class="col">
+      <div class="rule"><h3>Metrics, in order <span class="tag ok">guide</span></h3>
+      <ol class="sm9"><li>Share rate: shares ÷ plays. Target ≥ 1.0% at 24 h</li><li>Like rate</li><li>Comment rate</li><li>Follows per 1,000 views</li><li>Watch time and skip rate (when readable)</li><li>Raw plays at 2 h and 24 h</li></ol>
+      <p class="sm9">No verdict on a format under 24 h. Judge posting slots after 2 weeks, not 2 days.</p></div>
+      <div class="rule"><h3>Experiments</h3>
+      <p class="sm9">IDs <code>EXP-G#</code> (own data) and <code>EXP-R#</code> (research). Write metric, sample size and kill condition first. Status: Leading, Promising, Running, Queued, Early miss, Killed. Example: character on screen and named = about 7× the others (873 TikTok plays).</p>
+      <p class="sm9"><b>Momentum rule:</b> a post beating 3× the account median gets a same-streamer follow-up within 24 h.</p></div>
+    </div>
+    <div class="col">
+      <div class="rule"><h3>Anti-stuck rules</h3>
+      <ul class="sm9"><li>Under 20 plays at 1 h = stuck (zero, not low, means it never entered distribution).</li>
+      <li>2 stuck in a row on a platform: pause it 24 h. Both: pause all and alert.</li>
+      <li>Repost once as a fresh cut; never re-upload the same file.</li>
+      <li>No post within 2 h of a profile edit.</li>
+      <li>One stuck post on a clean account is usually a one-off hold, not a shadowban.</li></ul></div>
+      <div class="rule"><h3>Learning files <span class="tag ok">guide</span></h3>
+      <p class="sm9"><code>scoreboard.csv</code> (one row per post per platform, every read timestamped) · <code>log.md</code> (hook, caption, source URL, proof frame, send-test line, rejects with reasons) · <code>learning.md</code> · <code>playbook.md</code> · takedown log.</p></div>
+      <div class="note prop"><b>Clipp version:</b> same files, one folder per streamer, fed by <code>post_stats</code> reads at 2 h, 24 h and 72 h.</div>
+    </div>
+    <div class="col">
+      <figure class="fr"><img class="shot dark" src="assets/k-06-guardrails.jpg"><figcaption><b>Guardrails</b> (8:40): never pays, DMs or edits the profile; never implies it is official; skips sexual clips, animal harm, leaks, spoilers; 2 stuck in a row pauses the app.</figcaption></figure>
+      <figure class="fr"><img class="shot dark" src="assets/k-05-human-loop.jpg"><figcaption><b>The human's role</b> (8:00): approves the first 3 posts, then autopilot; says yes to money, messages, profile and rule changes; one-command kill switch; short update each run. <b>We keep our stricter gate.</b></figcaption></figure>
+    </div>
+  </div>
+  <div class="foot"><span>Frames: Nate Herk · metrics, rules and experiments from his guide</span><span>8 / 12</span></div>
+</section>
+
+<!-- 9 GAP ANALYSIS -->
+<section class="page">
+  <div class="hd"><div class="kicker">8 · Gap analysis</div><h2>Clipp has the plumbing. It is missing the feedback loop.</h2></div>
+  <div class="body" style="grid-template-rows:1fr">
+    <table class="tight">
+      <tr><th style="width:22%">Capability</th><th style="width:25%">Clipper Pro / Kenji</th><th style="width:30%">Clipp today <span class="tag ok">verified in code</span></th><th>Action</th></tr>
+      <tr><td>Live watch and buffer</td><td>Own window, nonstop</td><td>Helix poll 60 s, 10 s segments, 10 min rolling buffer</td><td>Keep</td></tr>
+      <tr><td>Detector signals</td><td>Sound events, cam motion, game change, cuts, chat mood and words</td><td>Chat burst, unique chatters, reaction emotes, loudness only</td><td>Add the missing signals</td></tr>
+      <tr><td>Dead-air gate</td><td>Skips starting soon, ads, map-staring</td><td>Chat-rate floor 0.5 msg/s only</td><td>Add gate + frame rejects</td></tr>
+      <tr><td>Viewer clips</td><td>Badge or cut if missed</td><td>None</td><td>Helix Get Clips poller</td></tr>
+      <tr><td>Per-streamer learning</td><td>Brain with thumbs and viewer clips</td><td>Standing <code>edit_rules</code> (style asks) and <code>candidate_log</code>; no per-streamer weights</td><td>Add brain per streamer</td></tr>
+      <tr><td>CLIP THAT</td><td>Last 40 s on demand</td><td>Buffer exists; no trigger</td><td>Button + Discord command</td></tr>
+      <tr><td>Score</td><td>0–100 with parts</td><td><code>score_10</code>, hook type, keep/drop</td><td>0–100 with reasons; keep <code>score_10</code></td></tr>
+      <tr><td>QA gates</td><td>Proof frame, freshness, dedupe, send test</td><td>Code QA: 9:16, loudness, size, duration, captions</td><td>Add the four Kenji gates</td></tr>
+      <tr><td>Analytics</td><td>Scoreboard at 2 h / 24 h / 72 h</td><td>Only <code>tiktok_stats</code> (manual)</td><td><code>post_stats</code> for YouTube, X, TikTok</td></tr>
+      <tr><td>Experiments, stuck-post flags</td><td>EXP IDs, tripwires</td><td>None</td><td>Per-streamer files; flags only, no auto-delete</td></tr>
+      <tr><td>Approval gate</td><td>Autopilot after 3 posts</td><td>Postgres trigger: no post without human approval; 10/day cap</td><td><b>Keep. Stronger than both.</b></td></tr>
+      <tr><td>Disk hygiene</td><td>Nothing raw older than 24 h</td><td>Not confirmed for raw sources</td><td>Verify, then add cleanup <span class="tag unv">unverified</span></td></tr>
+    </table>
+  </div>
+  <div class="foot"><span>Clipp column from worker code and Supabase migrations (explored 2026-11-22; same commit in both checkouts)</span><span>9 / 12</span></div>
+</section>
+
+<!-- 10 STREAMERS -->
+<section class="page">
+  <div class="hd"><div class="kicker">9 · The three streamers</div><h2>Your trio: Lacy, Jynxzi, Stable Ronaldo. xQc is the bench.</h2>
+  <p class="lead" style="font-size:10pt">Last 30 days (to 2026-11-22), TwitchTracker stream lists and Kick's public videos endpoint. GTA 6 share is a title-keyword proxy; confirm with Twitch Helix before locking.</p></div>
+  <div class="body" style="grid-template-columns:1.3fr 1fr;grid-template-rows:1fr">
+    <div>
+      <table class="tight">
+        <tr><th>Streamer</th><th>Days live /30</th><th>Hours</th><th>Avg viewers</th><th>GTA 6 hours since 11-18</th><th>Score /35</th></tr>
+        <tr><td>Lacy</td><td>21</td><td>210</td><td>13.7k</td><td>107.5 (4 marathons)</td><td><b>32</b></td></tr>
+        <tr><td>xQc</td><td>23</td><td>278</td><td>26.9k</td><td>59.7</td><td><b>27</b></td></tr>
+        <tr><td>Stable Ronaldo</td><td>15</td><td>218</td><td>34.8k</td><td>59.6</td><td><b>26</b></td></tr>
+        <tr><td>Jynxzi</td><td>31</td><td>229</td><td>29.0k</td><td>31.1, shares time with Siege and chess</td><td>25</td></tr>
+        <tr><td>Kai Cenat</td><td>11</td><td>226</td><td>39.3k</td><td>74.6, only 13 streams</td><td>21</td></tr>
+        <tr><td>Adin Ross (Kick)</td><td>27</td><td>102</td><td>28–51k VOD views</td><td>4 days "PLAYING GTA 6"</td><td>20</td></tr>
+        <tr><td>IShowSpeed</td><td>11</td><td>87</td><td>25.1k</td><td>59.5 (main home is YouTube)</td><td>17</td></tr>
+      </table>
+      <p class="sm9" style="margin-top:2mm">Rubric, 1–5 each: activity · GTA 6 focus · volume · less saturated · capture reliability · crop box ready · brand safety. The qualitative columns are my judgment; every row is in <code>streamer-shortlist.md</code>.</p>
+      <h3 style="margin-top:3mm">Hours streamed, last 30 days</h3>
+      <div class="sm9" style="margin-top:1.5mm">
+        <div style="display:grid;grid-template-columns:24mm 1fr 12mm;gap:1.4mm 2mm;align-items:center">
+          <span>xQc</span><div style="background:#9aa3b0;height:3.6mm;width:100%;border-radius:.8mm"></div><span class="mono">278 h</span>
+          <span>Lacy</span><div style="background:#0b7a74;height:3.6mm;width:75.6%;border-radius:.8mm"></div><span class="mono">210 h</span>
+          <span>Jynxzi</span><div style="background:#0b7a74;height:3.6mm;width:82.4%;border-radius:.8mm"></div><span class="mono">229 h</span>
+          <span>Stable Ronaldo</span><div style="background:#0b7a74;height:3.6mm;width:78.4%;border-radius:.8mm"></div><span class="mono">218 h</span>
+          <span>Kai Cenat</span><div style="background:#9aa3b0;height:3.6mm;width:81.3%;border-radius:.8mm"></div><span class="mono">226 h</span>
+          <span>Adin Ross</span><div style="background:#9aa3b0;height:3.6mm;width:36.7%;border-radius:.8mm"></div><span class="mono">102 h</span>
+          <span>IShowSpeed</span><div style="background:#9aa3b0;height:3.6mm;width:31.3%;border-radius:.8mm"></div><span class="mono">87 h</span>
+        </div>
+        <p class="mute" style="margin-top:1.5mm;font-size:8pt">Green = your trio (xQc scored 27 vs Jynxzi 25; your call). Days live: Jynxzi 31, Adin 27, xQc 23, Lacy 21, Stable 15, Kai 11, Speed 11. Hours alone mislead: Kai's 226 h came from 13 streams.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="rule"><h3>Why these three</h3><ul class="sm9">
+        <li><b>Lacy:</b> mid-size, all-GTA marathons of about 25 h, approved crop box, official Twitch capture. Matches Kenji's finding that mid-size streamers with real facecams yield best.</li>
+        <li><b>Jynxzi:</b> live every one of the last 31 days, avg 29k, so the most reliable clip supply. Not all GTA: titles show chess, fan mail and Siege segments beside GTA 6, so his agent keeps a baseline per game.</li>
+        <li><b>Stable Ronaldo:</b> long, steady GTA playthroughs and strong viewership; fewer streams, so each one needs more patience.</li></ul></div>
+      <div class="rule"><h3>Risks</h3><ul class="sm9">
+        <li>Stable Ronaldo and Kai are finishing the game; GTA volume may fall. Jynxzi's mix of games makes him the durable pick. Re-rank monthly; xQc is the bench.</li>
+        <li>Only Lacy's crop box is approved; the others render full-frame until you approve.</li>
+        <li>Adin Ross: Kick capture is unofficial and content is mature-flagged. Left out.</li>
+        <li>Campaigns need pay above $1 per 1,000 views (D072); none qualified on 2026-11-21. <span class="tag unv">unverified</span></li></ul></div>
+    </div>
+  </div>
+  <div class="foot"><span>Sources: twitchtracker.com stream lists, kick.com public videos endpoint, roster notes D069 · scraped 2026-11-22</span><span>10 / 12</span></div>
+</section>
+
+<!-- 11 AGENTS -->
+<section class="page">
+  <div class="hd"><div class="kicker">10 · Three agents, one lifecycle each</div><h2>Each agent owns one streamer from "went live" to "what did it earn", and learns from every outcome.</h2></div>
+  <div class="body" style="grid-template-columns:1.6fr 1fr;grid-template-rows:1fr">
+    <div>
+      <svg viewBox="0 0 760 470" class="big" role="img" aria-label="Agent lifecycle">
+        <text class="lab" x="8" y="16">PER-STREAMER AGENT (Lacy, Jynxzi or Stable Ronaldo)</text>
+        <rect class="nc" x="8" y="30" width="112" height="64" rx="8"/><text class="t" x="18" y="56">1 Watch</text><text class="s" x="18" y="76">poll + notify</text>
+        <rect class="nc" x="135" y="30" width="112" height="64" rx="8"/><text class="t" x="145" y="56">2 Detect</text><text class="s" x="145" y="76">own weights</text>
+        <rect class="nm" x="262" y="30" width="112" height="64" rx="8"/><text class="t" x="272" y="56">3 Judge</text><text class="s" x="272" y="76">score /100</text>
+        <rect class="nc" x="389" y="30" width="112" height="64" rx="8"/><text class="t" x="399" y="56">4 Cut + QA</text><text class="s" x="399" y="76">edit + gates</text>
+        <rect class="nh" x="516" y="30" width="112" height="64" rx="8"/><text class="t" x="526" y="56">5 Zo review</text><text class="s" x="526" y="76">yes / revise</text>
+        <rect class="nc" x="643" y="30" width="112" height="64" rx="8"/><text class="t" x="653" y="56">6 Publish</text><text class="s" x="653" y="76">existing gate</text>
+        <path class="ar" d="M120 62H133"/><path class="ar" d="M247 62H260"/><path class="ar" d="M374 62H387"/><path class="ar" d="M501 62H514"/><path class="ar h" d="M628 62H641"/>
+        <rect class="nx" x="516" y="140" width="239" height="58" rx="8"/><text class="t" x="528" y="164">7 Platform stats</text><text class="s" x="528" y="184">2 h, 24 h, 72 h reads</text>
+        <path class="ar" d="M699 94V138"/>
+        <rect class="np" x="262" y="140" width="239" height="58" rx="8"/><text class="t" x="274" y="164">8 Labels</text><text class="s" x="274" y="184">approve, reject, viewer clip, ratio</text>
+        <path class="ar" d="M516 169H503"/><path class="ar d" d="M572 94V138"/>
+        <rect class="np" x="8" y="140" width="239" height="58" rx="8"/><text class="t" x="20" y="164">9 Brain refit (weekly)</text><text class="s" x="20" y="184">weights, chat words, versioned</text>
+        <path class="ar" d="M262 169H249"/><path class="ar p" d="M64 140V96"/><path class="ar p" d="M191 140V96"/>
+        <rect class="zone" x="8" y="230" width="747" height="215" rx="10"/><text class="lab" x="22" y="252">STATE FOLDER  streamers/&lt;slug&gt;/  (only this agent writes here)</text>
+        <rect class="nc" x="22" y="268" width="110" height="48" rx="6"/><text class="s" x="32" y="290">brain.json</text><text class="m g" x="32" y="306">weights, lift</text>
+        <rect class="nc" x="144" y="268" width="110" height="48" rx="6"/><text class="s" x="154" y="290">playbook.md</text><text class="m g" x="154" y="306">this streamer</text>
+        <rect class="nc" x="266" y="268" width="110" height="48" rx="6"/><text class="s" x="276" y="290">learning.md</text><text class="m g" x="276" y="306">dated lessons</text>
+        <rect class="nc" x="388" y="268" width="110" height="48" rx="6"/><text class="s" x="398" y="290">experiments.md</text><text class="m g" x="398" y="306">1 variable</text>
+        <rect class="nc" x="510" y="268" width="110" height="48" rx="6"/><text class="s" x="520" y="290">scoreboard.csv</text><text class="m g" x="520" y="306">ratios first</text>
+        <rect class="nc" x="632" y="268" width="110" height="48" rx="6"/><text class="s" x="642" y="290">log.md</text><text class="m g" x="642" y="306">+ takedowns.md</text>
+        <rect class="nx" x="22" y="336" width="350" height="94" rx="6"/><text class="t" x="34" y="360">Shared, read-only</text><text class="s" x="34" y="380">zo-clipper skill: scoring, edit grammar, QA gates</text><text class="s" x="34" y="398">channels.toml, Decision Log, edit_rules</text><text class="s" x="34" y="416">Never reads another streamer's folder</text>
+        <rect class="nh" x="388" y="336" width="354" height="94" rx="6"/><text class="t" x="400" y="360">Zo decides</text><text class="s" x="400" y="380">every clip, rule change and new test</text><text class="s" x="400" y="398">Nothing posts or changes without a yes</text><text class="s" x="400" y="416">Pause with Wake Up (D055)</text>
+        <path class="ar p" d="M130 200V228"/>
+      </svg>
+      <div class="key"><span><i style="background:#f3f5f8;border:1px solid #9aa3b0"></i>code</span><span><i style="background:#e3f3f1;border:1px solid #0b7a74"></i>model</span><span><i style="background:#fff;border:2px solid #131821"></i>human</span><span><i style="background:#efe9fb;border:1px solid #7449c9"></i>proposed learning</span></div>
+      <table class="tight" style="margin-top:3mm">
+        <tr><th>Run mode</th><th>Trigger</th><th>Reads</th><th>Writes</th></tr>
+        <tr><td>Live</td><td>Streamer goes live</td><td>chat, audio, frames, brain.json</td><td>clip, <code>candidate_log</code>, log.md</td></tr>
+        <tr><td>After decision</td><td>Approve, revise, reject</td><td>the clip's score and reason</td><td>label, log.md, brain counts</td></tr>
+        <tr><td>Analytics</td><td>2 h, 24 h, 72 h after a post</td><td>platform stats</td><td>scoreboard.csv, stuck-post flag</td></tr>
+        <tr><td>Weekly learn</td><td>Schedule or 25 new labels</td><td>scoreboard, labels, experiments</td><td>learning.md, brain.json version, proposals</td></tr>
+      </table>
+    </div>
+    <div class="col">
+      <div class="rule"><h3>Why separate agents</h3><ul class="sm9">
+        <li>Each streamer's chat, humour and layout differ. One brain per streamer means no cross-contamination.</li>
+        <li>Per-streamer evidence: a clip type that works for Lacy is a hypothesis for Jynxzi, never an inherited rule.</li>
+        <li>Smaller context per run; cheaper (D026).</li></ul></div>
+      <div class="rule"><h3>How it self-improves</h3><ul class="sm9">
+        <li>Every decision and stat read becomes a labelled example.</li>
+        <li>Weekly: one question from the data, one experiment, one proposed rule change.</li>
+        <li>Cold start: first 3 streams observe and score only.</li>
+        <li>Weights move ≤ 25% per refit; four versions kept for rollback.</li>
+        <li>Judge by share rate at 24 h; slots after 2 weeks.</li></ul></div>
+      <div class="note prop"><b>Format:</b> three project agents, <code>memory: project</code>, writing only their own folder. Drafts are in <code>agents/</code>; nothing installed.</div>
+    </div>
+  </div>
+  <div class="foot"><span>Clipper &amp; Kenji · review pack</span><span>11 / 12</span></div>
+</section>
+
+<!-- 12 UPGRADES AND DECISIONS -->
+<section class="page">
+  <div class="hd"><div class="kicker">11 · Upgrades and decisions</div><h2>Highest-impact quality upgrades first, then the five calls you made.</h2></div>
+  <div class="body" style="grid-template-columns:1.3fr 1fr;grid-template-rows:1fr">
+    <div>
+      <table class="tight">
+        <tr><th style="width:5%">#</th><th>Upgrade</th><th style="width:14%">Impact</th><th style="width:12%">Effort</th></tr>
+        <tr><td>1</td><td><b>Dead-air gate + non-chat confirmation.</b> Fewer false clips, less review time.</td><td>High</td><td>S</td></tr>
+        <tr><td>2</td><td><b>Labels table + per-streamer brain.</b> Foundation for everything that "gets better".</td><td>High</td><td>M</td></tr>
+        <tr><td>3</td><td><b>Score 0–100 with reasons, send test, proof frame.</b> Explainable ranking, fewer GTA V mix-ups.</td><td>High</td><td>S</td></tr>
+        <tr><td>4</td><td><b>Post stats at 2 h / 24 h / 72 h + share-rate scoreboard.</b> Without it nothing can learn from results.</td><td>High</td><td>M</td></tr>
+        <tr><td>5</td><td><b>Viewer-clip poller.</b> Free third-party vote on what mattered.</td><td>Med</td><td>S</td></tr>
+        <tr><td>6</td><td><b>CLIP THAT button.</b> Catches what the detector missed, and trains it.</td><td>Med</td><td>S</td></tr>
+        <tr><td>7</td><td><b>Hook A/B: headline vs payoff-first teaser.</b> One variable, data decides.</td><td>Med</td><td>M</td></tr>
+        <tr><td>8</td><td><b>Sound events + facecam motion + game-change signals.</b> Better recall on non-verbal moments.</td><td>Med</td><td>M</td></tr>
+        <tr><td>9</td><td><b>Stuck-post tripwire (flag only).</b></td><td>Low</td><td>S</td></tr>
+      </table>
+      <p class="sm9" style="margin-top:2mm"><b>Build order:</b> shared foundations → Lacy end to end in dry-run → Jynxzi and Stable Ronaldo → analytics loop → dashboard polish. Every step sits behind a flag, off by default. Full list in <code>wiring-plan.md</code>.</p>
+    </div>
+    <div class="col">
+      <div class="rule"><h3>Decisions (all made)</h3>
+      <ol class="sm9">
+        
+        </ol></div>
+      <div class="note prop"><b>Settled 2026-11-22:</b> trio = Lacy, Jynxzi, Stable Ronaldo. xQc stays on the bench with a ready agent draft. Every clip stays human-approved (D003); no trust mode. TikTok = manual upload of short clips (D074); the long-form Zwoclipp plan (D079-D083) is untouched unless you change it. Hook style is an A/B: headline vs payoff-first teaser, flash and whoosh off. Cadence: heavy, quality-gated ramp up to about 8 posts a day per platform, 2.5 h apart, tripwires on (cap stays 10, D043).</div>
+      <div class="note unv"><b>Not verified:</b> Pro's internals, any earnings, GTA 6 share by category (title proxy), X and YouTube stats API cost and limits, whether current disk cleanup covers raw sources.</div>
+      <div class="note"><b>Licence:</b> the free skill may not be re-uploaded; we copied none of its code.</div>
+    </div>
+  </div>
+  <div class="foot"><span>Clipper &amp; Kenji · review pack</span><span>12 / 12</span></div>
+</section>
+
+<script>
+document.fonts.ready.then(function(){
+  var out=[];
+  document.querySelectorAll('.page').forEach(function(el,i){
+    var r=el.getBoundingClientRect(), maxB=0;
+    el.querySelectorAll('*').forEach(function(c){ if(c.closest('.foot')||c.closest('svg')) return; var cr=c.getBoundingClientRect(); if(cr.height) maxB=Math.max(maxB,cr.bottom-r.top); });
+    var limit=r.height-8*3.78;
+    if(maxB>limit||el.scrollHeight>el.clientHeight) out.push((i+1)+':'+Math.round(maxB)+'/'+Math.round(limit));
+  });
+  var d=document.createElement('div'); d.id='overflow'; d.textContent='OVERFLOW='+(out.join(',')||'none'); document.body.appendChild(d);
+});
+</script>
+</body>
+</html>
