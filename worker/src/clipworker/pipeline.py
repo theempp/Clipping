@@ -77,6 +77,7 @@ class Pipeline:
             video, dur, settings.dead_air, env("FFMPEG_BIN", "ffmpeg")))
         self.channels = {c.key: c for c in settings.channels}
         self._pod_ids: dict[str, str] | None = None
+        self.ts_offset = 0.0  # VOD runs: offset seconds + this = real time
 
     def pod_of(self, channel_key: str) -> str:
         ch = self.channels.get(channel_key)
@@ -171,7 +172,7 @@ class Pipeline:
             return
         try:
             self.sb.log_candidate({"job_id": job.id, "channel_key": job.channel,
-                                   "moment_at": iso(job.trigger_ts), "score": job.score,
+                                   "moment_at": iso(job.trigger_ts + self.ts_offset), "score": job.score,
                                    "outcome": outcome, "reason": reason[:500],
                                    "features": job.data.get("features", {}),
                                    **self._pod_fields(job.channel)})
@@ -481,7 +482,7 @@ class Pipeline:
             "description": job.data["description"], "category": j["category"],
             "confidence": j["confidence"], "detector_score": job.score,
             "score_10": j.get("score_10") or None, "hook_type": j.get("hook_type"),
-            "moment_at": iso(job.trigger_ts), "duration_s": m["duration"],
+            "moment_at": iso(job.trigger_ts + self.ts_offset), "duration_s": m["duration"],
             "storage_path": f"{base}/clip.mp4", "thumb_path": f"{base}/thumb.jpg", "source_path": source_path,
             "qa": job.data["qa"], "judge": j, "manifest": m, **self._pod_fields(job.channel)},
             on_conflict="job_id",

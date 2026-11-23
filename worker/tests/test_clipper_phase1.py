@@ -230,8 +230,98 @@ def test_run_dry_end_to_end_nothing_uploaded(tmp_path):
     assert "would reach review 1" in (out / "report.md").read_text(encoding="utf-8")
 
 
+def test_run_dry_review_mode_uploads_pending_review(tmp_path):
+    s = _settings(tmp_path, score_100=True)
+
+    class Tr:
+        def transcribe(self, wav):
+            return [Word(18 + i * 0.4, 18.3 + i * 0.4, w) for i, w in enumerate("no way he did that".split())]
+
+    class SB:
+        def __init__(self):
+            self.inserts, self.uploads = [], []
+
+        def upload(self, path, file, ct):
+            self.uploads.append(path)
+            return path
+
+        def insert(self, table, row, **k):
+            self.inserts.append((table, row))
+            return [row]
+
+        def select(self, table, **k):
+            return [{"id": "s1"}] if table == "streamers" else []
+
+        def log_candidate(self, row):
+            pass
+
+        def log_spend(self, *a, **k):
+            pass
+
+    def extract(_b, start, end, out_dir):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return {"video": str(out_dir / "w.mp4"), "audio": str(out_dir / "w.wav"), "start_ts": start,
+                "end_ts": end, "partial": False}
+
+    def render(job_id, video, job_dir, t_in, t_out, *a, **k):
+        job_dir.mkdir(parents=True, exist_ok=True)
+        (job_dir / "clip.mp4").write_bytes(b"x")
+        (job_dir / "t.jpg").write_bytes(b"x")
+        return {"video": str(job_dir / "clip.mp4"), "thumbnail": str(job_dir / "t.jpg"), "duration": t_out - t_in}
+
+    from clipworker.judge.heuristic import HeuristicJudge
+    sb = SB()
+    qa = lambda *a, **k: SimpleNamespace(passed=True, failures=[], metrics={"lufs": -14})
+    out = run_dry(s, "twitch:lacy", Path("vod.mp4"), _chat_file(tmp_path), tmp_path / "dry", Tr(),
+                  HeuristicJudge(), loudness=[], extract=extract, render=render, qa=qa,
+                  supabase=sb, vod_started_at=1_700_000_000)
+    rep = json.loads((out / "report.json").read_text(encoding="utf-8"))
+    assert not rep["flags"]["dry_run"]
+    clips = [r for t, r in sb.inserts if t == "clips"]
+    assert clips and all(c["state"] == "pending_review" for c in clips)
+    assert clips[0]["moment_at"].startswith("2023-")
+    assert rep["jobs"][0]["stage"] == "uploaded"
+    assert not any(t == "publications" for t, _ in sb.inserts)
+
+
 def test_render_report_lists_gated():
     md = render_report({"channel": "twitch:lacy", "vod": "v", "flags": {"dead_air_gate": True},
                         "candidates": 2, "judged": 0, "jobs": [],
                         "gated": [{"start": 65, "reason": "dead air: before show_start"}]})
     assert "0:01:05 | gated" in md and "dead_air_gate" in md
+
+
+def test_rejudge_updates_metadata_never_state(tmp_path):
+    from clipworker.judge.grok import Judgment
+    from clipworker.rejudge import rejudge_queue
+    from clipworker.store import Store
+    s = _settings(tmp_path, score_100=False)
+    live = tmp_path / "live.sqlite3"
+    st = Store(live)
+    jid = "j1"
+    st.create_job(jid, "twitch:lacy", 10.0, 50.0, 30.0, 5.0, {
+        "capture": {"start_ts": 10.0, "end_ts": 50.0}, "rules": {"min_s": 10, "max_s": 60},
+        "words": [], "features": {"z_chat": 2.0}, "chat_sample": [], "rules_summary": "", "peak_ts": 30.0}, None)
+    st.db.commit()
+
+    class SB:
+        updates = []
+
+        def select(self, table, **k):
+            return [{"id": "c1", "job_id": jid, "channel_key": "twitch:lacy", "title": "UNJUDGED: x", "judge": {}}]
+
+        def update(self, table, match, values):
+            self.updates.append((table, match, values))
+
+        def log_spend(self, *a, **k):
+            pass
+
+    class J:
+        def judge(self, *a, **k):
+            return Judgment(False, "funny", 1, 20, "h", "Boring bit", [], 0.4, "meh", score_10=3)
+
+    sb = SB()
+    rows = rejudge_queue(s, live, tmp_path / "rj", sb, J())
+    assert rows[0]["keep"] is False
+    (_, match, vals), = sb.updates
+    assert match == {"id": "c1"} and "state" not in vals and vals["title"] == "WEAK: Boring bit"

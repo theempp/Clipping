@@ -38,15 +38,16 @@ pop_ms = 90
 # robotic: gentle 112%, cosine-eased in and out, only on the detector peak and shouted lines, at most 2
 # per clip, plus a slow 3% push across the whole clip so the frame is never dead still.
 # Gaming layouts zoom only the facecam panel; IRL (track) mode zooms the whole frame.
+# D112 (Zo, 2026-11-23): NO zooms on any clip, existing or future. scale 1.0 = off, no drift.
 [zoom]
-scale = 1.12
+scale = 1.0
 ramp_s = 0.6
 hold_s = 1.8
 min_gap_s = 8.0
 max_zooms = 2
 moments = "emphasis"
 ease = "smooth"
-drift = 0.03
+drift = 0.0
 
 # Whoosh on each zoom (P4). D052 (Zo, 2026-11-20): off by default. Synthesized locally, no licence risk. A campaign with
 # rules.allow_sfx = false always renders without it; a revision note can switch it per clip.
