@@ -1,6 +1,19 @@
 // Sample day for demo mode (D057). Times are relative to page load so the
 // countdown and "live for" clocks move. Nothing here touches the network.
-import type { Access, BrainWeights, Campaign, Candidate, Clip, LiveStat, LongformVideo, Pod, Publication, Snapshot, StatPoint, Streamer } from "./types.ts";
+import type { Access, BrainWeights, Campaign, Candidate, Clip, LiveStat, LongformVideo, Pod, PodCampaign, PodStatement, PostStat, Publication,
+  Snapshot, StatPoint, Streamer } from "./types.ts";
+
+/** Demo pod_statements rows for this month (stand-in for the view; amounts are sample data). */
+function demoStatements(now: number): PodStatement[] {
+  const d = new Date(now);
+  const month = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  return [
+    { pod_id: "pod-1", month, entries: 3, gross_cents: 120000, agency_cut_cents: 18000, pod_net_cents: 102000,
+      pending_net_cents: 25500, owed_net_cents: 42500, paid_net_cents: 34000 },
+    { pod_id: "pod-2", month, entries: 1, gross_cents: 20000, agency_cut_cents: 3000, pod_net_cents: 17000,
+      pending_net_cents: 17000, owed_net_cents: 0, paid_net_cents: 0 },
+  ];
+}
 
 // Pods demo (D091): Pod 1 is Zo's roster; Pod 2 is a test pod with the two GTA-6-only streamers.
 export const DEMO_PODS: Pod[] = [
@@ -152,8 +165,19 @@ export function demoSnapshot(now = Date.now()): Snapshot {
     { streamer_id: "s-lacy", weights: { chat_spike: 72, voice_peak: 58, chat_words: 81, viewer_clips: 34, approved_match: 66 }, words: ["CLIP", "NO WAY", "LACY"], updated_at: iso(86400_000) },
     { streamer_id: "s-jynxzi", weights: { chat_spike: 64, voice_peak: 77, chat_words: 52, viewer_clips: 41, approved_match: 58 }, words: ["JYNXZI", "W"], updated_at: iso(2 * 86400_000) },
   ];
+  // Pod home (Phase 3): one suggested campaign per pod, two posts stuck under 20 plays at ~1 h.
+  const podCampaigns: PodCampaign[] = [
+    { pod_id: "pod-1", campaign_id: "c1", status: "joined", scout: {}, decided_at: iso(2 * 86400_000), created_at: iso(3 * 86400_000) },
+    { pod_id: "pod-1", campaign_id: "c2", status: "suggested", scout: { reason: "Jynxzi is in this pod; $1.00 CPM clears the floor" }, decided_at: null, created_at: iso(5 * 3600_000) },
+    { pod_id: "pod-2", campaign_id: "c1", status: "suggested", scout: { reason: "Kai Cenat and IShowSpeed are named" }, decided_at: null, created_at: iso(3 * 3600_000) },
+  ];
+  const postStats: PostStat[] = [
+    { clip_id: "demo-3", platform: "youtube", read_at: iso(4 * 3600_000), hours_since_post: 1, plays: 1450 },
+    { clip_id: "demo-3", platform: "x", read_at: iso(4 * 3600_000), hours_since_post: 1, plays: 12 },
+    { clip_id: "demo-14", platform: "youtube", read_at: iso(20 * min), hours_since_post: 1.1, plays: 8 },
+  ];
   return {
-    pods: DEMO_PODS,
+    pods: DEMO_PODS, podCampaigns, postStats, statements: demoStatements(now),
     live, history, publications, campaigns, brains,
     streamers,
     clips,

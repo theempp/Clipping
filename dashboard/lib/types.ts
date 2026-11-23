@@ -180,6 +180,10 @@ export type Snapshot = {
   brains: BrainWeights[];
   /** Pods (NEXT_PUBLIC_CLIPP_PODS=1). Empty while the flag is off. */
   pods: Pod[];
+  podCampaigns: PodCampaign[];
+  /** Early post_stats readings (<= 2.5 h), enough for the stuck-post flag. */
+  postStats: PostStat[];
+  statements: PodStatement[];
 };
 
 /** Manual editor output (trim + crop + headline + captions), sent as a revision payload. */
@@ -201,3 +205,15 @@ export type Pod = { id: string; slug: string; name: string; status: "trial" | "a
 export type PodAccess = { id: string; slug: string; name: string; role: PodRole };
 /** my_access(): admin sees every pod; pods = the user's own memberships. */
 export type Access = { admin: boolean; pods: PodAccess[] };
+/** Campaign participation per pod; the per-pod scout writes `suggested` rows (D106: the pod owner decides). */
+export type PodCampaign = {
+  pod_id: string; campaign_id: string; status: "suggested" | "joined" | "declined" | "left";
+  scout: Record<string, unknown>; decided_at: string | null; created_at: string;
+};
+/** One stats reading of one post (migration 20261122230000). */
+export type PostStat = { clip_id: string; platform: "youtube" | "x" | "tiktok"; read_at: string; hours_since_post: number; plays: number | null };
+/** pod_statements view: one pod, one month. Money is cents, computed in the database. */
+export type PodStatement = {
+  pod_id: string; month: string; entries: number; gross_cents: number; agency_cut_cents: number; pod_net_cents: number;
+  pending_net_cents: number; owed_net_cents: number; paid_net_cents: number;
+};

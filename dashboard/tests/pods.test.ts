@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DEMO_PODS, demoAccess, demoSnapshot } from "../lib/demo.ts";
-import { canReview, hasAccess, parseAccess, podSnapshot, scopedPod } from "../lib/pods.ts";
+import { canReview, cents, hasAccess, monthOf, parseAccess, podSnapshot, scopedPod, stuckPosts, usd } from "../lib/pods.ts";
 import type { Pod } from "../lib/types.ts";
 
 const ZO = parseAccess({ admin: true, pods: [{ id: "pod-1", slug: "pod-1", name: "Pod 1", role: "owner" }] });
@@ -42,6 +42,20 @@ test("podSnapshot keeps one pod's clips and streamers", () => {
   assert.ok(p2.streamers.every((x) => x.pod_id === "pod-2"));
   assert.equal(podSnapshot(s, null), s);
   assert.ok(s.clips.some((c) => c.pod_id == null), "demo has an untagged clip");
+});
+
+test("stuckPosts matches the worker rule (< 20 plays at ~1 h, else ~2 h)", () => {
+  const r = (clip_id: string, h: number, plays: number | null, platform: "youtube" | "x" = "youtube") =>
+    ({ clip_id, platform, read_at: "2026-11-20T18:00:00Z", hours_since_post: h, plays });
+  const flags = stuckPosts([r("a", 1.0, 12), r("a", 2.0, 400), r("b", 1.1, 25), r("c", 2.0, 5), r("d", 0.2, 1), r("e", 1.0, null), r("a", 1.0, 900, "x")]);
+  assert.deepEqual(flags.map((f) => `${f.clip_id}:${f.platform}`).sort(), ["a:youtube", "c:youtube"]);
+});
+
+test("money is display formatting only", () => {
+  assert.equal(usd(150050), "$1,500.50");
+  assert.equal(usd(-8501), "-$85.01");
+  assert.equal(cents(0), "0.00");
+  assert.equal(monthOf(Date.parse("2026-11-30T23:59:00Z")), "2026-11-01");
 });
 
 test("demo login switch", () => {

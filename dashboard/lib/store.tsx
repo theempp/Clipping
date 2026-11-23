@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from "react";
 import { demoAccess, demoSnapshot } from "./demo";
 import { IS_DEMO, PODS_ON } from "./env";
-import { canReview as podCanReview, hasAccess, parseAccess, podSnapshot, scopedPod } from "./pods";
+import { canReview as podCanReview, hasAccess, isPodOwner, parseAccess, podSnapshot, scopedPod } from "./pods";
 import { browserClient } from "./supabase/client";
 import type { Access, Clip, EditPlan, LongformVideo, ReviewAction, Snapshot, TiktokStats } from "./types";
 import { editNote, editPayload } from "./logic";
@@ -19,6 +19,8 @@ function driftLive(rows: LiveStat[]): LiveStat[] {
 export const UNDO_MS = 4000;
 
 type Pending = { clip: Clip; action: ReviewAction; note?: string; applyAll?: boolean; until: number };
+/** key lets a page hide the row while the action waits. */
+export type Deferred = { key: string; verb: string; label: string; until: number; run: () => Promise<void> };
 
 type Store = {
   demo: boolean;
@@ -35,6 +37,10 @@ type Store = {
   /** Mirrors review_clip(): only the clip's pod owner, or the admin for untagged clips. The DB enforces it too. */
   canReview: (clip: Clip) => boolean;
   pending: Pending | null;
+  /** A non-clip action waiting UNDO_MS (campaign decline, ledger clear/approve); UndoToast shows it. */
+  later: Deferred | null;
+  /** Pod owner joins / declines a campaign for its pod (pod_campaign_set, D106). Decline waits for undo. */
+  setPodCampaign: (pod: string, campaign: string, status: "joined" | "declined", label: string) => Promise<string | null>;
   /** Approve / deny wait UNDO_MS before they reach the database, so a stray key press can be undone. */
   /** applyAll (revise only): the note's style asks also become standing rules for every clip (D078). */
   act: (clip: Clip, action: ReviewAction, note?: string, applyAll?: boolean) => void;
@@ -60,6 +66,7 @@ const EMPTY: Snapshot = {
   streamers: [], clips: [], submissions: [], heartbeat: null,
   control: { awake: false, updated_at: new Date(0).toISOString() }, candidates: [], spend: [], revisions: [], rules: [],
   longform: [], results: [], live: [], history: [], publications: [], campaigns: [], brains: [], pods: [],
+  podCampaigns: [], postStats: [], statements: [],
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -143,6 +150,15 @@ async function loadLive(): Promise<Snapshot> {
   // Admin reads every pod; a member reads only its own (RLS pod_read).
   const pods = PODS_ON ? await sb.from("pods").select("id,slug,name,status").order("slug") : null;
   if (pods?.error) throw new Error(pods.error.message);
+  const none = { data: [], error: null };
+  const [pc, ps, pst] = PODS_ON ? await Promise.all([
+    sb.from("pod_campaigns").select("pod_id,campaign_id,status,scout,decided_at,created_at"),
+    // post_stats is admin-only under RLS today; members read it as empty.
+    sb.from("post_stats").select("clip_id,platform,read_at,hours_since_post,plays").lte("hours_since_post", 2.5)
+      .gte("read_at", since30d).limit(3000),
+    sb.from("pod_statements").select("*").order("month", { ascending: false }).limit(240),
+  ]) : [none, none, none];
+  const num = (v: unknown) => Number(v ?? 0);
   const ok = <T,>(r: { data: T[] | null; error: unknown }): T[] => (r.error ? [] : r.data ?? []);
   const dest = new Map(ok(de).map((d) => [d.id, d]));
   const opt = {
@@ -152,6 +168,14 @@ async function loadLive(): Promise<Snapshot> {
     campaigns: ok(cm).map((c) => ({ ...c, cpm_usd: c.cpm_usd == null ? null : Number(c.cpm_usd), cap_usd: c.cap_usd == null ? null : Number(c.cap_usd), score: c.score == null ? null : Number(c.score) })),
     brains: ok(br),
     pods: pods?.data ?? [],
+    podCampaigns: ok(pc),
+    postStats: ok(ps).map((r) => ({ ...r, hours_since_post: Number(r.hours_since_post) })),
+    // bigint sums arrive as numbers or strings; Number() only changes the type, never the amount.
+    statements: ok(pst).map((r) => ({
+      pod_id: r.pod_id, month: String(r.month), entries: num(r.entries), gross_cents: num(r.gross_cents),
+      agency_cut_cents: num(r.agency_cut_cents), pod_net_cents: num(r.pod_net_cents), pending_net_cents: num(r.pending_net_cents),
+      owed_net_cents: num(r.owed_net_cents), paid_net_cents: num(r.paid_net_cents),
+    })),
   };
   return {
     ...opt,
@@ -177,6 +201,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<Pending | null>(null);
   const [access, setAccess] = useState<Access | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
+  const [later, setLater] = useState<Deferred | null>(null);
+  const laterRef = useRef<Deferred | null>(null);
+  const laterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const accessRef = useRef<Access | null>(null);
   accessRef.current = access;
   const pendingRef = useRef<Pending | null>(null);
@@ -303,7 +330,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
     timer.current = setTimeout(flush, UNDO_MS);
   }, [commit, flush, canReview]);
 
+  // Non-clip actions on the same undo pattern: run after UNDO_MS unless undone.
+  const flushLater = useCallback(() => {
+    if (laterTimer.current) clearTimeout(laterTimer.current);
+    laterTimer.current = null;
+    const d = laterRef.current;
+    laterRef.current = null;
+    setLater(null);
+    if (d) void d.run();
+  }, []);
+
+  const defer = useCallback((key: string, verb: string, label: string, run: () => Promise<void>) => {
+    flushLater();
+    const d: Deferred = { key, verb, label, until: Date.now() + UNDO_MS, run };
+    laterRef.current = d;
+    setLater(d);
+    laterTimer.current = setTimeout(flushLater, UNDO_MS);
+  }, [flushLater]);
+
   const undo = useCallback(() => {
+    if (!pendingRef.current && laterRef.current) {
+      if (laterTimer.current) clearTimeout(laterTimer.current);
+      laterTimer.current = null;
+      laterRef.current = null;
+      setLater(null);
+      return;
+    }
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
     pendingRef.current = null;
@@ -312,7 +364,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   // Leaving the page commits whatever is waiting, so nothing is silently lost.
   useEffect(() => {
-    const h = () => { const p = pendingRef.current; if (p) void commit(p); };
+    const h = () => { const p = pendingRef.current; if (p) void commit(p); const d = laterRef.current; laterRef.current = null; if (d) void d.run(); };
     window.addEventListener("pagehide", h);
     return () => window.removeEventListener("pagehide", h);
   }, [commit]);
@@ -452,6 +504,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     window.location.href = "/login";
   }, []);
 
+  const setPodCampaign = useCallback(async (podId: string, campaign: string, status: "joined" | "declined", label: string) => {
+    if (!isPodOwner(podId, accessRef.current, snapRef.current.pods)) return "Only this pod's owner joins or declines campaigns.";
+    const save = async (): Promise<string | null> => {
+      if (IS_DEMO) {
+        const at = new Date().toISOString();
+        setSnap((s) => ({ ...s, podCampaigns: s.podCampaigns.map((r) => (r.pod_id === podId && r.campaign_id === campaign
+          ? { ...r, status, decided_at: at } : r)) }));
+        return null;
+      }
+      const { error: e } = await browserClient().rpc("pod_campaign_set", { p_pod: podId, p_campaign: campaign, p_status: status });
+      if (e) { setError(e.message); return e.message; }
+      await refresh();
+      return null;
+    };
+    if (status === "joined") return save();
+    defer(`camp:${podId}:${campaign}`, "Declined", label, async () => { await save(); });
+    return null;
+  }, [refresh, defer]);
+
   const setPod = useCallback((id: string | null) => {
     setPicked(id);
     try { if (id) localStorage.setItem(POD_KEY, id); else localStorage.removeItem(POD_KEY); } catch { /* pick lasts this visit */ }
@@ -462,10 +533,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const view = useMemo(() => (PODS_ON ? podSnapshot(snap, pod) : snap), [snap, pod]);
 
   const value = useMemo<Store>(() => ({
-    demo: IS_DEMO, ready, error, snap: view, podsOn: PODS_ON, access, pod, setPod, canReview, pending, act, undo,
+    demo: IS_DEMO, ready, error, snap: view, podsOn: PODS_ON, access, pod, setPod, canReview, pending, later, setPodCampaign, act, undo,
     setRuleActive, setAwake, markSubmitted, mediaUrl,
     markTiktokPosted, addTiktokStats, setNotice, sendEdit, setBrain, setTiktokChannel, pollLive, signOut,
-  }), [ready, error, view, access, pod, setPod, canReview, pending, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl,
+  }), [ready, error, view, access, pod, setPod, canReview, pending, later, setPodCampaign, act, undo, setRuleActive, setAwake, markSubmitted, mediaUrl,
     markTiktokPosted, addTiktokStats, setNotice, sendEdit, setBrain, setTiktokChannel, pollLive, signOut]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
