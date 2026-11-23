@@ -27,7 +27,7 @@ from .qa import CampaignRules, check_clip
 from .remote.rights import RightsGate
 from .editplan import edit_overrides
 from .pods import fair_order, resolve_pod_ids
-from .render import feedback, recipe
+from .render import feedback, flashback, recipe, sfxlib
 from .render import tools as tools_mod
 from .render.ffmpeg import render_clip
 from .store import Job, Store
@@ -281,7 +281,7 @@ class Pipeline:
         # standing rules learned from Zo's notes (D078) sit under this clip's own overrides
         j = {**job.data["judgment"], **self.rule_settings(), **(overrides or {})}
         words = [Word(**w) for w in job.data["words"]]
-        rec = self._recipe_for(job, j)
+        rec = self._recipe_for(job, j, words)
         if rec is not None:  # D114: the recipe sets caption style, SFX; zooms are off whatever it says
             j = {**j, **recipe.to_judgment(rec), "recipe": rec.to_json()}
         layout, track = ch.layout, ch.layout is None
@@ -334,13 +334,14 @@ class Pipeline:
                                 **({"swap": swap} if swap else {}),
                                 **({"crop_x": float(crop_x)} if crop_x is not None else {}),
                                 **({"cuts": j["cuts"]} if j.get("cuts") else {}))
-        manifest = self._apply_recipe(j, manifest, peak_rel)
+        manifest = self._apply_recipe(j, manifest, peak_rel, layout, swap)
         self.store.advance(job.id, "rendered", {"manifest": manifest, "title": title,
                                                 "description": desc, "judgment": j})
         return True
 
-    def _recipe_for(self, job: Job, j: dict) -> "recipe.Recipe | None":
+    def _recipe_for(self, job: Job, j: dict, words: list[Word]) -> "recipe.Recipe | None":
         """D114: the clip's edit recipe. Reused on re-render, else picked from the streamer's weights.
+        Also finds a flashback PROPOSAL (D113: never rendered until Zo approves it in the editor).
         Off (None) unless settings.extra["recipe_weights"] names the weights file."""
         path = self.s.extra.get("recipe_weights")
         if not path:
@@ -350,31 +351,61 @@ class Pipeline:
             drop = set(j.get("remove_tools") or []) - set(recipe.DEFAULT_TOOLS)  # editor: Zo took a tool off
             if drop:
                 rec.tools = [t for t in rec.tools if t not in drop]
-            return rec
-        store = recipe.WeightStore(path)
-        sw = store.get(job.channel)
-        rec = recipe.build_recipe(job.id, job.channel, j, sw, random.Random(job.id),
-                                  float(j["trim_out"]) - float(j["trim_in"]))
-        recipe.record_pick(sw, rec.tools)
-        store.save()
+        else:
+            store = recipe.WeightStore(path)
+            sw = store.get(job.channel)
+            rec = recipe.build_recipe(job.id, job.channel, j, sw, random.Random(job.id),
+                                      float(j["trim_out"]) - float(j["trim_in"]))
+            recipe.record_pick(sw, rec.tools)
+            store.save()
+            j["flashback_proposal"] = flashback.propose(self.store, job.channel, words, job.trigger_ts, job.id)
+        prop, decision = j.get("flashback_proposal"), j.get("flashback_decision")
+        if decision == "approve" and prop:      # only Zo flips this, from the editor (D113)
+            rec.flashback = recipe.Flashback(prop["reason"], prop["source_moment"], approved=True)
+        elif decision == "drop":
+            rec.flashback, j["flashback_proposal"] = None, None
         return rec
 
-    def _apply_recipe(self, j: dict, manifest: dict, peak_rel: float) -> dict:
-        """Run the recipe's after-render effects on the finished clip and record the recipe in the manifest."""
+    def _apply_recipe(self, j: dict, manifest: dict, peak_rel: float, layout, swap) -> dict:
+        """Run the recipe's after-render effects on the finished clip and record the recipe in the manifest.
+        Order: slow-mo, approved flashback, music, then SFX last at times remapped for the stretched timeline."""
         if not j.get("recipe"):
             return manifest
         rec = recipe.Recipe.from_json(j["recipe"])
         problems = recipe.validate(rec)
-        fx = []
-        if "slowmo_vignette" in rec.tools:
-            fx.append({"tool": "slowmo_vignette", "at": max(0.0, peak_rel - 0.3)})
-        if "music_cue" in rec.tools:
-            fx.append({"tool": "music_cue", "file": self.s.extra.get("music_cue_file"), "start": 0.0})
         video = Path(manifest.get("video") or "")
-        if fx and not problems and video.exists():
-            manifest = {**manifest, "duration": round(tools_mod.apply_effects(
-                video, fx, float(manifest["duration"]), env("FFMPEG_BIN", "ffmpeg")), 3)}
-        return {**manifest, "recipe": j["recipe"], "recipe_problems": problems}
+        out = {**manifest, "recipe": j["recipe"], "recipe_problems": problems,
+               "flashback_proposal": j.get("flashback_proposal")}
+        if problems or not video.exists():
+            return out
+        ff, dur, applied, cache = env("FFMPEG_BIN", "ffmpeg"), float(manifest["duration"]), [], self.s.work_dir / "_sfx"
+        if "slowmo_vignette" in rec.tools:
+            at = max(0.0, peak_rel - 0.3)
+            dur = tools_mod.apply_effects(video, [{"tool": "slowmo_vignette", "at": at, "length": 1.2}], dur, ff)
+            applied.append(("slowmo_vignette", at, 1.2, 0.5))
+        prop = j.get("flashback_proposal")
+        if rec.flashback is not None and rec.flashback.approved and prop:
+            try:
+                at = tools_mod.shift_time(peak_rel + 1.0, applied)
+                new = flashback.render_flashback(video, prop, dur, at, layout, cache, ff)
+                applied.append(("flashback", at, new - dur, 1.0))
+                dur, out["flashback_rendered"] = new, True
+            except Exception as e:  # noqa: BLE001 - a missing source must not lose the clip; Zo sees the reason
+                log.warning("flashback not rendered for %s: %s", rec.clip_id, e)
+                out["flashback_error"] = str(e)[:200]
+        if "music_cue" in rec.tools and self.s.extra.get("music_cue_file"):
+            tools_mod.apply_effects(video, [{"tool": "music_cue", "file": self.s.extra["music_cue_file"],
+                                             "start": 0.0}], dur, ff)
+        hits = []
+        for tool, name in sfxlib.TOOL_TO_SFX.items():
+            if tool in rec.tools:
+                t = (swap[1] if swap else peak_rel) if tool != "sfx_hit" else peak_rel
+                hits.append((str(sfxlib.ensure_sfx(name, cache, ff)),
+                             round(tools_mod.shift_time(max(0.0, t - 0.1), applied), 3), -10.0))
+        if hits:
+            tools_mod.apply_effects(video, [{"tool": "sfx", "hits": hits}], dur, ff)
+        out["duration"] = round(dur, 3)
+        return out
 
     def _qa_step(self, job: Job) -> bool:
         m = job.data["manifest"]
