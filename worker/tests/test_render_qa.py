@@ -70,7 +70,7 @@ def test_qa_reports_every_failure(source_video, tmp_path):
                      title="watch on kick")
     text = " | ".join(res.failures)
     assert not res.passed
-    for frag in ("rights", "duration", "#clix", "banned word"):
+    for frag in ("rights", "duration", "#clix", "banned word", "hook"):
         assert frag in text, text
 
 
@@ -109,3 +109,35 @@ def test_qa_flags_caption_overflow(source_video, tmp_path):
                    + f"Dialogue: 0,{ass_time(1)},{ass_time(2)},Cap,,0,0,0,,{'W' * 40}\n", encoding="utf-8")
     bad = check_clip(tmp_path / "r" / "clip.mp4", cap, rules, title="t")
     assert any("overflows" in f for f in bad.failures)
+
+
+def test_flash_counter():
+    from clipworker.qa import max_flashes_per_s
+    strobe = [(i / 30, 235.0 if (i // 3) % 2 else 16.0) for i in range(90)]   # 5 flashes/s
+    assert max_flashes_per_s(strobe) > 3
+    cuts = [(i / 30, 200.0 if i >= 45 else 40.0) for i in range(90)]            # one hard cut
+    assert max_flashes_per_s(cuts) <= 1
+
+
+@needs_ffmpeg
+def test_qa_flags_flashing_small_text_and_late_hook(source_video, tmp_path):
+    import re
+    import subprocess
+    render_clip("clip4", source_video, tmp_path / "r", 3.0, 18.0, WORDS, TEST_LAYOUT, TEST_STYLE)
+    rules = CampaignRules(min_s=10, max_s=60, permitted=True)
+    ok = check_clip(tmp_path / "r" / "clip.mp4", tmp_path / "r" / "captions.ass", rules, title="t")
+    assert ok.metrics["max_flashes_per_s"] <= 3 and ok.metrics["hook_s"] <= 3
+    cap = tmp_path / "r" / "captions.ass"
+    cap.write_text(re.sub(r"^(Style: Cap,[^,]*,)\d+,", r"\g<1>40,", cap.read_text(encoding="utf-8"),
+                          flags=re.M), encoding="utf-8")
+    late = CampaignRules(min_s=10, max_s=60, permitted=True, hook_s=0.5)
+    bad = check_clip(tmp_path / "r" / "clip.mp4", cap, late, title="t")
+    text = " | ".join(bad.failures)
+    assert "too small" in text and "hook" in text, text
+    strobe = tmp_path / "strobe.mp4"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                    "color=black:s=1080x1920:r=30:d=12,geq=lum='if(mod(floor(T*10),2),235,16)':cb=128:cr=128",
+                    "-f", "lavfi", "-i", "sine=f=440:d=12", "-shortest", "-pix_fmt", "yuv420p", str(strobe)],
+                   check=True)
+    res = check_clip(strobe, None, rules, title="t")
+    assert any("flashes/s" in f for f in res.failures), res.failures

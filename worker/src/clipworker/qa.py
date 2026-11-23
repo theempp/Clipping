@@ -15,6 +15,12 @@ from .render.ffmpeg import probe
 MAX_BYTES = 50 * 1024 * 1024  # Supabase free plan per-file limit
 _LOUD_I = re.compile(r"I:\s*(-?[0-9.]+) LUFS")
 _LOUD_TP = re.compile(r"Peak:\s*(-?[0-9.]+) dBFS")
+_YAVG = re.compile(r"pts_time:([0-9.]+)\s*\n\s*lavfi\.signalstats\.YAVG=([0-9.]+)")
+# Checks adapted from video-director (D117): hook on screen early, phone-readable text, no flashing.
+HOOK_S = 3.0          # first caption must appear within this many seconds
+MIN_CAPTION_PX = 60   # smallest caption font size readable on a phone at 1080x1920
+FLASH_DELTA = 32      # frame-to-frame mean-luma jump (0-255) that counts as a flash edge (~12%)
+MAX_FLASHES_PER_S = 3  # WCAG 2.3.1 general flash threshold
 
 
 @dataclass
@@ -25,6 +31,7 @@ class CampaignRules:
     banned_words: list[str] = field(default_factory=list)
     permitted: bool = False                                  # rights gate (D016)
     allow_sfx: bool = True                                   # some campaigns ban added audio
+    hook_s: float = HOOK_S
 
 
 @dataclass
@@ -44,6 +51,33 @@ def measure_loudness(path: Path, ffmpeg: str = "ffmpeg", run=subprocess.run) -> 
     i = _LOUD_I.search(tail)
     tp = _LOUD_TP.search(tail)
     return (float(i.group(1)) if i else -99.0, float(tp.group(1)) if tp else 0.0)
+
+
+def luma_series(path: Path, ffmpeg: str = "ffmpeg", run=subprocess.run) -> list[tuple[float, float]]:
+    """Mean luma per frame, from a 64 px-wide downscale (fast)."""
+    r = run([ffmpeg, "-hide_banner", "-nostats", "-i", str(path), "-an", "-vf",
+             "scale=64:-2,signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-",
+             "-f", "null", "-"], capture_output=True, text=True, check=True)
+    return [(float(t), float(y)) for t, y in _YAVG.findall(r.stdout)]
+
+
+def max_flashes_per_s(series: list[tuple[float, float]], delta: float = FLASH_DELTA) -> float:
+    """Most flashes (pairs of opposing big luma jumps) in any 1 s window."""
+    edges: list[float] = []
+    last_sign = 0
+    for (_, y0), (t1, y1) in zip(series, series[1:]):
+        d = y1 - y0
+        if abs(d) >= delta:
+            sign = 1 if d > 0 else -1
+            if sign != last_sign:
+                edges.append(t1)
+                last_sign = sign
+    best, j = 0, 0
+    for i, t in enumerate(edges):
+        while edges[j] < t - 1.0:
+            j += 1
+        best = max(best, i - j + 1)
+    return best / 2
 
 
 def check_clip(video: Path, captions: Path | None, rules: CampaignRules, title: str = "",
@@ -71,6 +105,11 @@ def check_clip(video: Path, captions: Path | None, rules: CampaignRules, title: 
         fails.append(f"duration: {dur:.1f}s outside {rules.min_s:.0f}-{rules.max_s:.0f}s")
     if size > MAX_BYTES:
         fails.append(f"size: {size / 1e6:.1f} MB > 50 MB storage limit")
+    if v is not None:
+        flashes = max_flashes_per_s(luma_series(video, ffmpeg, run))
+        m["max_flashes_per_s"] = flashes
+        if flashes > MAX_FLASHES_PER_S:
+            fails.append(f"video: {flashes:g} flashes/s > {MAX_FLASHES_PER_S} (photosensitivity risk)")
     if a is None:
         fails.append("audio: missing")
     else:
@@ -86,6 +125,11 @@ def check_clip(video: Path, captions: Path | None, rules: CampaignRules, title: 
         m["caption_events"] = len(ev)
         if not ev:
             fails.append("captions: no caption events")
+        else:
+            first = min(st for st, _ in ev)
+            m["hook_s"] = round(first, 2)
+            if first > rules.hook_s:
+                fails.append(f"hook: first caption at {first:.1f}s, needs to be on screen by {rules.hook_s:.0f}s")
         late = [s for s, e in ev if e > dur + 0.3 or s < 0]
         if late:
             fails.append(f"captions: {len(late)} events outside clip (first at {late[0]:.2f}s)")
@@ -95,6 +139,9 @@ def check_clip(video: Path, captions: Path | None, rules: CampaignRules, title: 
         sz = re.search(r"^Style: Cap,[^,]*,(\d+),(?:[^,]*,){13}([\d.]+),", text, re.M)
         if sz:
             size, outline = int(sz.group(1)), float(sz.group(2))
+            m["caption_font_px"] = size
+            if size < MIN_CAPTION_PX:
+                fails.append(f"captions: font {size}px < {MIN_CAPTION_PX}px, too small on a phone")
             pops = [int(x) for x in re.findall(r"\\fscx(\d+)", text)] or [100]
             widest = max((text_width(part, size, outline, max(pops))
                           for line in text.splitlines() if line.startswith("Dialogue:")
