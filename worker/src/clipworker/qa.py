@@ -16,7 +16,7 @@ MAX_BYTES = 50 * 1024 * 1024  # Supabase free plan per-file limit
 _LOUD_I = re.compile(r"I:\s*(-?[0-9.]+) LUFS")
 _LOUD_TP = re.compile(r"Peak:\s*(-?[0-9.]+) dBFS")
 _YAVG = re.compile(r"pts_time:([0-9.]+)\s*\n\s*lavfi\.signalstats\.YAVG=([0-9.]+)")
-# Checks adapted from video-director (D092): hook on screen early, phone-readable text, no flashing.
+# Checks adapted from video-director (D093): hook on screen early, phone-readable text, no flashing.
 HOOK_S = 3.0          # first caption must appear within this many seconds
 MIN_CAPTION_PX = 60   # smallest caption font size readable on a phone at 1080x1920
 FLASH_DELTA = 32      # frame-to-frame mean-luma jump (0-255) that counts as a flash edge (~12%)
