@@ -29,6 +29,7 @@ from .ingest import viewer_clips
 from .ingest.kick_chat import run_kick_pusher
 from .ingest.twitch_irc import run_twitch_chat
 from .pipeline import Pipeline
+from .pods import GPU_STAGES, queue_waits
 from .power import keep_awake
 from .roster import pick_captures
 from .store import Store
@@ -310,7 +311,18 @@ class LiveRunner:
                                       "queue": depth, "clock_drift_s": round(self.clock.check_drift(), 3),
                                       **stream_fields(getattr(self, "stream_info", {})),
                                       **roster_fields(self.s.channels),
+                                      **self._pod_waits(),
                                       **({"gpu": g} if (g := gpu_snapshot()) else {})})
+
+    def _pod_waits(self) -> dict:
+        """Per-pod oldest GPU-queue wait (D096); only with [pods] enabled."""
+        if not self.s.pods.enabled:
+            return {}
+        pods = {c.key: c.pod for c in self.s.channels}
+        rows = self.store.db.execute(
+            f"SELECT channel, created_at FROM jobs WHERE stage IN ({','.join('?' * len(GPU_STAGES))})",
+            GPU_STAGES).fetchall()
+        return {"pod_queue_wait_s": queue_waits(rows, lambda ch: pods.get(ch, "pod-1"), time.time())}
 
     def prune(self):
         now = self.clock.now()

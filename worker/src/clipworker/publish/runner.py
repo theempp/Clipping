@@ -15,6 +15,7 @@ import datetime as dt
 import logging
 from pathlib import Path
 
+from ..pods import ramp_allows
 from ..remote.supabase import Supabase
 from .base import PublishError, Publisher
 
@@ -45,12 +46,20 @@ def _today_utc() -> str:
 
 class PublishRunner:
     def __init__(self, sb: Supabase, publishers: dict[str, Publisher], local_video,
-                 retry_backoff_s: float = 300, clock=None):
+                 retry_backoff_s: float = 300, clock=None, ramp=None):
         """publishers: credential_ref -> Publisher. local_video(clip) -> Path."""
         import time
         self.sb, self.publishers, self.local_video = sb, publishers, local_video
         self.backoff, self.clock = retry_backoff_s, clock or time.time
         self._last_try: dict[str, float] = {}
+        self.ramp = ramp  # PostingConfig when [posting] ramp is on (D088); None = caps only
+
+    def _recent_posts(self, dest_id: str, now: float) -> list[float]:
+        since = dt.datetime.fromtimestamp(now - 86400, dt.timezone.utc).isoformat()
+        rows = self.sb.select("publications", destination_id=f"eq.{dest_id}", status="eq.posted",
+                              posted_at=f"gte.{since}", select="posted_at")
+        return [dt.datetime.fromisoformat(r["posted_at"].replace("Z", "+00:00")).timestamp()
+                for r in rows if r.get("posted_at")]
 
     def _posted_today(self, dest_id: str) -> int:
         rows = self.sb.select("publications", destination_id=f"eq.{dest_id}", status="eq.posted",
@@ -119,6 +128,12 @@ class PublishRunner:
             raise PublishError("max attempts reached")
         if self._posted_today(d["id"]) >= int(d.get("daily_cap", 10)):
             raise PublishError(f"daily cap {d.get('daily_cap')} reached for {d['label']}", retryable=True)
+        if self.ramp is not None:
+            now = self.clock()
+            ok, why = ramp_allows(self._recent_posts(d["id"], now), now, ramp_daily=self.ramp.ramp_daily,
+                                  daily_cap=int(d.get("daily_cap", 10)), min_gap_h=self.ramp.min_gap_h)
+            if not ok:
+                raise PublishError(f"{why} for {d['label']}", retryable=True)
         pub_impl = self.publishers.get(d["credential_ref"])
         if pub_impl is None:
             raise PublishError(f"no credentials loaded for {d['credential_ref']}")

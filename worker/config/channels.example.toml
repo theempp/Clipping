@@ -191,3 +191,16 @@ facecam_height = 720
 
 [extra.kick_chatrooms]   # chatroom_id -> kick login (needed for the Pusher chat path)
 "875062" = "adinross"    # from kick.com/api/v2/channels/adinross, 2026-11-21
+
+# Pods Phase 1 (docs/pods/build-plan.md). All off by default.
+# Per channel: pod = "pod-1" (pods.slug).
+[pods]
+enabled = false      # pod_id on clips/candidate_log, fair GPU queue (D096, D097)
+[posting]
+ramp = false         # D088: ramp_daily posts/day/destination, >= 2.5 h apart, never above daily_cap
+ramp_daily = 4       # days 1-3: 4; step up to 8 by hand
+min_gap_h = 2.5
+[stats]
+stuck_flag = false   # clipworker stuck-posts: < 20 plays at ~1 h
+[scout]
+per_pod = false      # clipworker scout-pods: pod_campaigns 'suggested'

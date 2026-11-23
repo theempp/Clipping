@@ -119,7 +119,7 @@ def _build(a, need_judge=True):
     return s, sb, store, pipe
 
 
-def _publisher(sb, store):
+def _publisher(sb, store, posting=None):
     import httpx
 
     from .publish.oauth import TokenSource
@@ -142,7 +142,7 @@ def _publisher(sb, store):
 
     def local_video(clip):
         return (clip.get("manifest") or {})["video"]
-    return PublishRunner(sb, pubs, local_video)
+    return PublishRunner(sb, pubs, local_video, ramp=posting if posting is not None and posting.ramp else None)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -159,6 +159,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("publish-once")
     sub.add_parser("discord")
     sub.add_parser("longform-once")
+    sub.add_parser("stuck-posts", help="flag posts with < 20 plays at ~1 h ([stats] stuck_flag)")
+    sub.add_parser("scout-pods", help="suggest active campaigns per pod ([scout] per_pod)")
     d = sub.add_parser("dryrun-vod", help="full pipeline on a downloaded VOD; nothing posts")
     d.add_argument("--channel", required=True)
     d.add_argument("--video", required=True)
@@ -191,11 +193,28 @@ def main(argv: list[str] | None = None) -> int:
         if a.cmd == "live":
             from .live import LiveRunner
             s, sb, store, pipe = _build(a)
-            asyncio.run(LiveRunner(s, store, pipe, _publisher(sb, store), sb).run())
+            asyncio.run(LiveRunner(s, store, pipe, _publisher(sb, store, s.posting), sb).run())
+            return 0
+        if a.cmd == "stuck-posts":
+            from .pods import stuck_flags
+            s, sb, _, _ = _build(a, need_judge=False)
+            if not s.stats.stuck_flag:
+                print("[stats] stuck_flag is off")
+                return 0
+            for f in stuck_flags(sb.select("post_stats", hours_since_post="lte.2.5", select="*")):
+                print(f"stuck: clip {f['clip_id']} {f['platform']} {f['plays']} plays at {f['hours_since_post']:g} h")
+            return 0
+        if a.cmd == "scout-pods":
+            from .campaigns.scout import scout_pods
+            s, sb, _, _ = _build(a, need_judge=False)
+            if not s.scout.per_pod:
+                print("[scout] per_pod is off")
+                return 0
+            print(f"{scout_pods(sb)} pod_campaigns row(s) suggested")
             return 0
         if a.cmd == "publish-once":
             s, sb, store, _ = _build(a, need_judge=False)
-            for line in _publisher(sb, store).run_once():
+            for line in _publisher(sb, store, s.posting).run_once():
                 print(line)
             return 0
         if a.cmd == "discord":

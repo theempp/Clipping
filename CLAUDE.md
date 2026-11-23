@@ -13,3 +13,6 @@ Private clip tool (Zo first). Vault notes (`*.md`) hold decisions; read `Decisio
 
 ## Design
 No default style. All visual values come from `references/` via Atlas. Empty = ask the user.
+
+## Working rule
+Claude does as much of every process as it can itself (connectors, browser pane). It hands back only secret entry and decisions; approval gates stay.

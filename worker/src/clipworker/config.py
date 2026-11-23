@@ -152,6 +152,28 @@ class Features:
 
 
 @dataclass(frozen=True)
+class PodsConfig:
+    enabled: bool = False        # tag clips/candidate_log with pod_id, fair GPU queue (D096, D097)
+
+
+@dataclass(frozen=True)
+class PostingConfig:
+    ramp: bool = False           # D088 ramp: ramp_daily posts/day/destination, min_gap_h apart
+    ramp_daily: int = 4          # manual step-up: 4 on days 1-3, then up to 8 (never automatic)
+    min_gap_h: float = 2.5
+
+
+@dataclass(frozen=True)
+class StatsConfig:
+    stuck_flag: bool = False     # flag posts with < 20 plays at ~1 h (never deletes)
+
+
+@dataclass(frozen=True)
+class ScoutConfig:
+    per_pod: bool = False        # score active campaigns per pod -> pod_campaigns 'suggested'
+
+
+@dataclass(frozen=True)
 class Channel:
     key: str                  # "twitch:lacy"
     platform: str             # twitch | kick
@@ -165,6 +187,7 @@ class Channel:
     name: str = ""            # display name for the dashboard (streamers.display_name)
     agent: str = ""           # dedicated agent, e.g. "lacy-agent" (D084); "" = none
     state_dir: str = ""       # streamer state folder (brain.json etc.); "" = streamers/<streamer>
+    pod: str = "pod-1"        # pods.slug (D097); used only when [pods] enabled
 
 
 GROUPS = ("core", "gta6_only")
@@ -195,6 +218,10 @@ class Settings:
     extra: dict = field(default_factory=dict)
     features: Features = field(default_factory=Features)
     dead_air: DeadAirParams = field(default_factory=DeadAirParams)
+    pods: PodsConfig = field(default_factory=PodsConfig)
+    posting: PostingConfig = field(default_factory=PostingConfig)
+    stats: StatsConfig = field(default_factory=StatsConfig)
+    scout: ScoutConfig = field(default_factory=ScoutConfig)
     state_root: Path = REPO_ROOT / "streamers"   # where streamers/<slug>/ folders live
 
     def state_dir(self, ch: "Channel") -> Path:
@@ -258,7 +285,7 @@ def parse_settings(data: dict, work_dir: Path) -> Settings:
         ch = Channel(f"{platform}:{c['login'].lower()}", platform,
                      c["login"].lower(), c.get("streamer", c["login"].lower()),
                      layout, weights, det, group, boost, c.get("name") or c["login"],
-                     c.get("agent", ""), c.get("state_dir", ""))
+                     c.get("agent", ""), c.get("state_dir", ""), c.get("pod", "pod-1"))
         (channels if c.get("active", True) else archived).append(ch)
     keys = [c.key for c in channels]
     if len(keys) != len(set(keys)):
@@ -287,6 +314,8 @@ def parse_settings(data: dict, work_dir: Path) -> Settings:
                     max_channels=max_channels, gta6=gta6, archived=archived,
                     zoom=zoom, sfx=SfxParams(**data.get("sfx", {})), extra=data.get("extra", {}),
                     features=Features(**feats), dead_air=DeadAirParams(**data.get("dead_air", {})),
+                    pods=PodsConfig(**data.get("pods", {})), posting=PostingConfig(**data.get("posting", {})),
+                    stats=StatsConfig(**data.get("stats", {})), scout=ScoutConfig(**data.get("scout", {})),
                     state_root=Path(data.get("state_root") or env("CLIP_STATE_ROOT") or REPO_ROOT / "streamers"))
 
 

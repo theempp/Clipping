@@ -25,6 +25,7 @@ from .judge.grok import Judgment
 from .qa import CampaignRules, check_clip
 from .remote.rights import RightsGate
 from .editplan import edit_overrides
+from .pods import fair_order, resolve_pod_ids
 from .render.ffmpeg import render_clip
 from .store import Job, Store
 from .transcribe import Word, words_text
@@ -60,6 +61,20 @@ class Pipeline:
         self._frames = frames or (lambda video, dur: frame_reject(
             video, dur, settings.dead_air, env("FFMPEG_BIN", "ffmpeg")))
         self.channels = {c.key: c for c in settings.channels}
+        self._pod_ids: dict[str, str] | None = None
+
+    def pod_of(self, channel_key: str) -> str:
+        ch = self.channels.get(channel_key)
+        return ch.pod if ch else "pod-1"
+
+    def _pod_fields(self, channel_key: str) -> dict:
+        """{"pod_id": ...} when [pods] enabled and the slug resolved; else {} (DB trigger falls back)."""
+        if not self.s.pods.enabled or self.sb is None:
+            return {}
+        if self._pod_ids is None:  # resolved once (D097)
+            self._pod_ids = resolve_pod_ids(self.sb, (c.pod for c in self.s.channels))
+        pid = self._pod_ids.get(self.pod_of(channel_key))
+        return {"pod_id": pid} if pid else {}
 
     # detection -> job
     def on_moment(self, m: Moment) -> str | None:
@@ -122,7 +137,10 @@ class Pipeline:
         for stage, fn in (("detected", self._capture), ("captured", self._transcribe),
                           ("transcribed", self._judge), ("judged", self._render_step),
                           ("rendered", self._qa_step), ("qa_passed", self._upload)):
-            for job in list(self.store.jobs_in(stage)):
+            jobs = list(self.store.jobs_in(stage))
+            if self.s.pods.enabled:  # one shared GPU queue, round-robin by pod (D096)
+                jobs = fair_order(jobs, lambda j: self.pod_of(j.channel))
+            for job in jobs:
                 try:
                     if fn(job):
                         n += 1
@@ -140,7 +158,8 @@ class Pipeline:
             self.sb.log_candidate({"job_id": job.id, "channel_key": job.channel,
                                    "moment_at": iso(job.trigger_ts), "score": job.score,
                                    "outcome": outcome, "reason": reason[:500],
-                                   "features": job.data.get("features", {})})
+                                   "features": job.data.get("features", {}),
+                                   **self._pod_fields(job.channel)})
         except Exception:  # noqa: BLE001 - logging must never block the pipeline
             log.warning("candidate_log write failed for %s", job.id)
 
@@ -346,7 +365,8 @@ class Pipeline:
             "score_10": j.get("score_10") or None, "hook_type": j.get("hook_type"),
             "moment_at": iso(job.trigger_ts), "duration_s": m["duration"],
             "storage_path": f"{base}/clip.mp4", "thumb_path": f"{base}/thumb.jpg", "source_path": source_path,
-            "qa": job.data["qa"], "judge": j, "manifest": m}, on_conflict="job_id",
+            "qa": job.data["qa"], "judge": j, "manifest": m, **self._pod_fields(job.channel)},
+            on_conflict="job_id",
             ignore_duplicates=True)
         self.store.advance(job.id, "uploaded")
         self._log(job, "kept", j.get("reason", ""))
