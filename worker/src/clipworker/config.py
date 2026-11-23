@@ -149,6 +149,7 @@ class Features:
     viewer_clips: bool = False   # Helix Get Clips poller: badge + positive label
     clip_that: bool = False      # CLIP THAT: last 40 s from the buffer as a labelled job
     dry_run: bool = False        # pipeline stops before Supabase upload; report written locally
+    links: bool = False          # paste-a-link jobs from the dashboard (link_jobs, D115) run inside `live`
 
 
 @dataclass(frozen=True)

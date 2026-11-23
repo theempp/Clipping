@@ -19,6 +19,7 @@ Discord bot (own server, followed channel) -> campaign drafts (D024)
 | `src/clipworker/ingest/` | Twitch IRC (anonymous), Kick chat, live status polling |
 | `src/clipworker/capture/` | segment buffer, window extraction, loudness parse |
 | `src/clipworker/render/` | ASS captions, ffmpeg 9:16 graph |
+| `src/clipworker/links.py` | paste-a-link (D115): dashboard link -> yt-dlp download -> detect (chat+audio or audio only) -> normal pipeline -> Review |
 | `src/clipworker/qa.py` | clip-qa checks (ffprobe/ebur128, rules, rights) |
 | `src/clipworker/pipeline.py` | restart-safe job stages + revise loop |
 | `src/clipworker/publish/` | YouTube resumable upload, X chunked upload, idempotent runner |

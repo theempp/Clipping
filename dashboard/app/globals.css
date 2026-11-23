@@ -487,3 +487,14 @@ textarea { resize: vertical; }
 .gate-card .err { color: var(--bad); font-size: 13px; margin: 0; }
 .mini .cv { border-radius: 8px; }
 .mini .snd, .mini .du { display: none; }
+
+/* paste-a-link (D115): layout only, colours and sizes from the existing tokens */
+.lk-form { display: grid; gap: 10px; margin-bottom: 14px; min-width: 0; }
+.lk-form .quiet { margin: 0; }
+.lk-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.lk-opts .field { margin-bottom: 0; }
+.lk-check { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--mut); }
+.lk-check input { accent-color: var(--acc); }
+.lk-go { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; }
+.quiet.bad { color: var(--bad); } .quiet.warn { color: var(--warn); } .quiet.ok { color: var(--c2); }
+.lk-list { margin-bottom: 10px; }

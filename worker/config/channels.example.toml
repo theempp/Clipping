@@ -63,6 +63,7 @@ brain = false          # per-streamer weights from streamers/<slug>/brain.json
 viewer_clips = false   # Helix Get Clips poller: viewers_clipped badge + positive label
 clip_that = false      # CLIP THAT: last 40 s from the buffer as a labelled job
 dry_run = false        # pipeline stops before Supabase upload; report written to renders/<job>/
+links = false          # paste-a-link: run dashboard link jobs inside `clipworker live` (or run `clipworker links`)
 
 # Dead-air gate numbers (replay-test before enabling; clip-detector-tuning owns changes).
 [dead_air]
