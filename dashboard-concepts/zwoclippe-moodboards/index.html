@@ -1,0 +1,30 @@
+<title>Zwoclippe Moodboards</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@300;600&family=Inter:wght@400;500;600&display=swap">
+<style>
+/* Picker: three concept cards, one column on phones. Dark only, matching the concepts. */
+:root{--bg:#121316;--card:#1c1e22;--line:#2e3137;--tx:#eef0f4;--mut:#8b909b;--acc:#7194f5;color-scheme:dark}
+body{background:var(--bg);color:var(--tx);font:15px/1.55 'Inter',system-ui,sans-serif}
+.w{max-width:1180px;margin:0 auto;padding-block:40px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font:300 40px/1.1 'Sora',system-ui,sans-serif;letter-spacing:-.03em;margin:0;text-wrap:balance}h1 b{font-weight:600}
+.lead{color:var(--mut);max-width:62ch;margin:12px 0 34px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.c{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.c img{display:block;width:100%;aspect-ratio:16/11;object-fit:cover;object-position:top left;border-bottom:1px solid var(--line)}
+.b{padding:18px;display:flex;flex-direction:column;gap:10px;flex:1}.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--acc)}
+.c h2{margin:0;font:600 20px 'Sora',system-ui,sans-serif}.c p{margin:0;color:var(--mut);font-size:14px}
+.c ul{margin:0;padding-left:18px;color:var(--tx);font-size:13px;display:grid;gap:4px}
+.go{margin-top:auto;display:inline-flex;justify-content:center;padding:11px;border-radius:12px;background:var(--acc);color:#0b1020;font-weight:600;text-decoration:none}.go:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.foot{margin-top:30px;color:var(--mut);font-size:13px}
+@media (max-width:900px){.grid{grid-template-columns:1fr}h1{font-size:32px}}
+</style>
+<div class="w">
+<h1>Zwoclippe dashboard, <b>three directions</b></h1>
+<p class="lead">Each concept has the same four working pages: Overview, Analytics (Growth, Money, Pipeline), Lacy, and Editor. All three use a lighter navy instead of the reference's orange. In the editor you can drag the trim handles, playhead and crop box, edit the headline, and press play.</p>
+<div class="grid">
+<article class="c"><img src="a-overview.png" alt="Concept A overview: sidebar, stat tiles, wave chart, live card"><div class="b"><span class="tag">Close to reference</span><h2>A · Classic</h2><p>The Dashnect shell almost as-is. Calm, familiar, roomy.</p><ul><li>Text sidebar with machine rings in the footer</li><li>Schedule page uses the Timeline pills</li><li>Three-pane editor with Media, Audio and Text tracks</li></ul><a class="go" href="concept-a.html">Open Classic</a></div></article>
+<article class="c"><img src="b-overview.png" alt="Concept B overview: icon rail, streamer worklist, bento cards, review board"><div class="b"><span class="tag">Close to reference</span><h2>B · Studio</h2><p>Built for working the queue. Streamers and agents are always visible on the left.</p><ul><li>Icon rail plus streamer worklist column</li><li>Review board in columns, like the Tasks page</li><li>Tablet-style editor with Split, Detach audio, Duplicate, Trim</li></ul><a class="go" href="concept-b.html">Open Studio</a></div></article>
+<article class="c"><img src="c-overview.png" alt="Concept C overview: aurora header, floating dock, glass stat cards"><div class="b"><span class="tag">Wildcard</span><h2>C · Broadcast</h2><p>No sidebar. A floating dock, an aurora header and big light numbers.</p><ul><li>Glowing + button opens New clip, Import VOD, Upload</li><li>Ring dock on the right edge for GPU, disk and AI spend</li><li>Full-stage editor with floating panels</li></ul><a class="go" href="concept-c.html">Open Broadcast</a></div></article>
+</div>
+<p class="foot">All numbers and clip titles are sample placeholders. Pages not mocked yet (Schedule in B and C, Campaigns, Library, Settings) appear dimmed in the nav.</p>
+</div>
