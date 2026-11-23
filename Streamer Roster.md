@@ -29,3 +29,6 @@ Clix, Silky: `active = false` in the channel config.
 
 ## Selection evidence needed (for future changes)
 Current audience and watch time; trend direction; streaming hours; frequency of usable moments; audience overlap; GTA 6 relevance; engagement and retention of comparable clips; source access; clipping policies/permissions; monetization suitability; language/regions; cost per usable clip.
+
+## 2026-11-22 — Agent trio (D084)
+Active trio for dedicated agents: **Lacy, Jynxzi, Stable Ronaldo**. Bench: xQc. Evidence and rubric: `docs/clipper-review/streamer-shortlist.md` (last 30 days to 2026-11-22: Lacy 21 days live/210 h/13.7k avg, Jynxzi 31/229 h/29.0k, Stable Ronaldo 15/218 h/34.8k, xQc 23/278 h/26.9k). Jynxzi also streams chess and Siege, so his brain keeps a baseline per game. Only Lacy's crop box is approved. D069 roster config is not yet changed.
