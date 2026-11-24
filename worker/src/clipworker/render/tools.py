@@ -14,8 +14,13 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-ENC = ["-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "16", "-maxrate", "16M", "-bufsize", "32M",
-       "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart"]
+from .ffmpeg import encode_args
+
+
+def enc(dur: float | None) -> list[str]:
+    """Shared re-encode args; bitrate capped so a `dur`-second clip fits the storage cap (rate_cap)."""
+    return ["-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", *encode_args(dur, "medium"),
+            "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart"]
 
 
 def _atempo(speed: float) -> str:
@@ -49,7 +54,7 @@ def slowmo_vignette_command(src: Path, out: Path, dur: float, at: float, length:
     g = ";".join(graph) + f";{labels}concat=n={n}:v=1:a=1[v][a]"
     new_dur = dur + (end - at) * (1 / speed - 1)
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), "-filter_complex", g,
-            "-map", "[v]", "-map", "[a]", *ENC, str(out)], new_dur
+            "-map", "[v]", "-map", "[a]", *enc(new_dur), str(out)], new_dur
 
 
 def black_spacer_command(src: Path, out: Path, dur: float, at: float, length: float = 0.3,
@@ -64,7 +69,7 @@ def black_spacer_command(src: Path, out: Path, dur: float, at: float, length: fl
          f"[0:v]trim={at:.3f}:{dur:.3f},setpts=PTS-STARTPTS[v2];[0:a]atrim={at:.3f}:{dur:.3f},asetpts=PTS-STARTPTS[a2];"
          f"[v0][a0][v1][a1][v2][a2]concat=n=3:v=1:a=1[v][a]")
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), "-filter_complex", g,
-            "-map", "[v]", "-map", "[a]", "-r", str(fps), *ENC, str(out)], dur + length
+            "-map", "[v]", "-map", "[a]", "-r", str(fps), *enc(dur + length), str(out)], dur + length
 
 
 def music_cue_command(src: Path, out: Path, music: Path, start: float = 0.0, music_db: float = -16.0,
@@ -99,7 +104,8 @@ def sfx_mix_command(src: Path, out: Path, hits: list[tuple[Path, float, float]],
 
 
 def stinger_command(src: Path, out: Path, asset: Path, at: float, length: float, mono: bool = False,
-                    size: tuple[int, int] = (1080, 1920), ffmpeg: str = "ffmpeg") -> list[str]:
+                    size: tuple[int, int] = (1080, 1920), ffmpeg: str = "ffmpeg",
+                    dur: float | None = None) -> list[str]:
     """Lay a transparent sting (ProRes 4444 .mov baked from gta-components, see ops/stingers) over the clip
     from `at` for `length` s. The sting is fitted to the frame, never the footage: the clip itself is not
     scaled or cropped (D112). mono drains the clip to black-and-white under the sting (Wasted / Failed)."""
@@ -110,7 +116,7 @@ def stinger_command(src: Path, out: Path, asset: Path, at: float, length: float,
          f"[b][o]overlay=0:0:eof_action=pass:enable='between(t,{at:.3f},{end:.3f})',format=yuv420p[v]")
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), "-i", str(asset),
             "-filter_complex", g, "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-profile:v", "high",
-            "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "16", "-maxrate", "16M", "-bufsize", "32M", "-c:a", "copy",
+            "-pix_fmt", "yuv420p", *encode_args(dur, "medium"), "-c:a", "copy",
             "-movflags", "+faststart", str(out)]
 
 
@@ -146,7 +152,7 @@ def apply_effects(clip: Path, effects: list[dict], dur: float, ffmpeg: str = "ff
             cmd = sfx_mix_command(clip, tmp, [(Path(h[0]), float(h[1]), float(h[2])) for h in e["hits"]], ffmpeg)
         elif tool == "gta_stinger" and e.get("file") and Path(e["file"]).exists():
             cmd = stinger_command(clip, tmp, Path(e["file"]), float(e["at"]), float(e["length"]),
-                                  bool(e.get("mono")), ffmpeg=ffmpeg)
+                                  bool(e.get("mono")), ffmpeg=ffmpeg, dur=dur)
         elif tool == "music_cue" and e.get("file") and Path(e["file"]).exists():
             cmd = music_cue_command(clip, tmp, Path(e["file"]), float(e.get("start", 0.0)),
                                     float(e.get("db", -16.0)), ffmpeg)
