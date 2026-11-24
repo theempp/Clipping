@@ -21,6 +21,22 @@ from .motion import ZoomParams, detector_name, path_crop_filter, track as face_t
 # Quality default (Zo, 2026-11-24): sharper scaler, higher-bitrate encode, AI facecam blended 60/40 (sr.py).
 SC = ":flags=lanczos+accurate_rnd+full_chroma_int"
 ENCODE = ["-preset", "slow", "-crf", "16", "-maxrate", "16M", "-bufsize", "32M"]
+SIZE_BUDGET_BYTES = 46_000_000  # under qa.MAX_BYTES (50 MiB storage cap) with room for container + audio peaks
+AUDIO_KBPS = 160
+
+
+def rate_cap(dur: float | None) -> list[str]:
+    """CRF 16 with a peak rate low enough that a `dur`-second clip stays under the storage cap.
+    Short clips keep the D118 16M ceiling; ~60 s clips get ~5.8M. Unknown duration: D118 default."""
+    kbps = 16000
+    if dur and dur > 0:
+        kbps = min(kbps, int(SIZE_BUDGET_BYTES * 8 / 1000 / dur) - AUDIO_KBPS)
+    kbps = max(kbps, 2500)
+    return ["-maxrate", f"{kbps}k", "-bufsize", f"{kbps * 2}k"]
+
+
+def encode_args(dur: float | None, preset: str = "slow") -> list[str]:
+    return ["-preset", preset, "-crf", "16", *rate_cap(dur)]
 SR_MIX = 0.6
 
 CAPTION_VERSION = "ass-v1"
@@ -118,7 +134,7 @@ def render_command(src: Path, out: Path, t_in: float, t_out: float, layout: Layo
                                             sr_input)
             + ";" + a_graph,
             "-map", "[v]", "-map", "[a]",
-            "-r", str(fps), "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", *ENCODE,
+            "-r", str(fps), "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", *encode_args(t_out - t_in),
             "-c:a", "aac", "-ar", "48000", "-b:a", "160k", "-movflags", "+faststart", str(out)]
 
 
@@ -243,7 +259,7 @@ def cut_command(src: Path, out: Path, drop: list[tuple[float, float]], dur: floa
     graph = ";".join(parts) + f";{labels}concat=n={len(keep)}:v=1:a=1[v][a]"
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
             "-filter_complex", graph, "-map", "[v]", "-map", "[a]",
-            "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "16", "-maxrate", "16M", "-bufsize", "32M",
+            "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", *encode_args(dur - sum(b - a for a, b in drop), "medium"),
             "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", str(out)]
 
 

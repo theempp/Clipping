@@ -15,7 +15,7 @@ from pathlib import Path
 from ..config import Layout
 from .ffmpeg import video_filter
 from .sfxlib import ensure_sfx
-from .tools import ENC
+from .tools import enc
 
 STOP = set("""this that with have from they them then than were been will would could should about there their what when
 where which while just like going gonna know yeah okay right really very because into over only also your
@@ -79,7 +79,7 @@ def flashback_segment_command(source: Path, out: Path, start: float, length: flo
                                      f"apad=whole_dur={out_len:.3f},atrim=0:{out_len:.3f}[a]")
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{start:.3f}", "-t", f"{length:.3f}",
             "-i", str(source), "-i", str(sfx_wav), "-filter_complex", g, "-map", "[v]", "-map", "[a]",
-            *ENC, str(out)], out_len
+            *enc(out_len), str(out)], out_len
 
 
 def insert_command(clip: Path, seg: Path, out: Path, dur: float, at: float, fps: int = 30,
@@ -92,7 +92,7 @@ def insert_command(clip: Path, seg: Path, out: Path, dur: float, at: float, fps:
          f"[0:a]atrim={at:.3f}:{dur:.3f},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo[a2];"
          f"[v0][a0][v1][a1][v2][a2]concat=n=3:v=1:a=1[v][a]")
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(clip), "-i", str(seg),
-            "-filter_complex", g, "-map", "[v]", "-map", "[a]", "-r", str(fps), *ENC, str(out)]
+            "-filter_complex", g, "-map", "[v]", "-map", "[a]", "-r", str(fps), *enc(dur + SEG_S / SPEED), str(out)]
 
 
 def render_flashback(clip: Path, proposal: dict, dur: float, at: float, layout: Layout | None,
