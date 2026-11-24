@@ -15,6 +15,7 @@ Found 2026-11-20 via search. Licenses, stars, maintenance and current behavior a
 - github.com/NaufalRizqullah/opensource-clipping — MediaPipe face tracking, karaoke .ASS captions, Whisper + Gemini.
 - github.com/r2hu1/skate — fully local: faster-whisper, Ollama, OpenCV, ffmpeg.
 - github.com/jurczykpawel/captions-cli (MIT) — word-level karaoke captions via local Whisper + libass.
+- github.com/xinntao/Real-ESRGAN (BSD-3-Clause, created 2021-07, 37.6k stars) — facecam AI upscale. **Audit 2026-11-24, light mode: pass-with-limits.** Allowed: weights file `realesr-general-x4v3.pth` only (release v0.2.5.0, 4,885,111 bytes, sha256 `8dc7edb9ac80ccdc30c3a5dca6616509367f05fbc184ad95b731f05bece96292`), loaded with `torch.load(weights_only=True)` into our own SRVGGNetCompact code in `C:\clip-work\renders\sr_upscale.py`. No Real-ESRGAN, basicsr or spandrel code is installed or run. Model at `C:\clip-work\models\`. Re-audit if the weights file changes.
 
 ## Publishing
 - Postiz (github.com/gitroomhq/postiz-app, AGPL-3.0) — self-hosted scheduler with API; X, YouTube, TikTok, Instagram. Possible later route for TikTok/Reels.
