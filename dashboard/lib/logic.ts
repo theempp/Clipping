@@ -206,6 +206,93 @@ export function clampTrim(a: number, b: number, total: number, min = 1): [number
   return [+x.toFixed(2), +y.toFixed(2)];
 }
 
+/** Start times of the pieces that are really dropped (same guard as `droppedCuts`). */
+export function droppedStarts(p: EditPlan): number[] {
+  return droppedCuts(p).map(([a]) => a);
+}
+
+/** Dropped state carried across a trim or split change: a new piece stays dropped when its
+ *  middle sat inside a piece that was dropped before. */
+export function remapDrop(prev: EditPlan, next: EditPlan): number[] {
+  const was = droppedCuts(prev);
+  if (!was.length) return [];
+  return pieces(next).filter(([a, b]) => { const m = (a + b) / 2; return was.some(([x, y]) => m > x && m < y); }).map(([a]) => a);
+}
+
+/** Move the trim (clamped) and keep dropped pieces where they were. */
+export function retrim(p: EditPlan, a: number, b: number, total: number): EditPlan {
+  const [x, y] = clampTrim(a, b, total);
+  const next = { ...p, trim_in: x, trim_out: y };
+  return { ...next, drop: remapDrop(p, next) };
+}
+
+/** Split the piece under `t`. Null when too close to an edge or another split. */
+export function splitAt(p: EditPlan, t: number, min = 0.3): EditPlan | null {
+  const s = +t.toFixed(2);
+  if (s <= p.trim_in + min || s >= p.trim_out - min || p.splits.some((x) => Math.abs(x - s) < min)) return null;
+  const next = { ...p, splits: [...p.splits, s].sort((a, b) => a - b) };
+  return { ...next, drop: remapDrop(p, next) };
+}
+
+/** Remove a split; the merged piece takes the dropped state of its left half. */
+export function removeSplit(p: EditPlan, s: number): EditPlan {
+  const was = new Set(droppedStarts(p));
+  const next = { ...p, splits: p.splits.filter((x) => x !== s) };
+  return { ...next, drop: pieces(next).filter(([a]) => was.has(a)).map(([a]) => a) };
+}
+
+/** Drop or restore the piece starting at `start`. Never drops the last kept piece. */
+export function toggleDrop(p: EditPlan, start: number): EditPlan {
+  const cur = droppedStarts(p);
+  if (cur.includes(start)) return { ...p, drop: cur.filter((a) => a !== start) };
+  if (cur.length + 1 >= pieces(p).length) return p;
+  return { ...p, drop: [...cur, start] };
+}
+
+/** Seconds that end up in the clip: the trim minus dropped pieces. */
+export function keptLength(p: EditPlan): number {
+  return pieces(p).filter(([a]) => !droppedStarts(p).includes(a)).reduce((s, [a, b]) => s + (b - a), 0);
+}
+
+export type StreamerRow = {
+  id: string; name: string; made: number; waiting: number; approved: number; posted: number; rejected: number;
+  /** Approved-or-later over everything you reviewed; null before the first review. */
+  rate: number | null; avgScore: number | null; avgLen: number | null;
+};
+
+/** Stats > By streamer: one row per streamer that has clips, from the clip rows alone. */
+export function streamerTable(clips: Clip[], streamers: Streamer[]): StreamerRow[] {
+  return streamers.map((s) => {
+    const cs = clips.filter((c) => c.streamer_id === s.id);
+    const ok = cs.filter((c) => OK_STATES.has(c.state)).length;
+    const rejected = cs.filter((c) => c.state === "rejected").length;
+    const scored = cs.filter((c) => c.score_10 != null);
+    const timed = cs.filter((c) => c.duration_s != null);
+    return {
+      id: s.id, name: s.display_name, made: cs.length, waiting: cs.filter((c) => c.state === "pending_review").length,
+      approved: ok, posted: cs.filter((c) => c.state === "published").length, rejected,
+      rate: ok + rejected ? ok / (ok + rejected) : null,
+      avgScore: scored.length ? +(scored.reduce((a, c) => a + (c.score_10 ?? 0), 0) / scored.length).toFixed(1) : null,
+      avgLen: timed.length ? +(timed.reduce((a, c) => a + (c.duration_s ?? 0), 0) / timed.length).toFixed(1) : null,
+    };
+  }).filter((r) => r.made > 0);
+}
+
+/** Median minutes from a clip landing in review to your decision, over reviewed clips. Null if none. */
+export function medianReviewMin(clips: Clip[]): number | null {
+  const m = clips.filter((c) => c.reviewed_at).map((c) => (Date.parse(c.reviewed_at!) - Date.parse(c.created_at)) / 60_000)
+    .filter((x) => Number.isFinite(x) && x >= 0).sort((a, b) => a - b);
+  return m.length ? Math.round(m[Math.floor(m.length / 2)]) : null;
+}
+
+/** Rows -> CSV text (quotes any cell with a comma, quote or newline). */
+export function toCsv(rows: (string | number | null)[][]): string {
+  return rows.map((r) => r.map((v) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }).join(",")).join("\n");
+}
+
 /** Short number: 1234 -> 1.2K, 2_910_000 -> 2.91M. */
 export function compact(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";

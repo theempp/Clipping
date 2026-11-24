@@ -28,6 +28,21 @@ const P: Record<string, string> = {
   back: "M19 12H5M12 19l-7-7 7-7",
   x: "M18 6 6 18M6 6l12 12",
   check: "m5 12 5 5L20 7",
+  play: "M7 4.5v15l12.5-7.5z",
+  pause: "M8 5v14M16 5v14",
+  vol: "M4 9v6h4l5 4V5L8 9zM16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12",
+  mute: "M4 9v6h4l5 4V5L8 9zM17 9l5 6M22 9l-5 6",
+  stepb: "M18 6v12l-8-6zM6 6v12",
+  stepf: "M6 6v12l8-6zM18 6v12",
+  split: "M12 3v18M7 8l-3 4 3 4M17 8l3 4-3 4",
+  trash: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
+  restore: "M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5",
+  undo: "M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3",
+  redo: "m15 14 5-5-5-5M20 9H9a5 5 0 0 0 0 10h3",
+  plus: "M12 5v14M5 12h14",
+  loop: "M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3",
+  key: "M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14h8",
+  chat: "M4 5h16v11H8l-4 4z",
 };
 export function Ico({ n, size, sw = 2 }: { n: keyof typeof P | string; size?: number; sw?: number }) {
   return (

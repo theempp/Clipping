@@ -4,12 +4,55 @@ import { Bars, LineChart, Ring } from "@/components/Charts";
 import { OwnChannels } from "@/components/OwnChannels";
 import { AgentTicker } from "@/components/Pipeline";
 import { WeekPulse } from "@/components/WeekPulse";
-import { compact } from "@/lib/logic";
+import { compact, medianReviewMin, streamerTable, toCsv, type StreamerRow } from "@/lib/logic";
 import { useNow, useStore } from "@/lib/store";
-import { BUDGET_USD, monthSpend, series, streamerViews } from "@/lib/view";
+import { BUDGET_USD, monthSpend, series } from "@/lib/view";
 
 type Tab = "growth" | "money" | "pipeline";
-type Range = 7 | 30;
+type Range = 7 | 30 | 90;
+type Col = "name" | "made" | "waiting" | "approved" | "posted" | "rejected" | "rate" | "avgScore" | "avgLen";
+const COLS: [Col, string][] = [["name", "Streamer"], ["made", "Made"], ["waiting", "Waiting"], ["approved", "Approved"], ["posted", "Posted"],
+  ["rejected", "Rejected"], ["rate", "Approval"], ["avgScore", "Avg score"], ["avgLen", "Avg length"]];
+
+/** Every streamer with clips, sortable by any column, exportable as CSV. */
+function ByStreamer() {
+  const { snap } = useStore();
+  const [col, setCol] = useState<Col>("made");
+  const [asc, setAsc] = useState(false);
+  const rows = useMemo(() => {
+    const r = streamerTable(snap.clips, snap.streamers);
+    const v = (x: StreamerRow) => x[col] ?? -1;
+    return r.sort((a, b) => (col === "name" ? a.name.localeCompare(b.name) : (v(a) as number) - (v(b) as number)) * (asc ? 1 : -1));
+  }, [snap.clips, snap.streamers, col, asc]);
+  const cell = (r: StreamerRow, c: Col) => c === "rate" ? (r.rate == null ? "—" : `${Math.round(r.rate * 100)}%`)
+    : c === "avgLen" ? (r.avgLen == null ? "—" : `${r.avgLen}s`) : (r[c] ?? "—");
+  const csv = () => {
+    const text = toCsv([COLS.map(([, l]) => l), ...rows.map((r) => [r.name, r.made, r.waiting, r.approved, r.posted, r.rejected,
+      r.rate == null ? null : Math.round(r.rate * 100), r.avgScore, r.avgLen])]);
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    a.download = `clips-by-streamer-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  return (
+    <>
+      <div className="sec"><h2>By streamer</h2><span>click a column to sort</span><span style={{ flex: 1 }} />
+        <button type="button" className="b" disabled={!rows.length} onClick={csv}>Download CSV</button></div>
+      {rows.length ? (
+        <div className="glass scroll-x">
+          <table className="tbl">
+            <thead><tr>{COLS.map(([c, l]) => (
+              <th key={c} aria-sort={col === c ? (asc ? "ascending" : "descending") : "none"}>
+                <button type="button" className="th-sort" onClick={() => { if (col === c) setAsc((x) => !x); else { setCol(c); setAsc(c === "name"); } }}>
+                  {l}{col === c ? (asc ? " ↑" : " ↓") : ""}</button></th>))}</tr></thead>
+            <tbody>{rows.map((r) => <tr key={r.id}>{COLS.map(([c]) => <td key={c}>{c === "name" ? <b>{r.name}</b> : cell(r, c)}</td>)}</tr>)}</tbody>
+          </table>
+        </div>
+      ) : <p className="quiet">No clips yet.</p>}
+    </>
+  );
+}
 
 /** Analytics: Growth (Zo's channels), Money (spend vs budget, submit windows), Pipeline (funnel + agents). */
 export default function Analytics() {
@@ -55,23 +98,21 @@ function Growth() {
   const has = total.some((v) => v > 0);
   const labels = Array.from({ length: range }, (_, i) => {
     const d = new Date(now - (range - 1 - i) * 86400_000);
-    return range === 7 ? d.toLocaleDateString([], { weekday: "short" }) : i % 6 === 0 ? `${d.getMonth() + 1}/${d.getDate()}` : "";
+    return range === 7 ? d.toLocaleDateString([], { weekday: "short" }) : i % (range === 90 ? 15 : 6) === 0 ? `${d.getMonth() + 1}/${d.getDate()}` : "";
   });
-  const views = streamerViews(snap, now);
-  const per = views.slice(0, 6).map((v) => ({
-    v, posted: snap.clips.filter((c) => c.streamer_id === v.s.id && c.state === "published").length,
-    made: snap.clips.filter((c) => c.streamer_id === v.s.id).length,
-  }));
+  const first = total.find((v) => v > 0) ?? 0;
+  const change = has && first > 0 ? (total[total.length - 1] - first) / first : null;
   const results = [...snap.results].sort((a, b) => (b.follows_per_1k ?? -1) - (a.follows_per_1k ?? -1));
   return (
     <>
       <div className="glass">
         <div className="hd">
           <div><span className="mut" style={{ fontSize: 12 }}>Total views · YouTube + TikTok · {range} d</span>
-            <div className="num" style={{ margin: "4px 0 0" }}>{has ? compact(total[total.length - 1]) : "—"}</div></div>
+            <div className="num" style={{ margin: "4px 0 0" }}>{has ? compact(total[total.length - 1]) : "—"}
+              {change != null && <small className={change >= 0 ? "up" : "down"} style={{ marginLeft: 10, fontSize: 14 }}>{change >= 0 ? "+" : ""}{Math.round(change * 100)}% in {range} d</small>}</div></div>
           <div className="seg" role="tablist" aria-label="Range">
-            <button type="button" className={range === 7 ? "on" : ""} onClick={() => setRange(7)}>7D</button>
-            <button type="button" className={range === 30 ? "on" : ""} onClick={() => setRange(30)}>1M</button>
+            {([[7, "7D"], [30, "1M"], [90, "3M"]] as const).map(([r, l]) => (
+              <button key={r} type="button" className={range === r ? "on" : ""} aria-pressed={range === r} onClick={() => setRange(r)}>{l}</button>))}
           </div>
         </div>
         <LineChart height={260} labels={labels} fmt={(x) => compact(x)} empty="Views appear once YouTube or TikTok numbers come in"
@@ -80,15 +121,7 @@ function Growth() {
       </div>
       <div className="sec"><h2>Your channels</h2><span>followers, live</span></div>
       <OwnChannels />
-      <div className="sec"><h2>By streamer</h2><span>clips made · posted</span></div>
-      <div className="row3">
-        {per.map(({ v, posted, made }) => (
-          <div key={v.s.id} className="glass stat">
-            <span className="lab full">{v.s.display_name}</span>
-            <div className="num sm">{posted}<small>posted of {made}</small></div>
-          </div>
-        ))}
-      </div>
+      <ByStreamer />
       {results.length > 0 && <>
         <div className="sec"><h2>TikTok long-form tests</h2><span>best follows per 1K first</span></div>
         <div className="glass scroll-x">
@@ -159,9 +192,24 @@ function Pipeline() {
     { n: recent.filter((c) => ["approved", "scheduled", "published"].includes(c.state)).length, l: "Approved", a: 0.18 },
     { n: recent.filter((c) => c.state === "published").length, l: "Posted", a: 0.1 },
   ];
+  const okN = recent.filter((c) => ["approved", "scheduled", "published"].includes(c.state)).length;
+  const rejN = recent.filter((c) => c.state === "rejected").length;
+  const reviewed = okN + rejN;
+  const medMin = medianReviewMin(recent);
+  const openRev = snap.revisions.filter((r) => !r.resolved_at).length;
+  const failedRev = recent.filter((c) => c.revise_failed).length;
   return (
     <>
       <div className="steps">{steps.map((s) => <div key={s.l} style={{ "--a": s.a } as React.CSSProperties}><b>{compact(s.n)}</b><span>{s.l}</span></div>)}</div>
+      <div className="sec"><h2>Your review</h2><span>all clips on record</span></div>
+      <div className="row3">
+        <div className="glass stat"><span className="lab full">Approval rate</span><div className="num sm">{reviewed ? `${Math.round((okN / reviewed) * 100)}%` : "—"}</div>
+          <div className="sub">{okN} approved · {rejN} rejected</div></div>
+        <div className="glass stat"><span className="lab full">Time to decide</span><div className="num sm">{medMin == null ? "—" : medMin < 60 ? `${medMin} min` : `${(medMin / 60).toFixed(1)} h`}</div>
+          <div className="sub">median, from landing in review to your call</div></div>
+        <div className="glass stat"><span className="lab full">Revisions</span><div className="num sm">{snap.revisions.length}</div>
+          <div className="sub">{openRev} still re-rendering · {failedRev} failed QA</div></div>
+      </div>
       <div className="sec"><h2>Agent health</h2><span>this hour</span></div>
       <AgentTicker />
       <div style={{ marginTop: 18 }}><WeekPulse /></div>

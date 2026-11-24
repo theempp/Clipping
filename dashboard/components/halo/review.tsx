@@ -8,6 +8,7 @@ import { UNDO_MS, useNow, useStore } from "@/lib/store";
 import type { Clip } from "@/lib/types";
 import { PLATFORM_LABEL, type Platform, agoShort, basePlan, clipLen, clipScore, compactNum, headlineOf, postablePlatforms, subScores } from "@/lib/halo";
 import { Dial, Ico, PlatIco, useMedia } from "./ui";
+import { Scrubber, hookRange, playerKeys, useVideoCtl } from "./scrub";
 
 type UI = {
   staged: Set<string>;
@@ -229,16 +230,39 @@ export function sourceLine(c: Clip, name: string, now: number): string {
   return [name, plat === "kick" ? "Kick" : plat === "twitch" ? "Twitch" : plat, clipLen(c.duration_s), `found ${agoShort(c.created_at, now)}`].join(" · ");
 }
 
+function PopPlayer({ clip }: { clip: Clip }) {
+  const src = useMedia(clip.storage_path);
+  const poster = useMedia(clip.thumb_path);
+  const v = useRef<HTMLVideoElement>(null);
+  const ctl = useVideoCtl(v, src);
+  const live = useRef(ctl);
+  live.current = ctl;
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (e.ctrlKey || e.metaKey || e.altKey || el.closest("input,textarea,select,[role=slider]") || document.querySelector(".z-cf")) return;
+      if (el.closest("button") && (e.key === " " || e.key === "Enter")) return;
+      playerKeys(live.current, e);
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+  return (
+    <div className="z-pcol">
+      <div className="z-pvid">
+        {src ? <video ref={v} key={src} src={src} poster={poster ?? undefined} playsInline loop={ctl.loop} autoPlay muted={ctl.muted} onClick={ctl.toggle} />
+          : <div className="z-empty" style={{ height: "100%" }}>Loading clip…</div>}
+        {src && ctl.paused && <button type="button" className="z-bigplay" aria-label="Play" onClick={ctl.toggle}><Ico n="play" size={26} sw={2.2} /></button>}
+      </div>
+      {src && <Scrubber ctl={ctl} hook={hookRange(clip.judge?.hook_window)} compact />}
+    </div>
+  );
+}
+
 function ReviewPopup({ clip }: { clip: Clip }) {
   const ui = useReview();
   const { snap } = useStore();
   const now = useNow(30_000);
-  const src = useMedia(clip.storage_path);
-  const poster = useMedia(clip.thumb_path);
-  const v = useRef<HTMLVideoElement>(null);
-  const [t, setT] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [muted, setMuted] = useState(true);
   const s = subScores(clip);
   const who = snap.streamers.find((x) => x.id === clip.streamer_id)?.display_name ?? clip.channel_key.split(":")[1];
   const close = useRef<HTMLButtonElement>(null);
@@ -248,18 +272,7 @@ function ReviewPopup({ clip }: { clip: Clip }) {
     <div className="z-pop z-on" onClick={(e) => { if (e.target === e.currentTarget) ui.closePop(); }}>
       <div className={`z-popbx${on ? " z-approved" : ""}`} role="dialog" aria-modal="true" aria-label="Review clip">
         <button ref={close} type="button" className="z-x" aria-label="Close" onClick={ui.closePop}><Ico n="x" size={14} /></button>
-        <div className="z-pvid">
-          {src ? <video ref={v} src={src} poster={poster ?? undefined} playsInline loop autoPlay muted={muted}
-            onTimeUpdate={(e) => setT(e.currentTarget.currentTime / (e.currentTarget.duration || 1))} />
-            : <div className="z-empty" style={{ height: "100%" }}>Loading clip…</div>}
-          <div className="z-pctl">
-            <button type="button" aria-label={paused ? "Play" : "Pause"} onClick={() => { const el = v.current; if (!el) return; if (el.paused) { void el.play(); setPaused(false); } else { el.pause(); setPaused(true); } }}>{paused ? "▶" : "❚❚"}</button>
-            <div className="z-pscrub" role="slider" aria-label="Seek" aria-valuenow={Math.round(t * 100)} aria-valuemin={0} aria-valuemax={100} tabIndex={0}
-              onClick={(e) => { const el = v.current; if (!el) return; const r = e.currentTarget.getBoundingClientRect(); el.currentTime = ((e.clientX - r.left) / r.width) * (el.duration || 0); }}>
-              <i style={{ width: `${t * 100}%` }} /></div>
-            <button type="button" aria-label={muted ? "Sound on" : "Sound off"} onClick={() => setMuted((m) => !m)}>{muted ? "🔇" : "🔊"}</button>
-          </div>
-        </div>
+        <PopPlayer clip={clip} />
         <div className="z-pmeta">
           <span className="z-lbl">{sourceLine(clip, who, now)}</span>
           <h3>{clip.title ?? clip.job_id}</h3>
@@ -293,6 +306,7 @@ function ReviseDialog({ clip, onClose }: { clip: Clip; onClose: () => void }) {
     act(clip, "revise", note, all);
     ui.stage(clip.id, false);
     ui.closePop();
+    if (ui.edit === clip.id) ui.closeEditor(null);
     onClose();
     ui.toast("Sent back to the editing agent.");
   };
