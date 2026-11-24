@@ -8,6 +8,12 @@
       "port": 3101
     },
     {
+      "name": "main-demo",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd /d P:\\.claude\\worktrees\\main-view\\dashboard && set NEXT_PUBLIC_CLIPP_DEMO=1&& set NEXT_PUBLIC_CLIPP_PODS=1&& set NEXT_PUBLIC_CLIPP_POD_HOME=1&& npx next dev -p 3103"],
+      "port": 3103
+    },
+    {
       "name": "halo-demo",
       "runtimeExecutable": "cmd",
       "runtimeArgs": ["/c", "cd /d P:\\dashboard && set NEXT_PUBLIC_CLIPP_DEMO=1&& set NEXT_DIST_DIR=.next-halo&& npx next dev -p 3102"],

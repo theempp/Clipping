@@ -7,6 +7,7 @@ Supabase 50 MB/file limit (free plan).
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 from dataclasses import asdict
 from pathlib import Path
@@ -16,6 +17,11 @@ from ..transcribe import Word
 from .captions import H, W, build_ass, shift_words
 from .sfx import audio_filter, ensure_whoosh
 from .motion import ZoomParams, detector_name, path_crop_filter, track as face_track, track_crop_filter, zoom_times, zoompan_filter
+
+# Quality default (Zo, 2026-11-24): sharper scaler, higher-bitrate encode, AI facecam blended 60/40 (sr.py).
+SC = ":flags=lanczos+accurate_rnd+full_chroma_int"
+ENCODE = ["-preset", "slow", "-crf", "16", "-maxrate", "16M", "-bufsize", "32M"]
+SR_MIX = 0.6
 
 CAPTION_VERSION = "ass-v1"
 
@@ -46,7 +52,9 @@ def video_filter(layout: Layout | None, captions_file: str | None, zooms: list[f
                  centres: list[tuple[float, float, float]] | None = None,
                  duration: float | None = None, crop_x: float | None = None,
                  swap: tuple[str, float, float] | None = None,
-                 keys: list[tuple[float, float, bool]] | None = None) -> str:
+                 keys: list[tuple[float, float, bool]] | None = None,
+                 sr_input: int | None = None) -> str:
+    """sr_input: ffmpeg input index of the AI-upscaled facecam (sr.py, 4x the crop); split layouts only."""
     moving = bool(zoom) and (bool(zooms) or (zoom.drift > 0 and zoom.on))
     zp = ((lambda w, h: "," + zoompan_filter(zooms or [], zoom, w, h, fps, duration))
           if moving else (lambda w, h: ""))
@@ -66,11 +74,18 @@ def video_filter(layout: Layout | None, captions_file: str | None, zooms: list[f
         gh = H - fh
         f, p = layout.facecam, layout.gameplay
         n_in = 3 if swap else 2
-        g = (f"[0:v]split={n_in}[a][b]" + ("[c]" if swap else "") + ";"
-             f"[a]crop={f.w}:{f.h}:{f.x}:{f.y},scale={W}:{fh}:force_original_aspect_ratio=increase,"
-             f"crop={W}:{fh},setsar=1{zp(W, fh)}[top];"
-             f"[b]crop={p.w}:{p.h}:{p.x}:{p.y},scale={W}:{gh}:force_original_aspect_ratio=increase,"
-             f"crop={W}:{gh},setsar=1[bot];[top][bot]vstack=inputs=2[v]")
+        if sr_input is not None:  # AI facecam: already 4x the crop, scale down to the panel, light CAS
+            n_in -= 1
+            top = (f"[{sr_input}:v]fps={fps},scale={W}:{fh}:force_original_aspect_ratio=increase{SC},"
+                   f"crop={W}:{fh},cas=strength=0.25,setsar=1{zp(W, fh)}[top];")
+            heads = "[b]" + ("[c]" if swap else "")
+        else:
+            top = (f"[a]crop={f.w}:{f.h}:{f.x}:{f.y},scale={W}:{fh}:force_original_aspect_ratio=increase{SC},"
+                   f"crop={W}:{fh},setsar=1{zp(W, fh)}[top];")
+            heads = "[a][b]" + ("[c]" if swap else "")
+        g = ((f"[0:v]split={n_in}{heads};" if n_in > 1 else f"[0:v]null{heads};") + top +
+             f"[b]crop={p.w}:{p.h}:{p.x}:{p.y},scale={W}:{gh}:force_original_aspect_ratio=increase{SC},"
+             f"crop={W}:{gh},cas=strength=0.3,setsar=1[bot];[top][bot]vstack=inputs=2[v]")
         if swap:  # D114 layout swap: full-frame face or game for a moment, picture cropped to cover, never zoomed
             mode, at, length = swap
             r = f if mode == "face" else p
@@ -89,16 +104,21 @@ def render_command(src: Path, out: Path, t_in: float, t_out: float, layout: Layo
                    centres: list[tuple[float, float, float]] | None = None,
                    sfx: SfxParams | None = None, whoosh: Path | None = None,
                    crop_x: float | None = None, swap: tuple[str, float, float] | None = None,
-                   keys: list[tuple[float, float, bool]] | None = None) -> list[str]:
+                   keys: list[tuple[float, float, bool]] | None = None,
+                   sr_file: Path | None = None) -> list[str]:
     a_graph, needs_sfx = audio_filter(zooms or [], sfx if whoosh else None)
     extra_in = ["-i", str(whoosh)] if needs_sfx else []
+    sr_input = None
+    if sr_file is not None and layout is not None:  # whoosh stays input 1 (sfx.py reads [1:a])
+        sr_input = 1 + len(extra_in) // 2
+        extra_in += ["-i", str(sr_file)]
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
             "-ss", f"{t_in:.3f}", "-to", f"{t_out:.3f}", "-i", str(src), *extra_in,
-            "-filter_complex", video_filter(layout, captions_file, zooms, zoom, fps, centres, t_out - t_in, crop_x, swap, keys)
+            "-filter_complex", video_filter(layout, captions_file, zooms, zoom, fps, centres, t_out - t_in, crop_x, swap, keys,
+                                            sr_input)
             + ";" + a_graph,
             "-map", "[v]", "-map", "[a]",
-            "-r", str(fps), "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p",
-            "-preset", "medium", "-crf", "20", "-maxrate", "6M", "-bufsize", "12M",
+            "-r", str(fps), "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", *ENCODE,
             "-c:a", "aac", "-ar", "48000", "-b:a", "160k", "-movflags", "+faststart", str(out)]
 
 
@@ -136,9 +156,19 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
     if sfx is not None and sfx.enabled and zooms:
         whoosh = Path(sfx.file).resolve() if sfx.file else ensure_whoosh(out_dir.parent / "_sfx", ffmpeg, run)
     out = out_dir / "clip.mp4"
+    sr_file = None
+    if layout is not None and run is subprocess.run:  # AI facecam; any failure falls back to the plain scale
+        try:
+            from .sr import upscale_region
+            f = layout.facecam
+            sr_file = upscale_region(Path(src).resolve(), t_in, dur, (f.x, f.y, f.w, f.h), out_dir / "facecam_sr.mp4",
+                                     fps=fps, mix=SR_MIX, ffmpeg=ffmpeg)
+        except Exception as e:  # noqa: BLE001 - torch/model missing or GPU error must not block a render
+            logging.getLogger(__name__).warning("facecam SR skipped: %s", e)
     # cwd=out_dir so the ass filter gets a bare filename (no Windows drive-colon escaping).
     run(render_command(Path(src).resolve(), out.resolve(), t_in, t_out, layout, "captions.ass", fps,
-                       ffmpeg, zooms, zoom, centres, sfx, whoosh, crop_x, swap, keys), check=True, cwd=str(out_dir))
+                       ffmpeg, zooms, zoom, centres, sfx, whoosh, crop_x, swap, keys,
+                       sr_file.resolve() if sr_file else None), check=True, cwd=str(out_dir))
     # Before/after on the dashboard: the same window of the untouched 16:9 stream, small and light.
     source_prev = out_dir / "source.mp4"
     run(source_preview_command(Path(src).resolve(), source_prev.resolve(), t_in, t_out, ffmpeg),
@@ -157,7 +187,8 @@ def render_clip(clip_id: str, src: Path, out_dir: Path, t_in: float, t_out: floa
     manifest = {"clip_id": clip_id, "source": str(src), "window": [t_in, t_out], "fps": fps,
                 "layout": asdict(layout) if layout else None, "caption_version": CAPTION_VERSION,
                 "zooms": zooms, "swap": list(swap) if swap else None, "shots": centres, "track_keys": keys,
-                "reframe": (detector_name() if keys else None), "sfx": bool(whoosh), "source_preview": str(source_prev),
+                "reframe": (detector_name() if keys else None), "sfx": bool(whoosh),
+                "facecam_sr": ({"model": "realesr-general-x4v3", "mix": SR_MIX} if sr_file else None), "source_preview": str(source_prev),
                 "motion": {"zoom_scale": zoom.scale if zoom else 1.0, "ease": zoom.ease if zoom else None,
                            "moments": zoom.moments if zoom else None, "drift": zoom.drift if zoom else 0.0,
                            "motion_version": MOTION_VERSION},
@@ -212,7 +243,7 @@ def cut_command(src: Path, out: Path, drop: list[tuple[float, float]], dur: floa
     graph = ";".join(parts) + f";{labels}concat=n={len(keep)}:v=1:a=1[v][a]"
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
             "-filter_complex", graph, "-map", "[v]", "-map", "[a]",
-            "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "20",
+            "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "16", "-maxrate", "16M", "-bufsize", "32M",
             "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart", str(out)]
 
 

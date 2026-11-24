@@ -81,7 +81,7 @@ body.z-waking .z-p{animation:lit 1.5s ease-out both;animation-delay:calc(var(--i
 .z-agent b{font-size:12.5px;display:block;line-height:1.2}
 .z-agent small{color:var(--mut);font-size:11px}
 .z-agent .z-ok{margin-left:auto;font:700 10px var(--fm);color:var(--ok)}
-.z-hero{grid-area:1/2/2/3;display:grid;grid-template-columns:auto minmax(0,1fr);gap:22px;padding:16px;overflow:hidden}
+.z-hero{grid-area:1/2/2/3;display:grid;grid-template-columns:auto minmax(0,1fr);gap:22px;padding:16px;overflow:hidden;overflow:clip}
 .z-hero .z-bgv{position:absolute;inset:0;background:var(--bgimg,none) center/cover;filter:blur(60px) saturate(1.7);opacity:.42;transform:scale(1.25);pointer-events:none}
 .z-hero::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,transparent 30%,rgba(16,20,26,.55));border-radius:inherit}
 .z-hero>*:not(.z-bgv){position:relative;z-index:1}
@@ -555,3 +555,12 @@ kbd{font:700 10px var(--fm);padding:1px 5px;border-radius:5px;background:var(--t
 .legacy .kdot.posted{background:var(--c2)}
 .legacy .kdot.failed{background:var(--bad)}
 .legacy .kdot.window{background:var(--warn)}
+
+/* editor, narrow: must follow the desktop .z-edmain rule above or it is overridden */
+@media (max-width:1180px),(max-height:700px){
+.z-edmain{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;min-height:auto}
+.z-edtools{min-height:max-content}
+.z-edbar{flex-wrap:wrap}
+.z-edttl{flex:1 1 160px}
+.z-edinsp{overflow:visible}
+}

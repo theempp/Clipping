@@ -14,7 +14,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-ENC = ["-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "20",
+ENC = ["-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "16", "-maxrate", "16M", "-bufsize", "32M",
        "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-movflags", "+faststart"]
 
 
@@ -110,7 +110,7 @@ def stinger_command(src: Path, out: Path, asset: Path, at: float, length: float,
          f"[b][o]overlay=0:0:eof_action=pass:enable='between(t,{at:.3f},{end:.3f})',format=yuv420p[v]")
     return [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), "-i", str(asset),
             "-filter_complex", g, "-map", "[v]", "-map", "0:a?", "-c:v", "libx264", "-profile:v", "high",
-            "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "20", "-c:a", "copy",
+            "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "16", "-maxrate", "16M", "-bufsize", "32M", "-c:a", "copy",
             "-movflags", "+faststart", str(out)]
 
 
